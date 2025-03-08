@@ -150,7 +150,7 @@ function instructions(){
   text("Instructions", 150, 10);
   text("Click the mouse to create a ball", 0, 100);
   text("Press x to remove a ball", 0, 120);
-  text("There's no real goal to the game but you do get prizes for hitting certain goals. Try to collect them all.", 0, 140);
+  text("There's no real goal to the game but you get prizes for hitting some goals. Try to collect them all.", 0, 140);
   text("Press z to begin", 150, 180);
   
   

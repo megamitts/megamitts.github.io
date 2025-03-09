@@ -28,8 +28,8 @@ function setup() {
   
   
   cursor('cursor_hand.png'); // change cursor to a picture
-  createCanvas(600, 600);
-  
+  let canvas= createCanvas(600, 600);
+  canvas.parent('game-container');  // we can now move the canvas to the centre of the screen with HTML.
   
   if (numBalls === 0){
     numBalls = 1;

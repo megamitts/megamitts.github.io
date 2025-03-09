@@ -32,11 +32,13 @@ function makeCloud(NewCloudX, NewCloudY) {
   
   // make a cloud 
   
-  fill(250)
+  
   noStroke();
+  fill(250)
   ellipse(NewCloudX, NewCloudY, 70, 50);
   ellipse(NewCloudX + 10, NewCloudY + 10, 70, 50);
   ellipse(NewCloudX - 20, NewCloudY + 10, 70, 50);
+  
 }
 
 function baby(){

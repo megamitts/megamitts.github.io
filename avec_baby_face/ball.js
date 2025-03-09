@@ -28,7 +28,7 @@ class Ball {
     
    
     
-  stroke(this.y, this.x, random(128));
+  stroke(255, 233, 34);
   strokeWeight(10);
   fill(200, 0, 200);
   ellipse(this.x, this.y, this.radius*2, this.radius*2);

@@ -1,7 +1,7 @@
 
-//OOP bouncy balls with classes by megamitts
+// Avec Baby Face by megamitts
 // Happy Baby Song by Levitate/OpenGameArt
-// Baby face from Vecteazy
+// graphics by megamitts and Vecteezy.com
 
 
 let timer = 0;
@@ -10,7 +10,7 @@ let clicks = 0;
 let slurps = 0;
 let balls=[]; // create an array to store balls
 let numBalls=Math.floor(Math.random()*5); // randomise number of balls
-let gameStart;
+let gameStart = false;
 let mySound;
 function preload() {
   soundFormats('wav', 'mp3');
@@ -20,6 +20,8 @@ function preload() {
   happy = loadSound('happy.mp3');
   giggle = loadSound('giggle.mp3');
   img = loadImage('baby.png');
+  front_screen = loadImage('front_screen.png');
+  credit = loadImage('credit.png');
 }
 
 function setup() {
@@ -40,71 +42,77 @@ function setup() {
     let y = random(120, 280);
     balls.push(new Ball(x, y)); // push the new ball into the array
   }
-  let gameStart = false;
+  
 }
   
   
 
 
 function draw() {
-  
-  if (!gameStart){
-  instructions();
+  if (!gameStart) {
+    // Clear the entire canvas first
+    background(255);
+    // Draw the front screen image
+    image(front_screen, 0, 0);
     
+    // For the bottom section, first draw the rectangle border without a fill
+    stroke(255);
+    strokeWeight(10);
+    noFill(); // Very important - don't fill the rectangle
+    rect(0, 400, 600, 200);
     
-  
-  }
+    // Then draw the credit image on top
+    image(credit, 10, 410);
+  } 
   else {
+    // Game is running - set black background
+    background(0);
     
-  background(0);
-  textSize(20);
-  stroke(255);
-  strokeWeight(1);
-  fill(255);
-  
-  
-  
-  
-   // Loop through all balls and update them
-  for (let i = 0; i < balls.length; i++) {
-    balls[i].move();
-    balls[i].bounce();
-    balls[i].display();
-  }
-   
-  }  
-  stroke(255);
-  strokeWeight(10);
-  fill(0);
-  rect(0,400, 600, 200);
-  
-  //strokeWeight(1);
-  //text(clicks, 20, 420);
-  //text(slurps, 20, 440);
-  
-  if(clicks >= 50){
-  rainbow();
-  }
-  
-  if(slurps >= 60){
-    makeCloud(300, 500);
-  }
-  
-  if(slurps >= 70){
-    makeCloud(250, 440);
-  }
-  
-  if(slurps >= 80){
-    makeCloud(380, 460);
-  }
-  
-  if(clicks >= 100 && slurps >= 100){
-    timer++;
-    baby();
+    // Draw the main game area rectangle with no fill (letting black background show)
+    stroke(255);
+    strokeWeight(10);
+    noFill(); // Keep the main rectangle unfilled to show black background
+    rect(0, 0, 600, 400);
     
+    // Loop through all balls and update them
+    for (let i = 0; i < balls.length; i++) {
+      balls[i].move();
+      balls[i].bounce();
+      balls[i].display();
+    }
+    
+    // Draw the blue rectangle at the bottom
+    stroke(255);
+    strokeWeight(10);
+    fill(135, 206, 235);
+    rect(0, 400, 600, 200);
+    
+    // Rest of the conditional game effects
+    if (clicks >= 50) {
+      rainbow();
+    }
+    
+    if (slurps >= 60) {
+      makeCloud(300, 500);
+      fill(0);
+    }
+    
+    if (slurps >= 70) {
+      makeCloud(250, 440);
+      fill(0);
+    }
+    
+    if (slurps >= 80) {
+      makeCloud(380, 460);
+      fill(0);
+    }
+    
+    if (clicks >= 100 && slurps >= 100) {
+      timer++;
+      baby();
+    }
   }
 }
-  
 
 
 function mousePressed() { // add a ball each mouse press
@@ -145,19 +153,12 @@ function keyPressed() {
 }
 
 function instructions(){
-  noStroke();
-  background(0);
-  fill(255);
-  text("Instructions", 150, 10);
-  text("Click the mouse to create a ball", 0, 100);
-  text("Press x to remove a ball", 0, 120);
-  text("There's no real goal to the game but you get prizes for hitting some goals. Try to collect them all.", 0, 140);
-  text("Press z to begin", 150, 180);
+  // replace with image 600x400
   
+  image(credit, 0, 0);
+  //image(credit, 10, 410);
+  
+  
+
   
 }
-
-
-
-
-

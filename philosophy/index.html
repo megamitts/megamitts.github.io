@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ancient Wisdom: Epicurus and Seneca</title>
+    <style>
+        body {
+            font-family: 'Georgia', serif;
+            background-color: #f5f5f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+        
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            padding: 40px;
+            margin-bottom: 20px;
+            transition: transform 0.3s ease;
+            min-height: 200px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .quote {
+            font-size: 20px;
+            line-height: 1.6;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        
+        .philosopher {
+            font-style: italic;
+            color: #666;
+            font-size: 18px;
+            margin-top: auto;
+        }
+        
+        .tag {
+            display: inline-block;
+            background-color: #e0e0e0;
+            border-radius: 20px;
+            padding: 5px 12px;
+            margin-top: 10px;
+            font-size: 14px;
+            color: #555;
+        }
+        
+        .epicurus {
+            background-color: #d1e8df;
+            color: #2e7d5b;
+        }
+        
+        .seneca {
+            background-color: #d6e0f0;
+            color: #3a548c;
+        }
+        
+        button {
+            background-color: #4a6fa5;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 12px 24px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        
+        button:hover {
+            background-color: #3a548c;
+        }
+        
+        h1 {
+            color: #444;
+            margin-bottom: 30px;
+        }
+        
+        .filters {
+            margin-bottom: 20px;
+        }
+        
+        .filter-btn {
+            background-color: #e0e0e0;
+            color: #555;
+            border: none;
+            border-radius: 5px;
+            padding: 8px 16px;
+            margin: 0 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .filter-btn.active {
+            background-color: #4a6fa5;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Ancient Wisdom</h1>
+        
+        <div class="filters">
+            <button class="filter-btn active" data-filter="all">All</button>
+            <button class="filter-btn" data-filter="epicurus">Epicurus</button>
+            <button class="filter-btn" data-filter="seneca">Seneca</button>
+        </div>
+        
+        <div class="card">
+            <p class="quote" id="quote">Click the button below for wisdom from Epicurus and Seneca.</p>
+            <p class="philosopher" id="philosopher"></p>
+            <span class="tag" id="tag"></span>
+        </div>
+        
+        <button id="new-quote">New Wisdom</button>
+    </div>
+
+    <script>
+        const quotes = [
+            // Epicurus quotes
+            {
+                text: "Do not spoil what you have by desiring what you have not; remember that what you now have was once among the things you only hoped for.",
+                philosopher: "Epicurus",
+                tag: "epicurus",
+                theme: "Contentment"
+            },
+            {
+                text: "Death does not concern us, because as long as we exist, death is not here. And when it does come, we no longer exist.",
+                philosopher: "Epicurus",
+                tag: "epicurus",
+                theme: "Fear"
+            },
+            {
+                text: "It is impossible to live a pleasant life without living wisely and well and justly, and it is impossible to live wisely and well and justly without living pleasantly.",
+                philosopher: "Epicurus",
+                tag: "epicurus",
+                theme: "Pleasure"
+            },
+            {
+                text: "The art of living well and the art of dying well are one.",
+                philosopher: "Epicurus",
+                tag: "epicurus",
+                theme: "Life"
+            },
+            {
+                text: "The greater the difficulty, the more the glory in surmounting it.",
+                philosopher: "Epicurus",
+                tag: "epicurus",
+                theme: "Challenges"
+            },
+            {
+                text: "Not what we have but what we enjoy constitutes our abundance.",
+                philosopher: "Epicurus",
+                tag: "epicurus",
+                theme: "Wealth"
+            },
+            {
+                text: "Of all the things which wisdom provides to make us entirely happy, much the greatest is the possession of friendship.",
+                philosopher: "Epicurus",
+                tag: "epicurus",
+                theme: "Friendship"
+            },
+            {
+                text: "Pleasure is the beginning and the end of living happily.",
+                philosopher: "Epicurus",
+                tag: "epicurus",
+                theme: "Pleasure"
+            },
+            {
+                text: "Empty is the argument of the philosopher who does not relieve any human suffering.",
+                philosopher: "Epicurus",
+                tag: "epicurus",
+                theme: "Philosophy"
+            },
+            {
+                text: "The wise person does not dread the moment of death.",
+                philosopher: "Epicurus",
+                tag: "epicurus",
+                theme: "Death"
+            },
+            
+            // Seneca quotes
+            {
+                text: "It is not the man who has too little, but the man who craves more, that is poor.",
+                philosopher: "Seneca",
+                tag: "seneca",
+                theme: "Wealth"
+            },
+            {
+                text: "We suffer more often in imagination than in reality.",
+                philosopher: "Seneca",
+                tag: "seneca",
+                theme: "Anxiety"
+            },
+            {
+                text: "Luck is what happens when preparation meets opportunity.",
+                philosopher: "Seneca",
+                tag: "seneca",
+                theme: "Fortune"
+            },
+            {
+                text: "Difficulties strengthen the mind, as labor does the body.",
+                philosopher: "Seneca",
+                tag: "seneca",
+                theme: "Resilience"
+            },
+            {
+                text: "The greatest obstacle to living is expectancy, which hangs upon tomorrow and loses today.",
+                philosopher: "Seneca",
+                tag: "seneca",
+                theme: "Present"
+            },
+            {
+                text: "If a man knows not to which port he sails, no wind is favorable.",
+                philosopher: "Seneca",
+                tag: "seneca",
+                theme: "Purpose"
+            },
+            {
+                text: "The bravest sight in the world is to see a great man struggling against adversity.",
+                philosopher: "Seneca",
+                tag: "seneca",
+                theme: "Courage"
+            },
+            {
+                text: "Begin at once to live, and count each separate day as a separate life.",
+                philosopher: "Seneca",
+                tag: "seneca",
+                theme: "Life"
+            },
+            {
+                text: "No person has the power to have everything they want, but it is in their power not to want what they don't have.",
+                philosopher: "Seneca",
+                tag: "seneca",
+                theme: "Desire"
+            },
+            {
+                text: "True happiness is to enjoy the present, without anxious dependence upon the future.",
+                philosopher: "Seneca",
+                tag: "seneca",
+                theme: "Happiness"
+            },
+            {
+                text: "He who is brave is free.",
+                philosopher: "Seneca",
+                tag: "seneca",
+                theme: "Freedom"
+            },
+            {
+                text: "Sometimes even to live is an act of courage.",
+                philosopher: "Seneca",
+                tag: "seneca",
+                theme: "Perseverance"
+            }
+        ];
+
+        let currentFilter = 'all';
+        
+        const quoteElement = document.getElementById('quote');
+        const philosopherElement = document.getElementById('philosopher');
+        const tagElement = document.getElementById('tag');
+        const newQuoteButton = document.getElementById('new-quote');
+        const filterButtons = document.querySelectorAll('.filter-btn');
+        
+        function getFilteredQuotes() {
+            if (currentFilter === 'all') {
+                return quotes;
+            } else {
+                return quotes.filter(quote => quote.tag === currentFilter);
+            }
+        }
+        
+        function displayRandomQuote() {
+            const filteredQuotes = getFilteredQuotes();
+            const randomIndex = Math.floor(Math.random() * filteredQuotes.length);
+            const randomQuote = filteredQuotes[randomIndex];
+            
+            quoteElement.textContent = randomQuote.text;
+            philosopherElement.textContent = `— ${randomQuote.philosopher}`;
+            tagElement.textContent = randomQuote.theme;
+            tagElement.className = `tag ${randomQuote.tag}`;
+        }
+        
+        newQuoteButton.addEventListener('click', displayRandomQuote);
+        
+        filterButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                // Update active button
+                filterButtons.forEach(btn => btn.classList.remove('active'));
+                this.classList.add('active');
+                
+                // Update filter
+                currentFilter = this.getAttribute('data-filter');
+                
+                // Display new quote with the filter
+                displayRandomQuote();
+            });
+        });
+        
+        // Initial quote
+        displayRandomQuote();
+    </script>
+</body>
+</html>

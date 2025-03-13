@@ -9,6 +9,11 @@
             font-family: 'Georgia', serif;
             background-color: #f5f5f0;
             background-image: url('columns.png');
+            
+            background-repeat: no-repeat; /* Prevent columns from repeating */
+            background-size: cover; /* Ensure the background covers the whole area */
+            background-position: center; /* Center the background image */
+            
             display: flex;
             justify-content: center;
             align-items: center;
@@ -23,7 +28,7 @@
             width: 100%;
             text-align: center;
             cursor: url("pointer.png"), auto; 
-            margin-left: 75px;
+            //margin-left: 75px;
         }
         
         .card {
@@ -147,7 +152,44 @@
         }
         
             
-        }
+        /* Media query for mobile devices */
+@media (max-width: 768px) {
+    body {
+        background-image: none; /* Remove background image on mobile */
+        background-color: #f5f5f0; /* Keep the background color */
+        padding: 10px; /* Adjust padding for smaller screens */
+    }
+
+    .container{
+      margin-left: 0px;
+      width: 95% /* Take up more of the width for mobile*/
+    }
+
+    .card {
+        padding: 20px; /* Adjust padding for smaller screens */
+        margin-bottom: 10px; /* less margin between cards */
+
+    }
+
+    .quote {
+        font-size: 18px; /* reduce font size for mobile*/
+
+    }
+
+    h1 {
+        font-size: 24px; /* Reduce h1 font size for mobile */
+        margin-bottom: 20px;
+    }
+
+    .pic {
+        width: 150px; /* Adjust image size */
+        height: 150px;
+    }
+
+    .filter-btn {
+            margin-bottom: 10px;
+    }
+}
         
 
 

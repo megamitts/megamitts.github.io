@@ -3,11 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ancient Wisdom: Epicurus and Seneca</title>
+    <!-- title>Ancient Wisdom: Epicurus, Seneca and Socrates</title -->
     <style>
         body {
             font-family: 'Georgia', serif;
             background-color: #f5f5f0;
+            background-image: url('columns.png');
             display: flex;
             justify-content: center;
             align-items: center;
@@ -22,6 +23,7 @@
             width: 100%;
             text-align: center;
             cursor: url("pointer.png"), auto; 
+            margin-left: 75px;
         }
         
         .card {
@@ -216,8 +218,47 @@
                 theme: "Self"
             },
 
+            {
+                text: "The wisest man alive knows but one thing: That he knows nothing.",
+                philosopher: "Socrates",
+                tag: "socrates",
+                theme: "Modesty"
+            },
 
+            {
+                text: "From the deepest desires often comes the deadliest hate.",
+                philosopher: "Socrates",
+                tag: "socrates",
+                theme: "Temperance"
+            },
 
+            {
+                text: "Wonder is the beginning of wisdom.",
+                philosopher: "Socrates",
+                tag: "socrates",
+                theme: "Imagination"
+            },
+
+            {
+                text: "Be slow to fall into friendship; but when thou art in, continue firm and constant.",
+                philosopher: "Socrates",
+                tag: "socrates",
+                theme: "Friendship"
+            },
+
+            {
+                text: "Do not do to others what angers you if done to you by others.",
+                philosopher: "Socrates",
+                tag: "socrates",
+                theme: "Empathy"
+            },
+
+            {
+                text: "Slanderers do not hurt me because they do not hit me.",
+                philosopher: "Socrates",
+                tag: "socrates",
+                theme: "Empathy"
+            },
 
             // Epicurus quotes
             {
@@ -402,5 +443,17 @@
         // Initial quote
         //displayRandomQuote();
     </script>
+    <script>
+
+        // Title Scroller
+
+        (function titleScroller(text) {
+    document.title = text;
+    setTimeout(function () {
+        titleScroller(text.substr(1) + text.substr(0, 1));
+    },75);
+}(" Ancient Wisdom: The Teachings of Epicurus, Seneca and Socrates.      "));
+    </script>
+    
 </body>
 </html>

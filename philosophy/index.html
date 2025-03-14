@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- title>Ancient Wisdom: Epicurus, Seneca and Socrates</title -->
+   
     <style>
         body {
             font-family: 'Georgia', serif;
@@ -28,7 +28,7 @@
             width: 100%;
             text-align: center;
             cursor: url("pointer.png"), auto; 
-            //margin-left: 75px;
+            
         }
         
         .card {
@@ -84,12 +84,12 @@
         
         .socrates {
             background-color: #d1e8df;
-            color: white // colour of text in button
+            color: white /* colour of text in button */
             //color: #2e7d5b;
         }
         
         button {
-            background-color:  white  // #4a6fa5;
+            background-color:  white  /* #4a6fa5; */
             color: white;
             border: none;
             border-radius: 5px;
@@ -136,9 +136,7 @@
             color: white;
         }
 
-        .pic {
-            margin-left: auto;  // pop the philosopher on the left
-        }
+        
 
         .new-btn {
             background-color: white;
@@ -201,6 +199,13 @@
         
         <div class="filters">
             <button class="filter-btn active" data-filter="all">All</button>
+          
+            <button class="filter-btn" data-filter="hypatia">Hypatia</button>
+            
+           
+            
+            
+           
             <button class="filter-btn" data-filter="epicurus">Epicurus</button>
             <button class="filter-btn" data-filter="seneca">Seneca</button>
             <button class="filter-btn" data-filter="socrates">Socrates</button>
@@ -211,7 +216,7 @@
             <p class="philosopher" id="philosopher"></p>
             <span class="tag" id="tag"></span>
             <button class="new-btn" id="new-quote">
-            <img src="philosopher.png" class="pic" width="200" height="200" alt="Philosopher"></button>
+            <img src="philosopher.png" width="200" height="200" alt="Philosopher"></button>
 
 
             
@@ -224,6 +229,43 @@
     <script>
         const quotes = [
             
+            // Hypatia quotes
+            {
+                text: "Reserve your right to think, for even to think wrongly is better than not to think at all.",
+                philosopher: "Hypatia",
+                tag: "hypatia",
+                theme: "Self"
+            },
+
+            {
+                text: "Life is an unfoldment, and the further we travel the more truth we can comprehend. To understand the things that are at our door is the best preparation for understanding those that lie beyond.",
+                philosopher: "Hypatia",
+                tag: "hypatia",
+                theme: "Exposure"
+            },
+
+            {
+                text: "All formal dogmatic religions are fallacious and must never be accepted by self-respecting persons as final.",
+                philosopher: "Hypatia",
+                tag: "hypatia",
+                theme: "Religion"
+            },
+
+            {
+                text: "In fact men will fight for a superstition quite as quickly as for a living truth - often more so, since a superstition is so intangible you cannot get at it to refute it, but truth is a point of view, and so is changeable.",
+                philosopher: "Hypatia",
+                tag: "hypatia",
+                theme: "Truth"
+            },
+
+            {
+                text: "Fables should be taught as fables, myths as myths, and miracles as poetic fantasies. To teach superstitions as truths is a most terrible thing. The child mind accepts and believes them, and only through great pain and perhaps tragedy can he be in after years relieved of them.",
+                philosopher: "Hypatia",
+                tag: "hypatia",
+                theme: "Truth"
+            },
+
+
             // Socrates quotes
             {
                 text: "He is a man of courage who does not run away, but remains at his post and fights against the enemy.",
@@ -494,7 +536,7 @@
     setTimeout(function () {
         titleScroller(text.substr(1) + text.substr(0, 1));
     },75);
-}(" Ancient Wisdom: The Teachings of Epicurus, Seneca and Socrates.      "));
+}("      Ancient Wisdom: The Teachings of Hypatia, Epicurus, Seneca and Socrates.      "));
     </script>
     
 </body>

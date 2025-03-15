@@ -27,6 +27,33 @@
             cursor: url("sweezy_pointer.png"), auto;
         }
         
+    .main-wrapper {
+    display: flex;
+    flex-direction: column; /* Stack items vertically */
+    align-items: stretch;   /* Center items horizontally within wrapper*/
+    max-width: 800px ; /* Take up full width of body */
+    width:100%;
+    }
+
+    .link-container {
+    display: flex; /* Make it a flex container */
+    justify-content: space-between; /* Align items to ends */
+    width: 100%; /* Ensure it takes full width */
+    margin-top: 20px; /* Add spacing above the links */
+}
+
+    .linksforward {
+    margin-top: 20px; /* Add spacing between the card and the link*/
+    align-self: flex-end;   
+    
+    }
+
+    .linksback {
+    margin-top: 20px; /* Add spacing between the card and the link*/
+    align-self: flex-start;      
+    
+    }
+
         h1 {
             font-family: 'Spartacus';
             font-size: 80px;
@@ -36,7 +63,7 @@
         }
 
         .container {
-            max-width: 800px;
+            
             width: 100%;
             text-align: center;
             cursor: url("pointer.png"), auto; 
@@ -55,6 +82,7 @@
             display: flex;
             flex-direction: column;
             justify-content: center;
+            
         }
         
         .card:hover {
@@ -204,6 +232,8 @@
     </style>
 </head>
 <body>
+    
+   <div class="main-wrapper"> 
     <div class="container">
         <h1>Ancient Wisdom</h1>
         
@@ -234,10 +264,20 @@
             
         </div>
         
+        
+        
        
         
     </div>
+    <div class="link-container">
+        
+    
+        <a class="linksback" href="1700s.html">1700s</a>
+        <a class="linksforward" href="1800s.html">1800s</a>
+    </div>
 
+    </div>
+    
     <script>
         const quotes = [
             

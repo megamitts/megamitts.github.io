@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" type="text/css" href="styles/style.css">
+    
+</head>
+<body>
+    
+   <div class="main-wrapper"> 
+    <div class="container">
+        <h1>Ancient Wisdom</h1>
+        
+        <div class="filters">
+            <button class="filter-btn active" data-filter="all">All</button>
+          
+            <button class="filter-btn" data-filter="hypatia">Hypatia</button>
+             
+            <button class="filter-btn" data-filter="epicurus">Epicurus</button>
+            
+            <button class="filter-btn" data-filter="seneca">Seneca</button>
+            
+            <button class="filter-btn" data-filter="socrates">Socrates</button>
+            
+            <button class="filter-btn" data-filter="aurelius">Aurelius</button>
+            
+            <button class="filter-btn" data-filter="epictetus">Epictetus</button>
+        </div>
+        
+        <div class="card">
+            <p class="quote" id="quote">Click the philosopher below for wisdom to help you through your journey.</p>
+            <p class="philosopher" id="philosopher"></p>
+            <span class="tag" id="tag"></span>
+            <button class="new-btn" id="new-quote">
+            <img src="philosopher.png" width="200" height="200" alt="Philosopher"></button>
+
+
+            
+        </div>
+        
+        
+        
+       
+        
+    </div>
+    <div class="link-container">
+        
+    
+     <a class="linksback" href="index.html"><img src="gfx/socrates.png" width="100" height="100" alt="Socrates" title="Ancient Wisdom"></a> 
+        
+        <a class="linksforward" href="1800s.html"><img src="gfx/nieztche.png" width="100" height="100" alt="Nieztche" title="Modern Era"></a>
+    </div>
+
+    </div>
+    
+    <script src="scripts/ancient.js">
+    </script>        
+            
+           
+            
+                
+        
+
+        
+    <script>
+
+        // Title Scroller
+
+        (function titleScroller(text) {
+    document.title = text;
+    setTimeout(function () {
+        titleScroller(text.substr(1) + text.substr(0, 1));
+    },75);
+}("      Ancient Wisdom: The Teachings of Hypatia, Epicurus, Seneca, Socrates, Aurelius and Epictetus.      "));
+    </script>
+    
+</body>
+</html>

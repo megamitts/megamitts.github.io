@@ -161,7 +161,7 @@
             border-radius: 5px;
             padding: 8px 16px;
             margin: 0 5px;
-            cursor: url("sweezy_pointer.png"), auto;
+            cursor: url("../gfx/sweezy_pointer.png"), auto;
             transition: all 0.3s ease;
             margin-bottom: 20px;
         }

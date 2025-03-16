@@ -18,7 +18,7 @@
             background-image: url('../gfx/columns.png');
             
             background-repeat: no-repeat; /* Prevent columns from repeating */
-            background-size: cover; /* Ensure the background covers the whole area */
+            background-size: contain; /* Ensure the background covers the whole area */
             background-position: center; /* Center the background image */
             
             display: flex;

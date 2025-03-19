@@ -27,7 +27,7 @@
             min-height: 100vh;
             margin: 0;
             padding: 20px;
-            cursor: url("../gfx/sweezy_pointer.png"), auto;
+            cursor: url("../gfx/pointer.png"), auto;
         }
         
     .main-wrapper {
@@ -145,7 +145,7 @@
         
         .new-btn:hover{
             background-color: white;
-            cursor: url("../gfx/sweezy_pointer.png"), auto;
+            cursor: url("../gfx/pointer.png"), auto;
         } 
         
         
@@ -161,7 +161,7 @@
             border-radius: 5px;
             padding: 8px 16px;
             margin: 0 5px;
-            cursor: url("../gfx/sweezy_pointer.png"), auto;
+            cursor: url("../gfx/pointer.png"), auto;
             transition: all 0.3s ease;
             margin-bottom: 20px;
         }
@@ -186,7 +186,7 @@
             border-radius: 5px;
             padding: 8px 16px;
             margin: 0 5px;
-            cursor: url("../gfx/sweezy_pointer.png"), auto;
+            cursor: url("../gfx/pointer.png"), auto;
             transition: all 0.3s ease;
         }
         

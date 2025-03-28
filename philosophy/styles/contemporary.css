@@ -1,0 +1,237 @@
+@font-face {
+            font-family: Twentieth;
+            src: url('../fonts/TwentiethCentury.ttf');
+            
+;
+        } 
+
+        @font-face {
+            font-family: Cinzel;
+            src: url('../fonts/cinzel.ttf');
+        }
+        body {
+            /*font-family: 'Georgia', serif; */
+            font-family: 'Cinzel', serif;
+               
+
+            background-color: #f5f5f0;
+            background-image: url('../gfx/glass_columns.png');
+            
+            background-repeat: no-repeat; /* Prevent columns from repeating */
+            background-size: contain; /* Ensure the background covers the whole area */
+            background-position: center; /* Center the background image */
+            
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            cursor: url("../gfx/pointer.png"), auto;
+        }
+        
+    .main-wrapper {
+    display: flex;
+    flex-direction: column; /* Stack items vertically */
+    align-items: stretch;   /* Center items horizontally within wrapper*/
+    max-width: 800px ; /* Take up full width of body */
+    width:100%;
+    }
+
+    .link-container {
+    display: flex; /* Make it a flex container */
+    justify-content: space-between; /* Align items to ends */
+    width: 100%; /* Ensure it takes full width */
+    margin-top: 20px; /* Add spacing above the links */
+}
+
+    .linksforward {
+    margin-top: 20px; /* Add spacing between the card and the link*/
+    align-self: flex-end;   
+    cursor: url("../gfx/pointer.png"), auto;
+    }
+
+    .linksback {
+    margin-top: 20px; /* Add spacing between the card and the link*/
+    align-self: flex-start;      
+    cursor: url("../gfx/pointer.png"), auto;
+    }
+    
+    .flip-horizontal {
+  transform: scaleX(-1);
+	}
+
+        h1 {
+            font-family: 'TwentiethCentury';
+            font-size: 80px;
+            color: #765b46;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .container {
+            
+            width: 100%;
+            text-align: center;
+            cursor: url("../gfx/pointer.png"), auto; 
+            
+        }
+        
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            padding: 40px;
+            margin-bottom: 20px;
+            transition: transform 0.3s ease;
+            min-height: 200px;
+            
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .quote {
+            font-size: 20px;
+            line-height: 1.6;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        
+        .philosopher {
+            font-style: italic;
+            color: #666;
+            font-size: 18px;
+            margin-top: 20px;
+        }
+        
+        .tag {
+            display: inline-block;
+            background-color: #e0e0e0;
+            border-radius: 20px;
+            padding: 5px 12px;
+            margin-top: 10px;
+            font-size: 14px;
+            color: #555;
+        }
+        
+        /*
+        .epicurus {
+            background-color: #d1e8df;
+            color: #2e7d5b;
+        }
+        
+        .seneca {
+            background-color: #d6e0f0;
+            color: #3a548c;
+        }
+        
+        .socrates {
+            background-color: #d1e8df;
+            color: white /* colour of text in button */
+            //color: #2e7d5b;
+        }
+        */
+        button {
+            background-color:  white  /* #4a6fa5; */
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 12px 24px;
+            font-size: 16px;
+            cursor: url("../gfx/pointer.png"), auto;                    
+            transition: background-color 0.3s ease;
+        } 
+        
+        .new-btn:hover{
+            background-color: white;
+            cursor: url("../gfx/pointer.png"), auto;
+        } 
+        
+        
+        
+        .filters {
+            margin-bottom: 20px;
+        }
+        
+        .filter-btn {
+            background-color: #e0e0e0;
+            color: #555;
+            border: none;
+            border-radius: 5px;
+            padding: 8px 16px;
+            margin: 0 5px;
+            cursor: url("../gfx/pointer.png"), auto;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+        }
+        
+        .filter-btn:hover {
+            background-color: #3a548c;
+            color: white;
+        }
+        
+
+        .filter-btn.active {
+            background-color: #4a6fa5;
+            color: white;
+        }
+
+        
+
+        .new-btn {
+            background-color: white;
+            color: #555;
+            border: none;
+            border-radius: 5px;
+            padding: 8px 16px;
+            margin: 0 5px;
+            cursor: url("../gfx/pointer.png"), auto;
+            transition: all 0.3s ease;
+        }
+        
+            
+        /* Media query for mobile devices */
+@media (max-width: 768px) {
+    body {
+        background-image: none; /* Remove background image on mobile */
+        background-color: #f5f5f0; /* Keep the background color */
+        padding: 10px; /* Adjust padding for smaller screens */
+    }
+
+    .container{
+      margin-left: 0px;
+      width: 95% /* Take up more of the width for mobile*/
+    }
+
+    .card {
+        padding: 20px; /* Adjust padding for smaller screens */
+        margin-bottom: 10px; /* less margin between cards */
+
+    }
+
+    .quote {
+        font-size: 18px; /* reduce font size for mobile*/
+
+    }
+
+    h1 {
+        font-size: 24px; /* Reduce h1 font size for mobile */
+        margin-bottom: 20px;
+    }
+
+    .pic {
+        width: 150px; /* Adjust image size */
+        height: 150px;
+    }
+
+    .filter-btn {
+            margin-bottom: 10px;
+    }
+}
+        

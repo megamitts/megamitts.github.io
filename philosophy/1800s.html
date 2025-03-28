@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <link rel="stylesheet" type="text/css" href="styles/1800.css">
+    
+</head>
+<body>
+    
+   <div class="main-wrapper"> 
+    <div class="container">
+        <h1>Modern Era Wisdom</h1>
+        
+        <div class="filters">
+            <button class="filter-btn active" data-filter="all">All</button>
+          
+            <button class="filter-btn" data-filter="nietzche">Nietzche</button>
+            
+           
+            
+            
+           <!--
+            <button class="filter-btn" data-filter="epicurus">Epicurus</button>
+            <button class="filter-btn" data-filter="seneca">Seneca</button>
+            <button class="filter-btn" data-filter="socrates">Socrates</button>
+            <button class="filter-btn" data-filter="aurelius">Aurelius</button>
+            <button class="filter-btn" data-filter="epictetus">Epictetus</button>
+        -->
+        </div>
+        
+        <div class="card">
+            <p class="quote" id="quote">Click the philosopher below for wisdom to help you through your journey.</p>
+            <p class="philosopher" id="philosopher"></p>
+            <span class="tag" id="tag"></span>
+            <button class="new-btn" id="new-quote">
+            <img src="gfx/kierkegaard.png" width="200" height="200" alt="Philosopher"></button>
+
+
+            
+        </div>
+        
+        
+        
+       
+        
+    </div>
+    <div class="link-container">
+        
+    
+     <a class="linksback" href="index.html"><img src="gfx/socrates.png" width="100" height="100" alt="Socrates" title="Ancient Wisdom"></a> 
+        
+        <a class="linksforward" href="contemporary.html"><img src="gfx/de_beauvoir.png" width="200" height="100" alt="de_beauvoir" title="Contempory Era"></a>
+    </div>
+
+    </div>
+    
+    <script>
+        const quotes = [
+            
+            // Nietzche quotes
+            {
+                text: "One must still have chaos in oneself to be able to give birth to a dancing star.",
+                philosopher: "Nietzche",
+                tag: "nietzche",
+                theme: "Self"
+            },
+
+            {
+                text: "Without music, life would be a mistake.",
+                philosopher: "Nietzche",
+                tag: "nietzche",
+                theme: "Art"
+            },
+            
+            {
+                text: "He who has a why to live can bear almost any how.",
+                philosopher: "Nietzche",
+                tag: "nietzche",
+                theme: "Purpose"
+            },
+
+            {
+                text: "In individuals, insanity is rare; but in groups, parties, nations and epochs, it is the rule.",
+                philosopher: "Nietzche",
+                tag: "nietzche",
+                theme: "Society"
+            },
+
+            {
+                text: "The individual has always had to struggle to keep from being overwhelmed by the tribe. If you try it, you will be lonely often, and sometimes frightened. But no price is too high to pay for the privilege of owning yourself.",
+                philosopher: "Nietzche",
+                tag: "nietzche",
+                theme: "Society"
+            },
+
+            {
+                text: "And those who were seen dancing were thought to be insane by those who could not hear the music.",
+                philosopher: "Nietzche",
+                tag: "nietzche",
+                theme: "Art"
+            },
+
+            {
+                text: "The higher we soar the smaller we appear to those who cannot fly.",
+                philosopher: "Nietzche",
+                tag: "nietzche",
+                theme: "Self"
+            },
+
+            {
+                text: "The snake which cannot cast its skin has to die. As well the minds which are prevented from changing their opinions; they cease to be mind.",
+                philosopher: "Nietzche",
+                tag: "nietzche",
+                theme: "Self"
+            },
+
+            {
+                text: "The surest way to corrupt a youth is to instruct him to hold in higher esteem those who think alike than those who think differently.",
+                philosopher: "Nietzche",
+                tag: "nietzche",
+                theme: "Society"
+            },
+
+
+            {
+                text: "The advantage of a bad memory is that one enjoys several times the same good things for the first time.",
+                philosopher: "Nietzche",
+                tag: "nietzche",
+                theme: "Self"
+            }
+
+            
+
+            
+
+
+
+                
+        ];
+
+        let currentFilter = 'all';
+        
+        const quoteElement = document.getElementById('quote');
+        const philosopherElement = document.getElementById('philosopher');
+        const tagElement = document.getElementById('tag');
+        const newQuoteButton = document.getElementById('new-quote');
+        const filterButtons = document.querySelectorAll('.filter-btn');
+        
+        function getFilteredQuotes() {
+            if (currentFilter === 'all') {
+                return quotes;
+            } else {
+                return quotes.filter(quote => quote.tag === currentFilter);
+            }
+        }
+        
+        function displayRandomQuote() {
+            const filteredQuotes = getFilteredQuotes();
+            const randomIndex = Math.floor(Math.random() * filteredQuotes.length);
+            const randomQuote = filteredQuotes[randomIndex];
+            
+            quoteElement.textContent = randomQuote.text;
+            philosopherElement.textContent = `— ${randomQuote.philosopher}`;
+            tagElement.textContent = randomQuote.theme;
+            tagElement.className = `tag ${randomQuote.tag}`;
+        }
+        
+        newQuoteButton.addEventListener('click', displayRandomQuote);
+        
+        filterButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                // Update active button
+                filterButtons.forEach(btn => btn.classList.remove('active'));
+                this.classList.add('active');
+                
+                // Update filter
+                currentFilter = this.getAttribute('data-filter');
+                
+                // Display new quote with the filter
+                displayRandomQuote();
+            });
+        });
+        
+        // Initial quote
+        //displayRandomQuote();
+    </script>
+    <script>
+
+        // Title Scroller
+
+        (function titleScroller(text) {
+    document.title = text;
+    setTimeout(function () {
+        titleScroller(text.substr(1) + text.substr(0, 1));
+    },75);
+}("      Modern Era Wisdom: The Teachings of Nietzche.      "));
+    </script>
+    
+</body>
+</html>

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <link rel="stylesheet" type="text/css" href="styles/contemporary.css">
+    
+</head>
+<body>
+    
+   <div class="main-wrapper"> 
+    <div class="container">
+        <h1>Contemporary Wisdom</h1>
+        
+        <div class="filters">
+            <button class="filter-btn active" data-filter="all">All</button>
+          
+            <button class="filter-btn" data-filter="de_beauvoir">De Beauvoir</button>
+            
+           
+            
+            
+           <!--
+            <button class="filter-btn" data-filter="epicurus">Epicurus</button>
+            <button class="filter-btn" data-filter="seneca">Seneca</button>
+            <button class="filter-btn" data-filter="socrates">Socrates</button>
+            <button class="filter-btn" data-filter="aurelius">Aurelius</button>
+            <button class="filter-btn" data-filter="epictetus">Epictetus</button>
+        -->
+        </div>
+        
+        <div class="card">
+            <p class="quote" id="quote">Click the philosopher below for wisdom to help you through your journey.</p>
+            <p class="philosopher" id="philosopher"></p>
+            <span class="tag" id="tag"></span>
+            <button class="new-btn" id="new-quote">
+            <img src="gfx/russell.png" width="200" height="200" alt="Philosopher"></button>
+
+
+            
+        </div>
+        
+        
+        
+       
+        
+    </div>
+    <div class="link-container">
+        
+    
+     <a class="linksback" href="1800s.html"><img src="gfx/nieztche.png" width="100" height="100" alt="Nietzche" title="Modern Era Wisdom" class="flip-horizontal"></a> 
+        
+        <a class="linksforward" href="contemporary.html"><img src="gfx/de_beauvoir.png" width="200" height="100" alt="de_beauvoir" title="Contempory Era"></a>
+    </div>
+
+    </div>
+    
+    <script>
+        const quotes = [
+            
+            // De Beauvoir quotes
+            {
+                text: "Quote 1",
+                philosopher: "De Beauvoir",
+                tag: "de_beauvoir",
+                theme: "Self"
+            },
+
+            
+
+            {
+                text: "Quote 2",
+                philosopher: "De Beauvoir",
+                tag: "de_beauvoir",
+                theme: "Self"
+            }
+
+            
+
+            
+
+
+
+                
+        ];
+
+        let currentFilter = 'all';
+        
+        const quoteElement = document.getElementById('quote');
+        const philosopherElement = document.getElementById('philosopher');
+        const tagElement = document.getElementById('tag');
+        const newQuoteButton = document.getElementById('new-quote');
+        const filterButtons = document.querySelectorAll('.filter-btn');
+        
+        function getFilteredQuotes() {
+            if (currentFilter === 'all') {
+                return quotes;
+            } else {
+                return quotes.filter(quote => quote.tag === currentFilter);
+            }
+        }
+        
+        function displayRandomQuote() {
+            const filteredQuotes = getFilteredQuotes();
+            const randomIndex = Math.floor(Math.random() * filteredQuotes.length);
+            const randomQuote = filteredQuotes[randomIndex];
+            
+            quoteElement.textContent = randomQuote.text;
+            philosopherElement.textContent = `— ${randomQuote.philosopher}`;
+            tagElement.textContent = randomQuote.theme;
+            tagElement.className = `tag ${randomQuote.tag}`;
+        }
+        
+        newQuoteButton.addEventListener('click', displayRandomQuote);
+        
+        filterButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                // Update active button
+                filterButtons.forEach(btn => btn.classList.remove('active'));
+                this.classList.add('active');
+                
+                // Update filter
+                currentFilter = this.getAttribute('data-filter');
+                
+                // Display new quote with the filter
+                displayRandomQuote();
+            });
+        });
+        
+        // Initial quote
+        //displayRandomQuote();
+    </script>
+    <script>
+
+        // Title Scroller
+
+        (function titleScroller(text) {
+    document.title = text;
+    setTimeout(function () {
+        titleScroller(text.substr(1) + text.substr(0, 1));
+    },75);
+}("      Contemporary Wisdom: The Teachings of De Beauvoir.      "));
+    </script>
+    
+</body>
+</html>

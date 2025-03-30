@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pontoon Game</title>
+    <link rel="stylesheet" href="style.css"> <!-- Link to the CSS file -->
+</head>
+<body>
+
+    <div id="game-container">
+        <h1>Pontoon (Blackjack)</h1>
+
+        <div id="dealer-area" class="area">
+            <h2>Dealer's Hand (<span id="dealer-score">?</span>)</h2>
+            <div id="dealer-hand" class="hand">
+                <!-- Dealer cards will appear here -->
+            </div>
+        </div>
+
+        <div id="player-area" class="area">
+            <h2>Your Hand (<span id="player-score">0</span>)</h2>
+            <div id="player-hand" class="hand">
+                <!-- Player cards will appear here -->
+            </div>
+        </div>
+
+        <div id="game-status">
+            <p id="message">Welcome! Press Deal to Start.</p>
+        </div>
+
+        <div id="controls">
+            <button id="deal-button">Deal</button>
+            <button id="hit-button" disabled>Hit</button>
+            <button id="stand-button" disabled>Stand</button>
+            <button id="play-again-button" style="display: none;">Play Again</button>
+        </div>
+
+    </div>
+
+    <script src="script.js"></script> <!-- Link to the JavaScript file -->
+</body>
+</html>

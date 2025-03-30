@@ -1,0 +1,113 @@
+body {
+    font-family: sans-serif;
+    background-color: #2a5233; /* Dark green background */
+    color: #fff;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start; /* Align to top */
+    min-height: 100vh;
+    padding-top: 20px;
+}
+
+#game-container {
+    background-color: #3a6f46; /* Slightly lighter green */
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    text-align: center;
+    min-width: 500px; /* Ensure enough space */
+}
+
+h1 {
+    color: #f0e68c; /* Khaki */
+    margin-bottom: 20px;
+}
+
+.area {
+    margin: 20px 0;
+    min-height: 130px; /* Ensure space for cards */
+    background-color: #2f5c3a;
+    padding: 10px;
+    border-radius: 5px;
+}
+
+.hand {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap; /* Allow cards to wrap */
+    gap: 10px; /* Space between cards */
+    min-height: 80px; /* Space for card elements */
+    margin-top: 10px;
+}
+
+.card {
+    background-color: white;
+    color: black;
+    border: 1px solid #555;
+    border-radius: 5px;
+    padding: 10px 5px;
+    min-width: 50px; /* Card width */
+    min-height: 70px; /* Card height */
+    font-size: 1.2em;
+    font-weight: bold;
+    box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.card.hidden {
+    background-color: #aaa;
+    color: #aaa;
+     background-image: repeating-linear-gradient(
+        45deg,
+        #bbb,
+        #bbb 5px,
+        #999 5px,
+        #999 10px
+    );
+    content: ""; /* Hide text */
+}
+.card .suit-display {
+    font-size: 1.5em; /* Larger suit symbol */
+}
+
+/* Color suits */
+.card.hearts, .card.diamonds {
+    color: red;
+}
+.card.spades, .card.clubs {
+    color: black;
+}
+
+
+#game-status {
+    margin: 20px 0;
+    font-size: 1.1em;
+    font-weight: bold;
+    min-height: 30px; /* Prevent layout jumps */
+}
+
+#controls button {
+    padding: 10px 20px;
+    font-size: 1em;
+    margin: 5px;
+    cursor: pointer;
+    border: none;
+    border-radius: 5px;
+    background-color: #f0e68c; /* Khaki */
+    color: #333;
+    transition: background-color 0.2s ease;
+}
+
+#controls button:hover:not(:disabled) {
+    background-color: #e8d870; /* Darker Khaki */
+}
+
+#controls button:disabled {
+    background-color: #a9a9a9; /* Dark Gray */
+    cursor: not-allowed;
+    color: #555;
+}

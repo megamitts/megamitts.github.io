@@ -7,20 +7,62 @@
     <title>The Bruces</title>
 </head>
 <style>
+    @font-face {
+        font-family: flying-circus;
+        src: url('fonts/flying-circus.ttf');
+    }
     iframe {
         display: block;
         margin: 0 auto;
         border: 2px solid #000;
     }
-    h1 {
+    div {
+        font-family: flying-circus;
+        
         text-align: center;
         font-size: 2.5em;
         color: #333;
     }
+    
+    span {
+        font-family: 'Courier New', Courier, monospace;
+        font-size: small;
+        text-align: center;
+    }
+
+    .tooltip .tooltiptext {
+  visibility: hidden;
+  width: 120px;
+  background-color: black;
+  color: #fff;
+  text-align: center;
+  padding: 5px 0;
+  border-radius: 6px;
+ 
+  /* Position the tooltip text  */
+  position: absolute;
+  z-index: 1;
+  
+  
+}
+
+/* Show the tooltip text when you mouse over the tooltip container */
+.tooltip:hover .tooltiptext {
+  visibility: visible;
+}
+
+.flip-horizontal {
+  transform: scaleX(-1);
+	}
+
 </style>
-<body>
+<body style = "text-align: center;">
     <header>
-        <h1>The Bruces</h1>
+        <div class ="tooltip">The Bruces
+        <span class="tooltiptext">The FontStruction “Flying Circus” was created by Christian Munk
+                    
+        </span>
+        </div>
     </header>
     <main>
         
@@ -28,7 +70,7 @@
     </main>
     <footer>
         <a href="contemporary.html">
-        <img src="gfx/de_beauvoir.png" alt="de_beauvoir" style="width: 200px; height: 100px; display: block; margin: 0 auto; padding-top: 30px;">
+        <img src="gfx/de_beauvoir.png" class = "flip-horizontal" alt="de_beauvoir" style="width: 200px; height: 100px; display: block; margin: 0 auto; padding-top: 30px;">
         </a>   
     </footer>
     <script>

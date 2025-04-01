@@ -3,7 +3,111 @@
 	/* ancient wisdom quotes */
 
         const quotes = [
-            
+
+            // Kong Qui quotes
+            {
+                text: "It does not matter how slowly you go as long as you do not stop.",
+                philosopher: "Kong Qui",
+                tag: "qui",
+                theme: "Perseverance"
+            },
+            {
+                text: "Our greatest glory is not in never falling, but in rising every time we fall.",
+                philosopher: "Kong Qui",
+                tag: "qui",
+                theme: "Resilience"
+            },
+            {
+                text: "Real knowledge is to know the extent of one's ignorance.",
+                philosopher: "Kong Qui",
+                tag: "qui",
+                theme: "Knowledge"
+            },
+            {
+                text: "I hear and I forget. I see and I remember. I do and I understand.",
+                philosopher: "Kong Qui",
+                tag: "qui",
+                theme: "Knowledge"
+            },
+            {
+                text: "The superior man is modest in his speech but exceeds in his actions.",
+                philosopher: "Kong Qui",
+                tag: "qui",
+                theme: "Self"
+            },
+            {
+                text: "Hold faithfulness and sincerity as first principles.",
+                philosopher: "Kong Qui",
+                tag: "qui",
+                theme: "Self"
+            },
+            {
+                text: "To see what is right and not do it is the worst cowardice.",
+                philosopher: "Kong Qui",
+                tag: "qui",
+                theme: "Self"
+            },
+            {
+                text: "Life is really simple, but we insist on making it complicated.",
+                philosopher: "Kong Qui",
+                tag: "qui",
+                theme: "Life"
+            },
+
+            // Lao Tzu quotes
+
+            {
+                text: "Knowing others is intelligence; knowing yourself is true wisdom. Mastering others is strength; mastering yourself is true power.",
+                philosopher: "Lao Tzu",
+                tag: "lao",
+                theme: "Self"
+            },
+            {
+                text: "A good traveler has no fixed plans and is not intent on arriving.",
+                philosopher: "Lao Tzu",
+                tag: "lao",
+                theme: "Journey"
+            },
+            {
+                text: "When you are content to be simply yourself and don't compare or compete, everyone will respect you.",
+                philosopher: "Lao Tzu",
+                tag: "lao",
+                theme: "Self"
+            },
+            {
+                text: "The journey of a thousand miles begins with one step.",
+                philosopher: "Lao Tzu",
+                tag: "lao",
+                theme: "Journey"
+            },
+            {
+                text: "If you are depressed, you are living in the past. If you are anxious, you are living in the future. If you are at peace, you are living in the present.",
+                philosopher: "Lao Tzu",
+                tag: "lao",
+                theme: "Present"
+            },
+            {
+                text: "Nature does not hurry, yet everything is accomplished.",
+                philosopher: "Lao Tzu",
+                tag: "lao",
+                theme: "Nature"
+            },
+            {
+                text: "The best fighter is never angry.",
+                philosopher: "Lao Tzu",
+                tag: "lao",
+                theme: "Self"
+            },
+            {
+                text: "To know that you do not know is the best. To pretend to know when you do not know is a disease.",
+                philosopher: "Lao Tzu",
+                tag: "lao",
+                theme: "Knowledge"
+            },
+
+
+
+
             // Hypatia quotes
             {
                 text: "Reserve your right to think, for even to think wrongly is better than not to think at all.",

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lightspeed</title>
+    <title>Credits</title>
     <style>
         body {
             margin: 0;
@@ -54,6 +54,11 @@
             height: 100%;
             z-index: 1;
         }
+        
+        .flip-horizontal {
+  transform: scaleX(-1);
+	}
+	
     </style>
 </head>
 <body>
@@ -62,10 +67,10 @@
 		<p>Code: Megamitts</p>
 		<p>Graphics: Various free sources around the web</p>
 		<p>Monty Python font: Christian Munk</p>
-		<p>This effect: Matthias Hurrle (@atzedent)</p>
+		<p>Mind blown effect: Matthias Hurrle (@atzedent)</p>
 		<p></p>
 		
-		<a href="index.html" style="color: white; text-decoration: none;"><img src="gfx/socrates.png" width = "100" height = "100"></a>
+		<a href="index.html" style="color: white; text-decoration: none;"><img src="gfx/socrates.png" class="flip-horizontal" width = "100" height = "100" class="flip-horizontal"></a>
 		<p></p>
     </div>
     <canvas id="glCanvas"></canvas>

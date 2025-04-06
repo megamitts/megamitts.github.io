@@ -1,0 +1,17 @@
+html, body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: black;
+  color: #eee;
+  font: caption;
+}
+
+#version {
+  position: absolute;
+  left: 5px;
+  top: 605px;
+}

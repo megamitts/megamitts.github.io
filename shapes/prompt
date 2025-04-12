@@ -1,0 +1,22 @@
+Prompt 1
+
+I have uploaded a simple design for a simple program that I want to create. The program will create a 3D cube, a 3D pyramid or a 3D star, all wireframes when you press the corresponding button.
+
+You will be able to select the created object and drag it around the viewing area.
+
+The program should be written in P5JS.
+
+*** The program worked as expected but you can drag the objects too far up and down the screen. 
+
+Prompt 2
+
+That's great but the objects can be dragged far too high and far too low. They should stay within the boundary as shown on the diagram.
+
+*** I noticed when I ran it on a phone that you could operate the buttons but not drag the objects.
+
+Prompt 3
+
+I have tried this on a touch screen and the buttons work but I am unable to drag the shapes around. Please fix this issue so that on a PC you can use a mouse and you can use your fingers on a touch screen.
+
+*** All worked perfectly.
+

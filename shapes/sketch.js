@@ -33,7 +33,7 @@ function setup() {
   // --- Create Buttons ---
   let buttonY = 25; // Position from top of the window
 
-  let cubeButton = createButton('Cube');
+  let cubeButton = createButton('Cube1');
   cubeButton.position(20, buttonY); // Position relative to window
   cubeButton.mousePressed(() => {
     currentObject = 'cube';

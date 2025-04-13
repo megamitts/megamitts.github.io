@@ -28,6 +28,19 @@ const IDLE_TIME_THRESHOLD = 1500; // 1.5 seconds for idle animation
 canvas.width = GAME_WIDTH;
 canvas.height = GAME_HEIGHT;
 
+
+let audio = document.getElementById("myAudio");
+ 
+/*   
+  function playAudio() {
+    audio.play();
+  }
+*/
+
+document.addEventListener('keydown', () => {
+    audio.play().catch(err => console.warn("Autoplay prevented:", err));
+}, { once: true });
+
 // --- Game State ---
 let player = {
     x: 50,
@@ -71,6 +84,9 @@ function checkCollision(rect1, rect2) {
 
 // --- Level Setup ---
 function setupLevel() {
+
+
+
     // ... (reset game state as before) ...
     player.x = 50;
     player.y = GAME_HEIGHT - TILE_SIZE * 3;
@@ -604,6 +620,9 @@ function restartGame() {
 // --- Game Loop ---
 function gameLoop(timestamp) {
     if (!gameActive) {
+    
+    	
+    
         // Allow restart even when game is not active
         if (keys['KeyR']) {
             restartGame();
@@ -641,3 +660,5 @@ function gameLoop(timestamp) {
 setupLevel();
 lastTime = performance.now(); // Initialize lastTime before the first loop
 requestAnimationFrame(gameLoop);
+//playAudio();
+

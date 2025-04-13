@@ -22,7 +22,7 @@ const TILE_SIZE = 20;    // Size of player, enemies, etc.
 const GRAVITY = 0.5;
 const JUMP_FORCE = -7.5;
 const PLAYER_SPEED = 4;
-const INVULNERABILITY_DURATION = 20000000; // 2 seconds in milliseconds
+const INVULNERABILITY_DURATION = 2000; // 2 seconds in milliseconds
 const IDLE_TIME_THRESHOLD = 1500; // 1.5 seconds for idle animation
 
 canvas.width = GAME_WIDTH;
@@ -30,7 +30,12 @@ canvas.height = GAME_HEIGHT;
 
 
 let audio = document.getElementById("myAudio");
- 
+let winAudio = document.getElementById("winAudio"); 
+let deathAudio = document.getElementById("deathAudio");
+let jumpAudio = document.getElementById("jumpAudio");
+let hitAudio = document.getElementById("hitAudio");
+let collectAudio = document.getElementById("collectAudio");
+
 /*   
   function playAudio() {
     audio.play();
@@ -39,6 +44,8 @@ let audio = document.getElementById("myAudio");
 
 document.addEventListener('keydown', () => {
     audio.play().catch(err => console.warn("Autoplay prevented:", err));
+    audio.volume = 0.2;
+    jumpAudio.volume = 0.4;
 }, { once: true });
 
 // --- Game State ---
@@ -248,6 +255,7 @@ function updatePlayer(deltaTime) {
     // Allow jumping only if grounded OR if briefly detached from a downward moving plat
     // This adds complexity, let's stick to grounded only for now.
     if ((keys['ArrowUp'] || keys['KeyW'] || keys['Space']) && player.isOnGround) {
+        jumpAudio.play();
         player.vy = JUMP_FORCE;
         player.isOnGround = false; // Will be reset if still colliding next frame
         player.lastMoveTime = now;
@@ -413,14 +421,17 @@ if (landedFromAbove || (platformMovingUpIntoPlayer && playerIsFalling)) {
     // --- Collectables ---
      collectables.forEach((fish, index) => {
         if (!fish.collected && checkCollision(player, fish)) {
+            
             fish.collected = true;
             score += fish.score;
+            collectAudio.play();
             updateHUD();
         }
     });
-    // --- Goal ---
+    // --- Goal --- 
     if (checkCollision(player, goal) && score === 800) {
         winGame();
+        
     }
 
 
@@ -582,6 +593,7 @@ function updateHUD() {
 }
 
 function loseLife() {
+	hitAudio.play();
     lives--;
     updateHUD();
     if (lives <= 0) {
@@ -604,11 +616,13 @@ function displayMessage(text) {
 }
 
 function gameOver() {
+    deathAudio.play();
     gameActive = false;
     displayMessage("<strong>GAME OVER!</strong> <br> Press R to Restart");
 }
 
 function winGame() {
+ 	winAudio.play();
     gameActive = false;
     displayMessage("YOU REACHED THE CASTLE!<br> <strong> WINNER! </strong> <br> Press R to Restart");
 }
@@ -660,5 +674,5 @@ function gameLoop(timestamp) {
 setupLevel();
 lastTime = performance.now(); // Initialize lastTime before the first loop
 requestAnimationFrame(gameLoop);
-//playAudio();
+
 

@@ -20,9 +20,9 @@ const GAME_HEIGHT = 400; // Canvas height
 const TILE_SIZE = 20;    // Size of player, enemies, etc.
 
 const GRAVITY = 0.5;
-const JUMP_FORCE = -9;
+const JUMP_FORCE = -7.5;
 const PLAYER_SPEED = 4;
-const INVULNERABILITY_DURATION = 2000; // 2 seconds in milliseconds
+const INVULNERABILITY_DURATION = 20000000; // 2 seconds in milliseconds
 const IDLE_TIME_THRESHOLD = 1500; // 1.5 seconds for idle animation
 
 canvas.width = GAME_WIDTH;
@@ -45,7 +45,7 @@ let player = {
     facingRight: true
 };
 
-let lives = 30;
+let lives = 3;
 let score = 0;
 let keys = {}; // Keep track of pressed keys
 let platforms = [];
@@ -76,12 +76,26 @@ function setupLevel() {
     player.y = GAME_HEIGHT - TILE_SIZE * 3;
     // ... (rest of player reset) ...
     score = 0;
-    lives = 30;  // lives counter
+    lives = 3;  // #lives counter
     keys = {};
     gameActive = true;
     messageElement.style.display = 'none';
     updateHUD();
 
+// --- MODIFIED Goal ---
+    // Place it on the NEW final platform
+    const finalPlatY = GAME_HEIGHT - TILE_SIZE * 14;
+    const goalHeight = TILE_SIZE * 2;
+    goal = {
+        x: 420, // Positioned on the final platform (x=360, width=150)
+        y: finalPlatY - goalHeight, // Base sits on the platform
+        width: TILE_SIZE * 2,
+        height: goalHeight,
+        color: Z_WHITE
+    };
+
+// Maybe add an enemy on the final platform?
+	
     // --- Define Platforms ---
     platforms = [
         // Ground
@@ -151,12 +165,13 @@ function setupLevel() {
         { x: 350, y: GAME_HEIGHT + TILE_SIZE * 8 + 1, width: TILE_SIZE, height: TILE_SIZE -2, color: Z_MAGENTA, type: 'bouncer', startY: GAME_HEIGHT - TILE_SIZE * 12, endY: GAME_HEIGHT - TILE_SIZE * 7, speed: 1.5, direction: 1 },
         
         // Pacer on ground
-        { x: 400, y: GAME_HEIGHT - TILE_SIZE * 2 + 1 , width: TILE_SIZE, height: TILE_SIZE-2, color: Z_RED, type: 'pacer', startX: 350, endX: 550, speed: 2, direction: 1 },
+        { x: 200, y: GAME_HEIGHT - TILE_SIZE * 2 + 1 , width: TILE_SIZE, height: TILE_SIZE-2, color: Z_RED, type: 'pacer', startX: 200, endX: 350, speed: 2, direction: 1 },
         
         { x: 100, y: GAME_HEIGHT - TILE_SIZE * 18 + 1 , width: TILE_SIZE, height: TILE_SIZE-2, color: Z_RED, type: 'pacer', startX: 100, endX: 320, speed: 4, direction: 1 },
         
         // Maybe add an enemy on the final platform?
-        { x: 400, y: GAME_HEIGHT - TILE_SIZE * 15 + 1, width: TILE_SIZE, height: TILE_SIZE - 2, color: Z_RED, type: 'pacer', startX: 370, endX: 460, speed: 1, direction: 1 }
+        { x: 360, y: GAME_HEIGHT - TILE_SIZE * 15 + 1, width: TILE_SIZE, height: TILE_SIZE - 2, color: Z_RED, type: 'pacer', startX: 360, endX: 420, speed: 1, direction: 1 }
+        
     ];
     // Initialize enemy direction/state if needed (redundant if set above)
     // enemies.forEach(enemy => { if (!enemy.direction) { enemy.direction = 1; } });
@@ -173,8 +188,11 @@ function setupLevel() {
         { x: 20, y: GAME_HEIGHT - TILE_SIZE * 19 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 100, collected: false }, // top
         { x: 520, y: GAME_HEIGHT - TILE_SIZE * 10 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 100, collected: false }, 
         { x: 170, y: GAME_HEIGHT - TILE_SIZE * 18 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 100, collected: false }, 
+        { x: 200, y: GAME_HEIGHT - TILE_SIZE * 2 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 100, collected: false }, 
     ];
 
+
+/*
     // --- MODIFIED Goal ---
     // Place it on the NEW final platform
     const finalPlatY = GAME_HEIGHT - TILE_SIZE * 14;
@@ -186,7 +204,7 @@ function setupLevel() {
         height: goalHeight,
         color: Z_WHITE
     };
-
+*/
 } // End of setupLevel function
 
 // --- Update Functions ---
@@ -252,29 +270,36 @@ function updatePlayer(deltaTime) {
 
         if (checkCollision(collisionCheckRect, platform)) {
             const playerBottomLastFrame = previousY + player.height;
-            const playerTopLastFrame = previousY;
-            const platformTop = platform.y;
-            const platformBottom = platform.y + platform.height;
-        
-            const landedFromAbove = player.vy >= 0 && playerBottomLastFrame <= platformTop;
-            const bumpedHead = player.vy < 0 && playerTopLastFrame >= platformBottom;
-        
-            const platformMovingUpIntoPlayer = platform.type === 'moving_v' && platform.dy < 0 &&
-                playerBottomLastFrame > platformTop && player.y + player.height >= platformTop;
-        
-            if (landedFromAbove || platformMovingUpIntoPlayer) {
-                // Landed on or caught by upward platform
-                player.y = platform.y - player.height;
-                player.vy = 0;
-                player.isOnGround = true;
-                if (platform.type.startsWith('moving')) {
-                    platformPlayerIsOn = platform;
-                }
-            } else if (bumpedHead) {
-                // Hit head from below
-                player.y = platformBottom;
-                player.vy = 0;
-            } else {
+const playerTopLastFrame = previousY;
+const platformTop = platform.y;
+const platformBottom = platform.y + platform.height;
+const playerIsFalling = player.vy >= 0;
+
+// Check what kind of collision occurred
+const landedFromAbove = playerBottomLastFrame <= platformTop && player.y + player.height >= platformTop;
+const bumpedHead = playerTopLastFrame >= platformBottom && player.y <= platformBottom;
+
+const platformMovingUpIntoPlayer = platform.type === 'moving_v' && platform.dy < 0 &&
+                                   playerBottomLastFrame > platformTop &&
+                                   player.y + player.height >= platformTop;
+
+if (landedFromAbove || (platformMovingUpIntoPlayer && playerIsFalling)) {
+    // Landed on or caught by upward platform while falling
+    player.y = platform.y - player.height;
+    player.vy = 0;
+    player.isOnGround = true;
+    if (platform.type.startsWith('moving')) {
+        platformPlayerIsOn = platform;
+    }
+} else if (bumpedHead) {
+    // Hit from below, including fast vertical motion
+    player.y = platformBottom;
+    if (player.vy < 0) {
+        player.vy = 0;
+    }
+}
+
+ else {
                 // Horizontal collisions
                 if (!player.isOnGround) {
                     if (player.vx > 0 && player.x + player.width - player.vx <= platform.x) {
@@ -325,6 +350,8 @@ function updatePlayer(deltaTime) {
 
 
     // --- Apply Moving Platform "Stickiness" ---
+
+    
     if (platformPlayerIsOn) {
         // Apply platform's horizontal movement delta
         player.x += platformPlayerIsOn.dx;
@@ -376,7 +403,7 @@ function updatePlayer(deltaTime) {
         }
     });
     // --- Goal ---
-    if (checkCollision(player, goal) && score === 600) {
+    if (checkCollision(player, goal) && score === 800) {
         winGame();
     }
 
@@ -494,6 +521,10 @@ function drawPlatforms() {
 
 function drawEnemies() {
     enemies.forEach(e => drawRect(e.x, e.y, e.width, e.height, e.color));
+    enemies.forEach(e => drawRect(e.x, e.y-4, 3, 5, e.color));
+    enemies.forEach(e => drawRect(e.x+17, e.y-4, 3, 5, e.color));
+    enemies.forEach(e => drawRect(e.x+4, e.y+4, 3, 3, Z_BLACK));
+    enemies.forEach(e => drawRect(e.x+12, e.y+4, 3, 3, Z_BLACK));
 }
 
 function drawCollectables() {
@@ -552,18 +583,18 @@ function loseLife() {
 }
 
 function displayMessage(text) {
-    messageElement.textContent = text;
+    messageElement.innerHTML = text;
     messageElement.style.display = 'block';
 }
 
 function gameOver() {
     gameActive = false;
-    displayMessage("GAME OVER! Press R to Restart");
+    displayMessage("<strong>GAME OVER!</strong> <br> Press R to Restart");
 }
 
 function winGame() {
     gameActive = false;
-    displayMessage("YOU REACHED THE CASTLE! WINNER! Press R to Restart");
+    displayMessage("YOU REACHED THE CASTLE!<br> <strong> WINNER! </strong> <br> Press R to Restart");
 }
 
 function restartGame() {

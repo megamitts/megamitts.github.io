@@ -36,17 +36,23 @@ let jumpAudio = document.getElementById("jumpAudio");
 let hitAudio = document.getElementById("hitAudio");
 let collectAudio = document.getElementById("collectAudio");
 
-/*   
-  function playAudio() {
-    audio.play();
-  }
-*/
 
 document.addEventListener('keydown', () => {
     audio.play().catch(err => console.warn("Autoplay prevented:", err));
     audio.volume = 0.2;
     jumpAudio.volume = 0.4;
 }, { once: true });
+
+
+/*   
+  function playAudio() {
+    audio.play();
+  }
+*/
+
+
+
+
 
 // --- Game State ---
 let player = {
@@ -88,6 +94,20 @@ function checkCollision(rect1, rect2) {
         rect1.y + rect1.height > rect2.y
     );
 }
+
+
+
+function loading() {
+
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const image = document.getElementById("loading_screen");
+ctx.drawImage(image, 100, 10);
+displayMessage("<strong>Press any key to start</strong>");
+
+
+}
+
 
 // --- Level Setup ---
 function setupLevel() {
@@ -670,9 +690,31 @@ function gameLoop(timestamp) {
     requestAnimationFrame(gameLoop);
 }
 
+
+
+
+
 // --- Start Game ---
+
+
+loading(); // loading screen
+
+// wait for a key press
+document.addEventListener('keydown', startGameOnce, { once: true });
+
+function startGameOnce() {
+    audio.play().catch(err => console.warn("Autoplay prevented:", err));
+    audio.volume = 0.2;
+    jumpAudio.volume = 0.4;
+
+    setupLevel();
+    lastTime = performance.now();
+    requestAnimationFrame(gameLoop);
+}
+
+/*
 setupLevel();
 lastTime = performance.now(); // Initialize lastTime before the first loop
-requestAnimationFrame(gameLoop);
+requestAnimationFrame(gameLoop); */  
 
 

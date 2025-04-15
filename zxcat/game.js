@@ -22,7 +22,7 @@ const TILE_SIZE = 20;    // Size of player, enemies, etc.
 const GRAVITY = 0.5;
 const JUMP_FORCE = -7.5;
 const PLAYER_SPEED = 4;
-const INVULNERABILITY_DURATION = 2000; // 2 seconds in milliseconds
+let INVULNERABILITY_DURATION = 2000; // 2 seconds in milliseconds
 const IDLE_TIME_THRESHOLD = 1500; // 1.5 seconds for idle animation
 
 canvas.width = GAME_WIDTH;
@@ -179,7 +179,7 @@ function setupLevel() {
             // Move between the level of the platform below and the final platform height
             startY: GAME_HEIGHT - TILE_SIZE * 18, // Peak height
             endY: GAME_HEIGHT - TILE_SIZE * 2,   // Lowest point
-            speed: 1, // Adjust speed as needed
+            speed: 1.5, // Adjust speed as needed
             direction: -1 // Start moving UP
         },
 
@@ -208,7 +208,9 @@ function setupLevel() {
         { x: 350, y: GAME_HEIGHT + TILE_SIZE * 8 + 1, width: TILE_SIZE, height: TILE_SIZE -2, color: Z_MAGENTA, type: 'bouncer', startY: GAME_HEIGHT - TILE_SIZE * 12, endY: GAME_HEIGHT - TILE_SIZE * 7, speed: 1.5, direction: 1 },
         
         // Pacer on ground
-        { x: 200, y: GAME_HEIGHT - TILE_SIZE * 2 + 1 , width: TILE_SIZE, height: TILE_SIZE-2, color: Z_RED, type: 'pacer', startX: 200, endX: 350, speed: 2, direction: 1 },
+        { x: 200, y: GAME_HEIGHT - TILE_SIZE * 2 + 1 , width: TILE_SIZE, height: TILE_SIZE-2, color: Z_RED, type: 'pacer', startX: 10, endX: 350, speed: 1, direction: 1 },
+        
+        { x: 490, y: GAME_HEIGHT - TILE_SIZE * 2 + 1 , width: TILE_SIZE, height: TILE_SIZE-2, color: Z_RED, type: 'pacer', startX: 490, endX: 590, speed: 0.5, direction: 1 },
         
         { x: 100, y: GAME_HEIGHT - TILE_SIZE * 18 + 1 , width: TILE_SIZE, height: TILE_SIZE-2, color: Z_RED, type: 'pacer', startX: 100, endX: 320, speed: 4, direction: 1 },
         
@@ -232,7 +234,13 @@ function setupLevel() {
         { x: 520, y: GAME_HEIGHT - TILE_SIZE * 10 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 100, collected: false }, 
         { x: 170, y: GAME_HEIGHT - TILE_SIZE * 18 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 100, collected: false }, 
         { x: 200, y: GAME_HEIGHT - TILE_SIZE * 2 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 100, collected: false }, 
+        { x: 110, y: GAME_HEIGHT - TILE_SIZE * 11 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 100, collected: false },
+        { x: 550, y: GAME_HEIGHT - TILE_SIZE * 1 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 100, collected: false },
+        
     ];
+
+
+
 
 
 /*
@@ -270,6 +278,11 @@ function updatePlayer(deltaTime) {
         moved = true;
         player.facingRight = true;
     }
+
+
+	if(keys['KeyI']){
+	INVULNERABILITY_DURATION = 2000000;
+	}
 
     // --- Jumping ---
     // Allow jumping only if grounded OR if briefly detached from a downward moving plat
@@ -449,7 +462,7 @@ if (landedFromAbove || (platformMovingUpIntoPlayer && playerIsFalling)) {
         }
     });
     // --- Goal --- 
-    if (checkCollision(player, goal) && score === 800) {
+    if (checkCollision(player, goal) && score === 1000) {
         winGame();
         
     }
@@ -526,6 +539,9 @@ function updateEnemies(deltaTime) {
 function drawRect(x, y, w, h, color) {
     ctx.fillStyle = color;
     ctx.fillRect(x, y, w, h);
+    
+   
+   
 }
 
 // Simple cat drawing (basic shapes)
@@ -560,10 +576,50 @@ function drawPlayer() {
          const tongueX = player.facingRight ? pawX -1 : pawX + player.width * 0.2 -1;
          ctx.fillRect(tongueX, pawY + player.height * 0.1, 2, 3);
     }
+    
+    // cloud top left - player will go behind them.
+    ctx.beginPath();
+ctx.arc(30, 50, 30, 0, 2 * Math.PI);
+ctx.fillStyle = "white";
+ctx.fill();
+
+
+ctx.beginPath();
+ctx.arc(50, 30, 30, 0, 2 * Math.PI);
+ctx.fillStyle = "white";
+ctx.fill();
+
+ctx.beginPath();
+ctx.arc(70, 50, 30, 0, 2 * Math.PI);
+ctx.fillStyle = "white";
+ctx.fill();    
 }
 
 function drawPlatforms() {
     platforms.forEach(p => drawRect(p.x, p.y, p.width, p.height, p.color));
+    
+    
+    //clouds
+
+ctx.beginPath();
+ctx.arc(500, 50, 30, 0, 2 * Math.PI);
+ctx.fillStyle = "white";
+ctx.fill();
+
+
+ctx.beginPath();
+ctx.arc(520, 30, 30, 0, 2 * Math.PI);
+ctx.fillStyle = "white";
+ctx.fill();
+
+ctx.beginPath();
+ctx.arc(540, 50, 30, 0, 2 * Math.PI);
+ctx.fillStyle = "white";
+ctx.fill();
+ 
+
+
+    
 }
 
 function drawEnemies() {
@@ -644,7 +700,7 @@ function gameOver() {
 function winGame() {
  	winAudio.play();
     gameActive = false;
-    displayMessage("YOU REACHED THE CASTLE!<br> <strong> WINNER! </strong> <br> Press R to Restart");
+    displayMessage("YOU REACHED THE CASTLE!<br> <strong> CONGRATULATIONS! </strong> <br> Press R to Restart");
 }
 
 function restartGame() {

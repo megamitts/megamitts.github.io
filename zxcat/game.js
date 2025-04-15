@@ -81,6 +81,39 @@ let goal = {};
 let gameActive = true;
 let lastTime = 0;
 
+// --- Starfield Setup ---
+const stars = [];
+const STAR_COUNT = 100; // Number of stars
+const STAR_SPEED = 1; // Speed of stars
+
+// Initialize stars with random positions
+for (let i = 0; i < STAR_COUNT; i++) {
+    stars.push({
+        x: Math.random() * GAME_WIDTH,
+        y: Math.random() * GAME_HEIGHT,
+        size: Math.random() * 2 + 1, // Random size between 1 and 3
+        color: Z_WHITE
+    });
+}
+
+// Update star positions
+function updateStarfield() {
+    stars.forEach(star => {
+        star.x -= STAR_SPEED; // Move stars to the left
+        if (star.x < 0) {
+            star.x = GAME_WIDTH; // Reset star to the right
+            star.y = Math.random() * GAME_HEIGHT; // Randomize vertical position
+        }
+    });
+}
+
+// Draw stars
+function drawStarfield() {
+    stars.forEach(star => {
+        drawRect(star.x, star.y, star.size, star.size, star.color);
+    });
+}
+
 // --- Input Handling ---
 document.addEventListener('keydown', (e) => { keys[e.code] = true; });
 document.addEventListener('keyup', (e) => { keys[e.code] = false; });
@@ -724,23 +757,24 @@ function gameLoop(timestamp) {
     const deltaTime = timestamp - lastTime;
     lastTime = timestamp;
 
-    // --- Update ---
-    updatePlayer(deltaTime || 0); // Use 0 delta for the first frame
-    updatePlatforms(deltaTime || 0);
-    updateEnemies(deltaTime || 0);
-
-
     // --- Draw ---
-    // Clear canvas
     ctx.fillStyle = Z_BLACK; // Use ZX Black for background clearing
     ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-    // Draw elements
+    drawStarfield(); // Draw the starfield
     drawPlatforms();
     drawCollectables();
     drawEnemies();
     drawGoal();
     drawPlayer(); // Draw player last so it's on top
+
+    // --- Update ---
+    updateStarfield(); // Update starfield positions
+
+    updatePlayer(deltaTime || 0); // Use 0 delta for the first frame
+    updatePlatforms(deltaTime || 0);
+    updateEnemies(deltaTime || 0);
+
 
     // Request next frame
     requestAnimationFrame(gameLoop);
@@ -771,6 +805,6 @@ function startGameOnce() {
 /*
 setupLevel();
 lastTime = performance.now(); // Initialize lastTime before the first loop
-requestAnimationFrame(gameLoop); */  
+requestAnimationFrame(gameLoop); */
 
 

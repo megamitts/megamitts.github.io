@@ -84,7 +84,7 @@ let lastTime = 0;
 // --- Starfield Setup ---
 const stars = [];
 const STAR_COUNT = 100; // Number of stars
-const STAR_SPEED = 1; // Speed of stars
+let STAR_SPEED = 0; // Speed of stars
 
 // Initialize stars with random positions
 for (let i = 0; i < STAR_COUNT; i++) {
@@ -153,6 +153,7 @@ function setupLevel() {
     // ... (rest of player reset) ...
     score = 0;
     lives = 3;  // #lives counter
+    STAR_SPEED = 0;
     keys = {};
     gameActive = true;
     messageElement.style.display = 'none';
@@ -263,7 +264,7 @@ function setupLevel() {
         { x: 200, y: GAME_HEIGHT - TILE_SIZE * 11 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 100, collected: false },
         // Fish on final platform
         { x: 400, y: GAME_HEIGHT - TILE_SIZE * 15 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 100, collected: false },
-        { x: 20, y: GAME_HEIGHT - TILE_SIZE * 19 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 100, collected: false }, // top
+        { x: 15, y: GAME_HEIGHT - TILE_SIZE * 19 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 100, collected: false }, // top
         { x: 520, y: GAME_HEIGHT - TILE_SIZE * 10 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 100, collected: false }, 
         { x: 170, y: GAME_HEIGHT - TILE_SIZE * 18 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 100, collected: false }, 
         { x: 200, y: GAME_HEIGHT - TILE_SIZE * 2 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 100, collected: false }, 
@@ -492,6 +493,7 @@ if (landedFromAbove || (platformMovingUpIntoPlayer && playerIsFalling)) {
             score += fish.score;
             collectAudio.play();
             updateHUD();
+            STAR_SPEED++;
         }
     });
     // --- Goal --- 

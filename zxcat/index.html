@@ -6,6 +6,95 @@
     <title>ZX Cat Platformer</title>
     <link rel="stylesheet" href="style.css">
 </head>
+
+<style>
+body {
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: black;
+}
+
+.game-border {
+    position: relative;
+    width: 800px;
+    height: 600px;
+    background-image: url('background.png');
+    background-size: cover;
+    background-repeat: no-repeat;
+    overflow: hidden;
+}
+
+/* Absolute positioning gives you full control */
+.hud {
+    position: absolute;
+    top: 405px; /* 👈 adjust this DOWN to avoid overlapping the top art */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 590px;
+    display: flex;
+    justify-content: space-between;
+    font-family: monospace;
+    font-size: 20px;
+    color: yellow;
+    padding: 4px 8px;
+    background: blue;
+}
+
+/* Same for the container with canvas */
+.game-container {
+    position: absolute;
+    top: 150px; /* 👈 adjust to push canvas lower too */
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.scanlines::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none; /* So it doesn't block clicks */
+  z-index: 9999; /* Make sure it's above everything */
+
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.1) 0px,
+    rgba(0, 0, 0, 0.1) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+.scanlines::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9998;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0) 30%,
+    rgba(0, 0, 0, 10) 100%
+  );
+}
+
+
+#gameCanvas {
+    width: 600px;
+    height: 400px;
+    background-color: black;
+}
+
+</style>
 <body>
 
 <audio id="myAudio" preload="auto" loop>
@@ -29,6 +118,7 @@
 
 <img id="loading_screen" src="pic.png" width = "300" height = "300" style="display: none;">
 
+<div class = "game-border scanlines">
     <div class="game-container">
         <div class="hud">
             <span>FISH: <span id="score">0</span></span>
@@ -37,6 +127,8 @@
         <canvas id="gameCanvas"></canvas>
         <div id="message" class="message-overlay" style="display: none;"></div>
     </div>
+</div>
+
 
     <script src="game.js"></script>
 </body>

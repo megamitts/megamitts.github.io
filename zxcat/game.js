@@ -36,6 +36,10 @@ let jumpAudio = document.getElementById("jumpAudio");
 let hitAudio = document.getElementById("hitAudio");
 let collectAudio = document.getElementById("collectAudio");
 
+let gameStarted = false;
+let animationFrameId = null;
+let waitingForStart = false;
+let canStart = true;
 
 document.addEventListener('keydown', () => {
     audio.play().catch(err => console.warn("Autoplay prevented:", err));
@@ -136,7 +140,7 @@ const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 const image = document.getElementById("loading_screen");
 ctx.drawImage(image, 100, 10);
-displayMessage("<strong>Press any key to start</strong>");
+displayMessage("<strong>Press Start (Enter or Gamepad)</strong>");
 
 
 }
@@ -770,58 +774,127 @@ function displayMessage(text) {
 function gameOver() {
     deathAudio.play();
     gameActive = false;
-    displayMessage("<strong>GAME OVER!</strong> <br> Press R to Restart");
+    gameStarted = false;
+    waitingForStart = true;
+    canStart = false;
+    cancelAnimationFrame(animationFrameId);
+
+    displayMessage("<strong>GAME OVER!</strong><br>Press any key or Start to restart");
+
+    // Wait before allowing input
+    setTimeout(() => {
+        canStart = true;
+        document.addEventListener('keydown', startGameOnce, { once: true });
+        requestAnimationFrame(waitForStart);
+    }, 500);
 }
 
 function winGame() {
- 	winAudio.play();
+    winAudio.play();
     gameActive = false;
-    displayMessage("YOU REACHED THE CASTLE!<br> <strong> CONGRATULATIONS! </strong> <br> Press R to Restart");
+    gameStarted = false;
+    waitingForStart = true;
+    canStart = false;
+    cancelAnimationFrame(animationFrameId);
+
+    displayMessage("YOU REACHED THE CASTLE!<br><strong>CONGRATULATIONS!</strong><br>Press any key or Start to restart");
+
+    // Wait before allowing input
+    setTimeout(() => {
+        canStart = true;
+        document.addEventListener('keydown', startGameOnce, { once: true });
+        requestAnimationFrame(waitForStart);
+    }, 500);
 }
+
+
 
 function restartGame() {
-    setupLevel(); // Re-initialize everything
+    gameActive = false;
+    gameStarted = false;
+    waitingForStart = true;
+    keys = {};
+    cancelAnimationFrame(animationFrameId);
+    animationFrameId = null;
+
+    loading();
+    document.addEventListener('keydown', startGameOnce, { once: true });
+    requestAnimationFrame(waitForStart);
 }
 
-// --- Game Loop ---
-function gameLoop(timestamp) {
-    if (!gameActive) {
-    
-    	
-    
-        // Allow restart even when game is not active
-        if (keys['KeyR']) {
-            restartGame();
+
+function handleGamepadInput() {
+    const gamepads = navigator.getGamepads ? navigator.getGamepads() : navigator.webkitGetGamepads();
+    if (!gamepads) return;
+
+    const gamepad = gamepads[0]; // Use the first connected gamepad
+    if (!gamepad) return;
+
+    // Map axes to movement (left stick)
+    const leftStickX = gamepad.axes[0]; // Horizontal movement
+    const leftStickY = gamepad.axes[1]; // Vertical movement (not used here)
+
+    // Deadzone to prevent accidental movement
+    const DEADZONE = 0.2;
+
+    if (Math.abs(leftStickX) > DEADZONE) {
+        if (leftStickX < -DEADZONE) {
+            keys['ArrowLeft'] = true; // Simulate left arrow key
+            keys['ArrowRight'] = false;
+        } else if (leftStickX > DEADZONE) {
+            keys['ArrowRight'] = true; // Simulate right arrow key
+            keys['ArrowLeft'] = false;
         }
-        requestAnimationFrame(gameLoop); // Keep listening for restart
-        return;
+    } else {
+        keys['ArrowLeft'] = false;
+        keys['ArrowRight'] = false;
     }
+
+    // Map buttons to actions
+    const BUTTON_A = 0; // A button (jump)
+    const BUTTON_B = 1; // B button (optional action)
+    const BUTTON_START = 9; // Start button (restart)
+
+    if (gamepad.buttons[BUTTON_A].pressed) {
+        keys['Space'] = true; // Simulate space key for jump
+    } else {
+        keys['Space'] = false;
+    }
+
+    if (gamepad.buttons[BUTTON_START].pressed) {
+        keys['KeyR'] = true; // Simulate 'R' key for restart
+    } else {
+        keys['KeyR'] = false;
+    }
+}
+
+function gameLoop(timestamp) {
+    if (!gameActive) return; // 🛑 game is over — do not continue
+
+    handleGamepadInput();
 
     const deltaTime = timestamp - lastTime;
     lastTime = timestamp;
 
-    // --- Draw ---
-    ctx.fillStyle = Z_BLACK; // Use ZX Black for background clearing
+    // DRAW
+    ctx.fillStyle = Z_BLACK;
     ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-
-    drawStarfield(); // Draw the starfield
+    drawStarfield();
     drawPlatforms();
     drawCollectables();
     drawEnemies();
     drawGoal();
-    drawPlayer(); // Draw player last so it's on top
+    drawPlayer();
 
-    // --- Update ---
-    updateStarfield(); // Update starfield positions
-
-    updatePlayer(deltaTime || 0); // Use 0 delta for the first frame
+    // UPDATE
+    updateStarfield();
+    updatePlayer(deltaTime || 0);
     updatePlatforms(deltaTime || 0);
     updateEnemies(deltaTime || 0);
 
-
-    // Request next frame
-    requestAnimationFrame(gameLoop);
+    animationFrameId = requestAnimationFrame(gameLoop);
 }
+
 
 
 
@@ -832,18 +905,49 @@ function gameLoop(timestamp) {
 
 loading(); // loading screen
 
+waitingForStart = true;
+
+
 // wait for a key press
+// wait for a key press or gamepad start button
 document.addEventListener('keydown', startGameOnce, { once: true });
+requestAnimationFrame(waitForStart);
 
 function startGameOnce() {
+    if (!canStart || gameStarted) return; // 🚫 ignore if still in pause or already running
+
+    gameStarted = true;
+    waitingForStart = false;
+    cancelAnimationFrame(animationFrameId);
+
     audio.play().catch(err => console.warn("Autoplay prevented:", err));
     audio.volume = 0.2;
     jumpAudio.volume = 0.4;
 
+    messageElement.style.display = 'none';
     setupLevel();
     lastTime = performance.now();
-    requestAnimationFrame(gameLoop);
+    animationFrameId = requestAnimationFrame(gameLoop);
 }
+
+
+
+
+
+function waitForStart() {
+    if (!waitingForStart) return; // Stop waiting if already playing
+
+    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+    const gp = gamepads[0];
+    if (gp && gp.buttons[9]?.pressed) {
+        startGameOnce();
+        return;
+    }
+
+    animationFrameId = requestAnimationFrame(waitForStart);
+}
+
+
 
 /*
 setupLevel();

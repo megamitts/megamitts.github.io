@@ -41,6 +41,11 @@ let animationFrameId = null;
 let waitingForStart = false;
 let canStart = true;
 
+let cloudX = -30;
+let cloudY = 50;
+let cloudSpeed = 0.5;
+let cloudDirection = 1;
+
 document.addEventListener('keydown', () => {
     audio.play().catch(err => console.warn("Autoplay prevented:", err));
     audio.volume = 0.2;
@@ -152,6 +157,13 @@ function setupLevel() {
 
 
     // ... (reset game state as before) ...
+    
+     cloudSpeed = 0.5;
+ cloudDirection = 1;
+    
+    cloudX = -30;
+	cloudY = 50;
+	
     player.x = 50;
     player.y = GAME_HEIGHT - TILE_SIZE * 3;
     // ... (rest of player reset) ...
@@ -615,25 +627,46 @@ function drawPlayer() {
          const tongueX = player.facingRight ? pawX -1 : pawX + player.width * 0.2 -1;
          ctx.fillRect(tongueX, pawY + player.height * 0.1, 2, 3);
     }
-    
-    // cloud top left - player will go behind them.
-    ctx.beginPath();
-ctx.arc(30, 50, 30, 0, 2 * Math.PI);
-ctx.fillStyle = "white";
-ctx.fill();
-
-
-ctx.beginPath();
-ctx.arc(50, 30, 30, 0, 2 * Math.PI);
-ctx.fillStyle = "white";
-ctx.fill();
-
-ctx.beginPath();
-ctx.arc(70, 50, 30, 0, 2 * Math.PI);
-ctx.fillStyle = "white";
-ctx.fill();    
+   
+   cloudLeft();
 }
 
+function cloudLeft(deltatime){
+
+    // cloud top left - player will go behind them.
+    ctx.beginPath();
+ctx.arc(cloudX, cloudY, 30, 0, 2 * Math.PI);
+ctx.fillStyle = "white";
+ctx.fill();
+
+
+ctx.beginPath();
+ctx.arc(cloudX+20, cloudY-20, 30, 0, 2 * Math.PI);
+ctx.fillStyle = "white";
+ctx.fill();
+
+ctx.beginPath();
+ctx.arc(cloudX+40, cloudY, 30, 0, 2 * Math.PI);
+ctx.fillStyle = "white";
+ctx.fill();    
+
+/*
+
+ if (enemy.type === 'pacer') {
+            enemy.x += enemy.speed * enemy.direction;
+            if (enemy.x <= enemy.startX || enemy.x + enemy.width >= enemy.endX) {
+                enemy.direction *= -1;
+
+*/
+
+
+	cloudX += cloudSpeed * cloudDirection;
+	if (cloudX <= -30 || cloudX >= 300) {
+		cloudDirection *=-1;
+		}
+
+
+}
 function drawPlatforms() {
     
     //mountains
@@ -661,18 +694,57 @@ function drawPlatforms() {
     ctx.fillStyle = "#3a3f55";
     ctx.fill();
     
-    
-    platforms.forEach(p => drawRect(p.x, p.y, p.width, p.height, p.color));
-    
-    
-    //drawRect(x, y, w, h, color)
-    
-    // tree
+    /*
+    // trees
     drawRect(300, 310, 10, 10, "green");
     drawRect(290, 320, 30, 10, "green"); 
     drawRect(280, 330, 50, 10, "green");
     drawRect(270, 340, 70, 10, "green");
     drawRect(295, 350, 20, 30, "brown");
+    
+    drawRect(355, 310, 10, 10, "green");
+    drawRect(345, 320, 30, 10, "green"); 
+    drawRect(335, 330, 50, 10, "green");
+    drawRect(325, 340, 70, 10, "green");
+    drawRect(350, 350, 20, 30, "brown");
+    
+    drawRect(410, 310, 10, 10, "green");
+    drawRect(400, 320, 30, 10, "green"); 
+    drawRect(390, 330, 50, 10, "green");
+    drawRect(380, 340, 70, 10, "green");
+    drawRect(405, 350, 20, 30, "brown");
+    
+    */
+    
+    const trees = [
+    { x: 300, y: 310, width: 10, height: 10, color: "green" },
+    { x: 290, y: 320, width: 30, height: 10, color: "green" },
+    { x: 280, y: 330, width: 50, height: 10, color: "green" },
+    { x: 270, y: 340, width: 70, height: 10, color: "green" },
+    { x: 295, y: 350, width: 20, height: 30, color: "brown" },
+    { x: 355, y: 310, width: 10, height: 10, color: "green" },
+    { x: 345, y: 320, width: 30, height: 10, color: "green" },
+    { x: 335, y: 330, width: 50, height: 10, color: "green" },
+    { x: 325, y: 340, width: 70, height: 10, color: "green" },
+    { x: 350, y: 350, width: 20, height: 30, color: "brown" },
+    { x: 410, y: 310, width: 10, height: 10, color: "green" },
+    { x: 400, y: 320, width: 30, height: 10, color: "green" },
+    { x: 390, y: 330, width: 50, height: 10, color: "green" },
+    { x: 380, y: 340, width: 70, height: 10, color: "green" },
+    { x: 405, y: 350, width: 20, height: 30, color: "brown" }
+];
+
+for (let i = 0; i < trees.length; i++) {
+    const { x, y, width, height, color } = trees[i];
+    drawRect(x, y, width, height, color);
+}
+
+    platforms.forEach(p => drawRect(p.x, p.y, p.width, p.height, p.color));
+    
+    
+    
+    
+    
     
     
     
@@ -737,7 +809,7 @@ function drawGoal() {
     // Add some basic detail
     drawRect(goal.x + goal.width * 0.1, goal.y - goal.height * 0.2, goal.width * 0.2, goal.height * 0.2, Z_RED); // Turret 1
     drawRect(goal.x + goal.width * 0.7, goal.y - goal.height * 0.2, goal.width * 0.2, goal.height * 0.2, Z_RED); // Turret 2
-    drawRect(goal.x + goal.width * 0.4, goal.y + goal.height * 0.5, goal.width * 0.2, goal.height * 0.5, Z_BLUE); // Door
+    drawRect(goal.x + goal.width * 0.4, goal.y + goal.height * 0.5, goal.width * 0.2, goal.height * 0.5, "gold"); // Door
 }
 
 
@@ -777,6 +849,8 @@ function gameOver() {
     gameStarted = false;
     waitingForStart = true;
     canStart = false;
+    
+    
     cancelAnimationFrame(animationFrameId);
 
     displayMessage("<strong>GAME OVER!</strong><br>Press any key or Start to restart");
@@ -816,7 +890,7 @@ function restartGame() {
     keys = {};
     cancelAnimationFrame(animationFrameId);
     animationFrameId = null;
-
+	
     loading();
     document.addEventListener('keydown', startGameOnce, { once: true });
     requestAnimationFrame(waitForStart);
@@ -870,7 +944,8 @@ function handleGamepadInput() {
 
 function gameLoop(timestamp) {
     if (!gameActive) return; // 🛑 game is over — do not continue
-
+	
+	
     handleGamepadInput();
 
     const deltaTime = timestamp - lastTime;
@@ -943,6 +1018,9 @@ function waitForStart() {
         startGameOnce();
         return;
     }
+
+	
+
 
     animationFrameId = requestAnimationFrame(waitForStart);
 }

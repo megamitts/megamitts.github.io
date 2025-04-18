@@ -6,7 +6,7 @@ const messageElement = document.getElementById('message');
 
 // --- ZX Spectrum Colors ---
 const Z_BLACK = '#000000';
-const Z_BLUE = '#0000CD';
+const Z_BLUE = '#F38630'; //'#0000CD';
 const Z_RED = '#CD0000';
 const Z_MAGENTA = '#CD00CD';
 const Z_GREEN = '#00CD00';
@@ -258,18 +258,18 @@ function setupLevel() {
 
     // --- Define Collectables --- (Adjust Y positions based on new platform layout)
     collectables = [
-        { x: 150, y: GAME_HEIGHT - TILE_SIZE * 5 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 100, collected: false }, // On plat 1
-        { x: 300, y: GAME_HEIGHT - TILE_SIZE * 7 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 100, collected: false }, // On plat 2
+        { x: 150, y: GAME_HEIGHT - TILE_SIZE * 5 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 1, collected: false }, // On plat 1
+        { x: 300, y: GAME_HEIGHT - TILE_SIZE * 15 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 1, collected: false }, // On plat 2
         // Fish near moving platform path
-        { x: 200, y: GAME_HEIGHT - TILE_SIZE * 11 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 100, collected: false },
+        { x: 200, y: GAME_HEIGHT - TILE_SIZE * 11 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 1, collected: false },
         // Fish on final platform
-        { x: 400, y: GAME_HEIGHT - TILE_SIZE * 15 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 100, collected: false },
-        { x: 15, y: GAME_HEIGHT - TILE_SIZE * 19 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 100, collected: false }, // top
-        { x: 520, y: GAME_HEIGHT - TILE_SIZE * 10 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 100, collected: false }, 
-        { x: 170, y: GAME_HEIGHT - TILE_SIZE * 18 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 100, collected: false }, 
-        { x: 200, y: GAME_HEIGHT - TILE_SIZE * 2 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 100, collected: false }, 
-        { x: 110, y: GAME_HEIGHT - TILE_SIZE * 11 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 100, collected: false },
-        { x: 550, y: GAME_HEIGHT - TILE_SIZE * 1 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 100, collected: false },
+        { x: 400, y: GAME_HEIGHT - TILE_SIZE * 15 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 1, collected: false },
+        { x: 15, y: GAME_HEIGHT - TILE_SIZE * 19 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 1, collected: false }, // top
+        { x: 520, y: GAME_HEIGHT - TILE_SIZE * 10 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 1, collected: false }, 
+        { x: 170, y: GAME_HEIGHT - TILE_SIZE * 18 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 1, collected: false }, 
+        { x: 300, y: GAME_HEIGHT - TILE_SIZE * 5 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 1, collected: false }, 
+        { x: 110, y: GAME_HEIGHT - TILE_SIZE * 11 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 1, collected: false },
+        { x: 550, y: GAME_HEIGHT - TILE_SIZE * 1 - TILE_SIZE/2, width: TILE_SIZE / 1.5, height: TILE_SIZE / 2, color: Z_BLUE, score: 1, collected: false },
         
     ];
 
@@ -497,7 +497,7 @@ if (landedFromAbove || (platformMovingUpIntoPlayer && playerIsFalling)) {
         }
     });
     // --- Goal --- 
-    if (checkCollision(player, goal) && score === 1000) {
+    if (checkCollision(player, goal) && score === 10) {
         winGame();
         
     }
@@ -631,7 +631,46 @@ ctx.fill();
 }
 
 function drawPlatforms() {
+    
+    //mountains
+    
+    ctx.beginPath();
+    ctx.moveTo(0, 380);
+    ctx.lineTo(150, 100);
+    ctx.lineTo(300,380);
+    ctx.fillStyle = "#3a3f4a";
+    ctx.fill();
+    //ctx.strokeStyle = "white";
+    //ctx.stroke();
+    
+    ctx.beginPath();
+    ctx.moveTo(400, 380);
+    ctx.lineTo(500, 200);
+    ctx.lineTo(600,380);
+    ctx.fillStyle = "#3a3f3a";
+    ctx.fill();
+    
+    ctx.beginPath();
+    ctx.moveTo(200, 380);
+    ctx.lineTo(350, 150);
+    ctx.lineTo(500,380);
+    ctx.fillStyle = "#3a3f55";
+    ctx.fill();
+    
+    
     platforms.forEach(p => drawRect(p.x, p.y, p.width, p.height, p.color));
+    
+    
+    //drawRect(x, y, w, h, color)
+    
+    // tree
+    drawRect(300, 310, 10, 10, "green");
+    drawRect(290, 320, 30, 10, "green"); 
+    drawRect(280, 330, 50, 10, "green");
+    drawRect(270, 340, 70, 10, "green");
+    drawRect(295, 350, 20, 30, "brown");
+    
+    
     
     
     //clouds
@@ -653,6 +692,8 @@ ctx.fillStyle = "white";
 ctx.fill();
  
 
+    
+   
 
     
 }

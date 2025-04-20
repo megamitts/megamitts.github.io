@@ -20,10 +20,10 @@ let color = 255; // hud color
 function preload() {
 	soundFormats('wav', 'mp3');
 	//always = loadSound('/music/alwaysmememusic.mp3');
-  playerShip = loadImage('/gfx/craft.png');
-  alienShip1 = loadImage('/gfx/alien1.png');
-  boss1 = loadImage('/gfx/boss1.png');
-  blockBottom = loadImage('/gfx/blockBottom.png');
+  playerShip = loadImage('gfx/craft.png');
+  alienShip1 = loadImage('gfx/alien1.png');
+  boss1 = loadImage('gfx/boss1.png');
+  blockBottom = loadImage('gfx/blockBottom.png');
 }
 
 

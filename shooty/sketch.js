@@ -1,6 +1,9 @@
 // This is a classic-style side-scrolling shooter game!
 // Let's set up all the things we need for the game.
 
+
+// global variables go here.
+
 let ship; // This will be the player’s ship
 let bullets = []; // Bullets player shoots
 let enemies = []; // The bad guys
@@ -9,13 +12,16 @@ let boss = null; // The big bad boss
 let bossActive = false; // Is the boss on the screen?
 let scrollX = 0; // This scrolls the background to the left
 let gameTime = 0; // Timer to know how long we've played
-let levelDuration = 5 * 60; // how long the level lasts before the boss comes (60 frames per second)
+let levelDuration = 1 * 60; // how long the level lasts before the boss comes (60 frames per second)
 let gameOver = false; // If true, the game has ended
 let gameStarted = false; // To track if game has started
 let waitingToStart = true; // Waiting for player to press a key to start
 let bossBulletSpeed = 90; // boss bullet speed
 let color = 255; // hud color
+let explosions = []; // Array to track active explosions
 
+
+// preload all the assets.
 
 function preload() {
 	soundFormats('wav', 'mp3');
@@ -24,17 +30,13 @@ function preload() {
   alienShip1 = loadImage('gfx/alien1.png');
   boss1 = loadImage('gfx/boss1.png');
   blockBottom = loadImage('gfx/blockBottom.png');
+  explosion = loadImage('gfx/explosion.png');
+  explosionBoss = loadImage('gfx/explosion2.png');
 }
 
 
-function rectsOverlap(r1, r2) {
-  return !(
-    r2.x > r1.x + r1.w ||
-    r2.x + r2.w < r1.x ||
-    r2.y > r1.y + r1.h ||
-    r2.y + r2.h < r1.y
-  );
-}
+
+
 
 
 function setup() {
@@ -84,7 +86,7 @@ function draw() {
 
 
   ship.update(); // Move the ship
-  ship.display(); 
+  ship.display(); // display the ship
 
   // Check for collision between ship and boss
   if (bossActive && boss) {
@@ -97,6 +99,7 @@ function draw() {
       ship.shield = max(ship.shield, 0); // Clamp to zero
     }
   }
+  
 // Draw the ship
 
   if (!bossActive && gameTime < levelDuration) { 
@@ -106,7 +109,24 @@ function draw() {
     bossActive = true; // Tell the game the boss is here
   }
 
-  for (let b of bullets) {
+
+/* the following code is shorthand for this code:
+
+for (let i = 0; i < bullets.length; i++) {
+    let b = bullets[i];
+    b.update();
+    b.display();
+    
+    OR:
+
+for (let i = 0; i < bullets.length; i++) {
+    bullets[i].update();
+    bullets[i].display();
+}
+
+*/
+
+  for (let b of bullets) {  
     b.update();
     b.display();
   }
@@ -122,9 +142,10 @@ function draw() {
       ship.y < e.y + 20 &&
       ship.y + ship.height > e.y
     ) {
+      e.explosion();
       e.destroyed = true; // Remove the enemy
       ship.shield--; // Take away one shield
-      if (ship.shield <= 0) {
+      if (ship.shield < 0) {
         ship.loseLife(); // If no shield, lose a life
       }
     }
@@ -193,22 +214,50 @@ enemyBullets = newEnemyBullets;
       //text("You Win!", width / 2, height / 2);
       text("You Win!", scrollX + width / 2, height / 2);
       color = 0;
+      explosions = []; // clear the explosion array
       noLoop(); // Stop the game
     }
   }
 
-  // Show shield and lives on screen
+  // Show shield and lives on screen whilst playing.
+  
   fill(color);
   textSize(16);
   textAlign(LEFT, CENTER);
-  text(`Shield: ${ship.shield}`, scrollX + 10, 20);
+  text(`Shield: `, scrollX + 10, 20);
+  
+   
   text(`Lives: ${ship.lives}`, scrollX + 10, 40);
   
+  if (ship.shield === 4) {
+  	rect(scrollX+65, 12, 100, 15);
+  	} else if (ship.shield === 3) {
+  	rect(scrollX+65, 12, 50, 15);
+  	} else if (ship.shield === 2) {
+  	rect(scrollX+65, 12, 33, 15);
+  	} else {
+  	fill(0);
+  	rect(scrollX+65, 12, 33, 15);
+  	}
+ 
   	
   
   if (ship.lives <= 0) {
     gameOver = true; // If no lives left, game over
+   
   }
+  
+  //routine for updating explosion time and displaying explosion
+  
+  
+  let activeExplosions = [];
+for (let i = 0; i < explosions.length; i++) {
+  if (explosions[i].update()) {
+    explosions[i].display();
+    activeExplosions.push(explosions[i]);
+  }
+}
+explosions = activeExplosions; // Keep only active explosions
 }
 
 function keyPressed() {
@@ -236,6 +285,9 @@ function handleEnemies() {
 }
 
 function startGame() {
+  
+  // variables that need to be reset every new game loop.
+  
   scrollX = 0;
   ship = new Ship();
   bullets = [];
@@ -245,8 +297,9 @@ function startGame() {
   bossActive = false;
   gameTime = 0;
   gameStarted = true;
-  //always.loop();
-  loop();
+   explosions = []; 
+  //always.loop(); // play music
+  loop(); // resume draw loop if noLoop() has been called.
 }
 
 // This is the player’s ship!
@@ -254,7 +307,7 @@ class Ship {
   constructor() {
     this.x = scrollX + 50;
     this.y = height / 2;
-    this.shield = 3;
+    this.shield = 4;
     this.lives = 3;
     this.width = 50;
     this.height = 40;
@@ -274,10 +327,18 @@ class Ship {
     //if (this.y <= 10 || this.y + this.height >= height - 10) {
       
       if (this.y + this.height >= height - 10) {
-      
+     	this.explosion();
       this.loseLife();
     }
+    
+    
+    
   }
+  
+  explosion() {
+  explosions.push(new Explosion_Ship(this.x, this.y));
+  }
+  
   display() {
     fill(0, 255, 255);
     
@@ -297,13 +358,14 @@ class Ship {
       bullet.offscreen = true; // Bullet disappears
       this.shield--; // Lose shield
       if (this.shield <= 0) {
+      this.explosion();
         this.loseLife();
       }
     }
   }
   loseLife() {
     this.lives--;
-    this.shield = 3;
+    this.shield = 4;
     this.x = scrollX + 50;
     this.y = height / 2; // Reset ship's position
   }
@@ -323,6 +385,7 @@ class Bullet {
     // If bullet hits an enemy
     for (let e of enemies) {
       if (dist(this.x, this.y, e.x, e.y) < 20) {
+        e.explosion();
         e.destroyed = true;
         this.offscreen = true;
       }
@@ -331,6 +394,7 @@ class Bullet {
     // If bullet hits the boss
     if (boss && dist(this.x, this.y, boss.x, boss.y) < 50) {
       boss.health -= 1;
+      boss.explosion();
       this.offscreen = true;
     }
   }
@@ -357,9 +421,12 @@ class Enemy {
     }
   }
   display() {
-    fill(255, 0, 0);
+    //fill(255, 0, 0);
     image(alienShip1, this.x, this.y);
     //rect(this.x, this.y, 20, 20); // Red square enemy
+  }
+  explosion() {
+  explosions.push(new Explosion(this.x, this.y));
   }
 }
 
@@ -403,12 +470,74 @@ class Boss {
     image(boss1, this.x - 50, this.y - 120);
     //rect(this.x - 50, this.y - 50, 100, 100); // Big purple square boss
   }
+  explosion() {
+  explosions.push(new Explosion_Boss(this.x, this.y));
+  }
 }
 
+class Explosion {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.timer = 60 * 0.5; // 5 seconds at 60fps
+  }
+  
+  update() {
+    this.timer--;
+    return this.timer > 0; // Return true if explosion is still active
+  }
+  
+  display() {
+    image(explosion, this.x, this.y);
+  }
+}
 
+// Explosion for the player's ship
 
+class Explosion_Ship {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.timer = 60 * 0.15; // x seconds at 60fps
+  }
+  
+  update() {
+    this.timer--;
+    return this.timer > 0; // Return true if explosion is still active
+  }
+  
+  display() {
+    image(explosion, this.x, this.y);
+  }
+}
 
+// Explosion for the boss
 
+class Explosion_Boss {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.timer = 60 * 0.15; // x seconds at 60fps
+  }
+  
+  update() {
+    this.timer--;
+    return this.timer > 0; // Return true if explosion is still active
+  }
+  
+  display() {
+    image(explosionBoss, this.x-40, this.y-40);
+  }
+}
 
+// part of the collision detection for the boss
 
+function rectsOverlap(r1, r2) {
+  return !(
+    r2.x > r1.x + r1.w ||
+    r2.x + r2.w < r1.x ||
+    r2.y > r1.y + r1.h ||
+    r2.y + r2.h < r1.y
+  );
+}
 

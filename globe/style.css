@@ -1,0 +1,11 @@
+body {
+    margin: 0;
+    overflow: hidden; /* Prevent scrollbars */
+    background-color: #000000; /* Black background */
+}
+
+#earth-canvas {
+    display: block; /* Remove potential extra space below canvas */
+    width: 100vw; /* Full viewport width */
+    height: 100vh; /* Full viewport height */
+}

@@ -1,0 +1,341 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden; /* Prevent scrollbars */
+    font-family: 'Arial', sans-serif;
+}
+
+.container {
+    width: 100vw;
+    height: 100vh;
+    background-color: #f0e4d7; /* Light background */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+}
+
+/* Present Styling */
+.present {
+    position: relative;
+    width: 250px; /* Adjust size as needed */
+    height: 250px;
+    transition: transform 0.5s ease-out, opacity 0.5s ease-out;
+}
+
+.lid {
+    width: 270px; /* Slightly wider than box */
+    height: 60px;
+    background: linear-gradient(145deg, #ffd700, #f0c400, #e0b400); /* Gold gradient */
+    position: absolute;
+    top: 0;
+    left: -10px; /* Center the lid */
+    border-radius: 5px 5px 0 0;
+    box-shadow: 0 -3px 5px rgba(0, 0, 0, 0.2);
+    z-index: 2;
+}
+
+.box {
+    width: 100%;
+    height: 190px; /* Fill remaining height */
+    background: linear-gradient(145deg, #f0c400, #e0b400, #d0a400); /* Slightly darker gold */
+    position: absolute;
+    top: 60px;
+    left: 0;
+    border-radius: 0 0 5px 5px;
+    box-shadow: 0 5px 10px rgba(0, 0, 0, 0.3);
+    z-index: 1;
+}
+
+/* Ribbon Styling */
+.ribbon {
+    position: absolute;
+    background-color: #c00; /* Red ribbon */
+    box-shadow: inset 0 0 5px rgba(0,0,0,0.3);
+    z-index: 3;
+}
+
+.ribbon-v {
+    width: 40px;
+    height: 100%;
+    top: 0;
+    left: calc(50% - 20px); /* Center horizontally */
+}
+
+.ribbon-h {
+    width: 270px; /* Match lid width */
+    height: 40px;
+    top: calc(60px + (190px / 2) - 20px); /* Center vertically on the box part */
+    left: -10px; /* Align with lid */
+    /* Bring horizontal ribbon visually on top of vertical at intersection */
+    z-index: 4;
+}
+
+/* Bow Styling */
+.bow {
+    position: absolute;
+    top: 15px; /* Position near top center */
+    left: calc(50% - 50px); /* Center the bow group */
+    width: 100px;
+    height: 80px;
+    z-index: 5; /* Highest */
+    cursor: pointer;
+    transition: transform 0.3s ease;
+}
+
+.bow:hover {
+    transform: scale(3);
+}
+
+.bow-left, .bow-right {
+    position: absolute;
+    width: 50px;
+    height: 80px;
+    background-color: #e00; /* Brighter red for bow */
+    border: 2px solid #c00;
+    border-radius: 50% 50% 0 50%; /* Loop shape */
+    box-shadow: inset 2px -2px 5px rgba(0,0,0,0.3);
+}
+
+.bow-left {
+    left: 0;
+    transform: rotate(-35deg); /* Angle the loops */
+    border-radius: 50% 50% 50% 0; /* Mirrored shape */
+}
+
+.bow-right {
+    right: 0;
+    transform: rotate(35deg); /* Angle the loops */
+    border-radius: 50% 50% 0 50%;
+}
+
+.bow-knot {
+    position: absolute;
+    width: 25px;
+    height: 25px;
+    background-color: #c00;
+    border-radius: 50%;
+    top: 28px; /* Position knot */
+    left: calc(50% - 12.5px);
+    box-shadow: 0 0 5px rgba(0,0,0,0.4);
+}
+
+/* Confetti Container & Styling */
+#confetti-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%; /* Full width of the screen */
+    height: 100%; /* Full height of the screen */
+    pointer-events: none; /* Don't block clicks */
+    overflow: hidden;
+    z-index: 10;
+}
+
+.confetti {
+    position: absolute;
+    width: 10px;
+    height: 15px;
+    opacity: 0; /* Start invisible */
+    /* We will set top/left/background/animation via JS */
+}
+
+/* Example Confetti Animation */
+@keyframes confetti-fall {
+    0% {
+        opacity: 1;
+        transform: translateY(0) rotateZ(0deg);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(110vh) rotateZ(720deg); /* Fall down and off screen */
+    }
+}
+
+/* Message Styling */
+.message {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.5); /* Start smaller */
+    font-size:4.5em; /* Slightly adjusted size if needed */
+    font-weight: bold;
+    /* color: #c00; */ /* Remove the single color */
+    text-align: center;
+    opacity: 0; /* Start hidden */
+    transition: opacity 1s ease-in-out 0.5s, transform 1s ease-in-out 0.5s; /* Fade and scale in, slight delay */
+    z-index: 20; /* Above confetti */
+    /* text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2); */ /* Shadow might interfere visually, optional */
+    white-space: nowrap; /* Prevent line breaks */
+
+    /* --- NEW RAINBOW STYLES --- */
+    background: linear-gradient(
+        to right,
+        #ff0000, /* Red */
+        #ff7f00, /* Orange */
+        #ffff00, /* Yellow */
+        #00ff00, /* Green */
+        #0000ff, /* Blue */
+        #4b0082, /* Indigo */
+        #ee82ee, /* Violet */
+        #ff0000  /* Repeat Red for seamless loop */
+    );
+    background-size: 250% auto; /* Make background wider than the text for scrolling */
+    background-clip: text;
+    -webkit-background-clip: text; /* For Safari/Chrome */
+    color: transparent; /* Make the text color transparent */
+    animation: rainbow-flow 8s linear infinite; /* Apply the animation */
+}
+
+/* Keyframes for the rainbow animation */
+@keyframes rainbow-flow {
+    0% {
+        background-position: 0% 50%; /* Start position */
+    }
+    100% {
+        /* Shift by the amount of gradient *larger* than the element width */
+        background-position: 150% 50%; /* End position for seamless loop with 250% size */
+    }
+}
+
+
+/* Class added by JS (no changes needed here) */
+.message-visible {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1); /* Scale to full size */
+}
+/* --- Candle Styles --- */
+#candles-container {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    display: flex;
+    gap: 15px;
+    z-index: 15;
+    opacity: 0;
+    transform: translate(-50%, 110%); /* Start below */
+    transition: transform 1.5s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.5s linear 0.2s;
+}
+
+#candles-container.visible {
+    opacity: 1;
+    transform: translate(-50%, -30px); /* Final position */
+}
+
+.candle {
+    font-family: 'Arial Black', Gadget, sans-serif;
+    font-size: 180px;
+    color: #f0eada;
+    text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.4);
+    position: relative;
+    line-height: 0.9;
+    display: flex;
+    justify-content: center;
+}
+
+/* --- Flame Styles --- */
+.flame {
+    position: absolute;
+    /* Base shape and appearance */
+    width: 20px; /* Restore original size */
+    height: 35px; /* Restore original size */
+    background: radial-gradient(ellipse at bottom, #ffec8b 20%, #ffac44 60%, #ff7700 100%);
+    border-radius: 50% 50% 20% 20% / 60% 60% 40% 40%;
+    box-shadow: 0 0 15px 8px rgba(255, 165, 0, 0.7);
+    transform-origin: 50% 90%; /* Flicker from base */
+    /* Interaction */
+    cursor: pointer;
+    /* Smooth transition for opacity and scale when extinguished */
+    transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+    /* Flicker animation */
+    animation: flicker 1s ease-in-out infinite alternate;
+    /* Ensure initial scale and opacity are correct */
+    opacity: 1;
+    transform: scale(1); /* Explicitly start at scale 1 */
+}
+
+
+/* --- Precise Flame Positioning (Crucial - Re-verify these) --- */
+.candle-five .flame {
+    top: -12px;
+    left: 45%;
+     /* NO transform here initially */
+}
+
+.candle-zero .flame {
+    top: -12px;
+    left: 50%;
+    /* ONLY apply centering transform here */
+    transform: translateX(-50%);
+}
+
+
+/* Flame Flicker Animation (Keep as is) */
+@keyframes flicker {
+    0% {
+        transform: scaleY(1) rotate(-1deg);
+        opacity: 1;
+        box-shadow: 0 0 15px 8px rgba(255, 165, 0, 0.7);
+    }
+    50% {
+        transform: scaleY(0.9) scaleX(1.1) rotate(1deg);
+        opacity: 0.9;
+        box-shadow: 0 0 20px 10px rgba(255, 200, 0, 0.8);
+    }
+    100% {
+        transform: scaleY(1.05) scaleX(0.95) rotate(-2deg);
+        opacity: 1;
+        box-shadow: 0 0 18px 9px rgba(255, 180, 0, 0.75);
+    }
+}
+/* This keyframe might need adjustment if positioning transform interferes */
+/* Let's refine the keyframe to ONLY affect scale/rotate */
+@keyframes flicker {
+    0% {
+        /* Apply base transform from CSS if needed, plus animation */
+        transform: var(--base-transform, scaleY(1)) scaleY(1) rotate(-1deg);
+        opacity: 1;
+        box-shadow: 0 0 15px 8px rgba(255, 165, 0, 0.7);
+    }
+    50% {
+        transform: var(--base-transform, scaleY(1)) scaleY(0.9) scaleX(1.1) rotate(1deg);
+        opacity: 0.9;
+        box-shadow: 0 0 20px 10px rgba(255, 200, 0, 0.8);
+    }
+    100% {
+        transform: var(--base-transform, scaleY(1)) scaleY(1.05) scaleX(0.95) rotate(-2deg);
+        opacity: 1;
+        box-shadow: 0 0 18px 9px rgba(255, 180, 0, 0.75);
+    }
+}
+/* We need to set the --base-transform CSS variable */
+.candle-zero .flame {
+    /* ... top/left styles ... */
+    --base-transform: translateX(-50%);
+    transform: var(--base-transform); /* Apply it */
+}
+.candle-five .flame {
+    /* ... top/left styles ... */
+     /* No base transform needed, but declare var to avoid errors */
+     --base-transform: scale(1); /* Use scale(1) as neutral base */
+     /* Don't apply transform here if none is needed */
+}
+
+/* --- Extinguished State --- */
+.flame.extinguished {
+    opacity: 0 !important; /* Use !important for testing if needed, then remove */
+    /* Apply scaling ON TOP of any base transform */
+    /* The browser should layer these transforms */
+    transform: var(--base-transform, scale(1)) scale(0.1); /* Scale down significantly */
+    animation: none; /* Stop flicker */
+    cursor: default;
+}
+
+/* Let's try removing the specific .candle-X.flame.extinguished rules for now */
+/* The general .flame.extinguished should handle it if base transforms are okay */

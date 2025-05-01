@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Happy Birthday!</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- The Present -->
+        <div class="present" id="present">
+            <div class="lid"></div>
+            <div class="box"></div>
+            <div class="ribbon ribbon-v"></div>
+            <div class="ribbon ribbon-h"></div>
+            <div class="bow" id="bow">
+                <div class="bow-left"></div>
+                <div class="bow-right"></div>
+                <div class="bow-knot"></div>
+            </div>
+        </div>
+
+        <!-- Confetti Container -->
+        <div id="confetti-container"></div>
+
+        <!-- Message Area -->
+        <div class="message" id="message">
+            <!-- Text will be added by JS -->
+        </div>
+
+        <!-- Candle Container -->
+        <div id="candles-container">
+            <div class="candle candle-five">
+                5
+                <div class="flame"></div>
+            </div>
+            <div class="candle candle-zero">
+                0
+                <div class="flame"></div>
+            </div>
+        </div>
+        <!-- End Candle Container -->
+
+    </div>
+
+    <!-- Audio Player -->
+    <audio id="birthday-music" src="happy_birthday.mp3" preload="auto"></audio>
+
+    <script src="script.js"></script>
+</body>
+</html>

@@ -48,7 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.error("Audio play failed:", error);
             });
 
-            messageElement.textContent = "Happy 50th birthday boopty!";
+            messageElement.textContent = "Happy 50th birthday, Boopty!";
 
             const messageAppearDelay = 500;
             const messageTransitionDuration = 1000;

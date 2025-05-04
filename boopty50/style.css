@@ -174,7 +174,7 @@ html, body {
     /* text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2); */ /* Shadow might interfere visually, optional */
     white-space: nowrap; /* Prevent line breaks */
 
-    /* --- NEW RAINBOW STYLES --- */
+    /* --- RAINBOW STYLES --- */
     background: linear-gradient(
         to right,
         #ff0000, /* Red */
@@ -204,13 +204,13 @@ html, body {
     }
 }
 
-
 /* Class added by JS (no changes needed here) */
 .message-visible {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1); /* Scale to full size */
 }
-/* --- Candle Styles --- */
+
+/* --- CANDLE STYLES (FIXED) --- */
 #candles-container {
     position: absolute;
     bottom: 0;
@@ -228,23 +228,36 @@ html, body {
     transform: translate(-50%, -30px); /* Final position */
 }
 
+/* Base candle style */
 .candle {
     font-family: 'Arial Black', Gadget, sans-serif;
     font-size: 180px;
-    color: #f0eada;
-    text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.4);
+    /* IMPORTANT FIX: Removing color:transparent that may be inherited from somewhere */
+    color: #FFF8DC !important; /* Force Cornsilk color */
+    text-shadow: 2px 2px 7px rgba(0, 0, 0, 0.4);
     position: relative;
     line-height: 0.9;
     display: flex;
     justify-content: center;
+    align-items: center;
+    min-height: 180px;
+}
+
+/* Explicit styles for each candle digit */
+#candle-5 {
+    color: #FFF8DC !important; /* Cornsilk */
+}
+
+#candle-0 {
+    color: #FFF8DC !important; /* Cornsilk */
 }
 
 /* --- Flame Styles --- */
 .flame {
     position: absolute;
     /* Base shape and appearance */
-    width: 20px; /* Restore original size */
-    height: 35px; /* Restore original size */
+    width: 20px;
+    height: 35px;
     background: radial-gradient(ellipse at bottom, #ffec8b 20%, #ffac44 60%, #ff7700 100%);
     border-radius: 50% 50% 20% 20% / 60% 60% 40% 40%;
     box-shadow: 0 0 15px 8px rgba(255, 165, 0, 0.7);
@@ -260,82 +273,85 @@ html, body {
     transform: scale(1); /* Explicitly start at scale 1 */
 }
 
-
-/* --- Precise Flame Positioning (Crucial - Re-verify these) --- */
+/* --- Precise Flame Positioning --- */
 .candle-five .flame {
     top: -12px;
     left: 45%;
-     /* NO transform here initially */
+    --base-transform: scale(1);
 }
 
 .candle-zero .flame {
     top: -12px;
     left: 50%;
-    /* ONLY apply centering transform here */
-    transform: translateX(-50%);
-}
-
-
-/* Flame Flicker Animation (Keep as is) */
-@keyframes flicker {
-    0% {
-        transform: scaleY(1) rotate(-1deg);
-        opacity: 1;
-        box-shadow: 0 0 15px 8px rgba(255, 165, 0, 0.7);
-    }
-    50% {
-        transform: scaleY(0.9) scaleX(1.1) rotate(1deg);
-        opacity: 0.9;
-        box-shadow: 0 0 20px 10px rgba(255, 200, 0, 0.8);
-    }
-    100% {
-        transform: scaleY(1.05) scaleX(0.95) rotate(-2deg);
-        opacity: 1;
-        box-shadow: 0 0 18px 9px rgba(255, 180, 0, 0.75);
-    }
-}
-/* This keyframe might need adjustment if positioning transform interferes */
-/* Let's refine the keyframe to ONLY affect scale/rotate */
-@keyframes flicker {
-    0% {
-        /* Apply base transform from CSS if needed, plus animation */
-        transform: var(--base-transform, scaleY(1)) scaleY(1) rotate(-1deg);
-        opacity: 1;
-        box-shadow: 0 0 15px 8px rgba(255, 165, 0, 0.7);
-    }
-    50% {
-        transform: var(--base-transform, scaleY(1)) scaleY(0.9) scaleX(1.1) rotate(1deg);
-        opacity: 0.9;
-        box-shadow: 0 0 20px 10px rgba(255, 200, 0, 0.8);
-    }
-    100% {
-        transform: var(--base-transform, scaleY(1)) scaleY(1.05) scaleX(0.95) rotate(-2deg);
-        opacity: 1;
-        box-shadow: 0 0 18px 9px rgba(255, 180, 0, 0.75);
-    }
-}
-/* We need to set the --base-transform CSS variable */
-.candle-zero .flame {
-    /* ... top/left styles ... */
     --base-transform: translateX(-50%);
-    transform: var(--base-transform); /* Apply it */
+    transform: var(--base-transform);
 }
-.candle-five .flame {
-    /* ... top/left styles ... */
-     /* No base transform needed, but declare var to avoid errors */
-     --base-transform: scale(1); /* Use scale(1) as neutral base */
-     /* Don't apply transform here if none is needed */
+
+/* Flame Flicker Animation */
+@keyframes flicker {
+    0% {
+        transform: var(--base-transform, scale(1)) scaleY(1) rotate(-1deg);
+        opacity: 1;
+        box-shadow: 0 0 15px 8px rgba(255, 165, 0, 0.7);
+    }
+    50% {
+        transform: var(--base-transform, scale(1)) scaleY(0.9) scaleX(1.1) rotate(1deg);
+        opacity: 0.9;
+        box-shadow: 0 0 20px 10px rgba(255, 200, 0, 0.8);
+    }
+    100% {
+        transform: var(--base-transform, scale(1)) scaleY(1.05) scaleX(0.95) rotate(-2deg);
+        opacity: 1;
+        box-shadow: 0 0 18px 9px rgba(255, 180, 0, 0.75);
+    }
 }
 
 /* --- Extinguished State --- */
 .flame.extinguished {
-    opacity: 0 !important; /* Use !important for testing if needed, then remove */
-    /* Apply scaling ON TOP of any base transform */
-    /* The browser should layer these transforms */
-    transform: var(--base-transform, scale(1)) scale(0.1); /* Scale down significantly */
-    animation: none; /* Stop flicker */
+    opacity: 0 !important;
+    transform: var(--base-transform, scale(1)) scale(0.1);
+    animation: none;
     cursor: default;
 }
 
-/* Let's try removing the specific .candle-X.flame.extinguished rules for now */
-/* The general .flame.extinguished should handle it if base transforms are okay */
+/* Styles for the replacement images */
+.candle-image {
+    display: block;
+    width: 100%;
+    max-width: 150px;
+    height: auto;
+    margin: 10px auto 0;
+    opacity: 0;
+    transition: opacity 0.5s ease-in;
+    position: relative;
+    z-index: 1;
+}
+
+/* Make the image visible */
+.candle-image.visible {
+    opacity: 1;
+}
+
+/* Image replacement state */
+.candle.image-shown {
+    font-size: 0;
+    color: transparent !important;
+    transition: color 0.3s linear, font-size 0.3s linear;
+}
+
+/* Present Opening Animation */
+.present-opened .lid {
+    transform: translateY(-20px) rotateX(60deg);
+    transition: transform 0.5s ease-out;
+}
+
+.present-opened .box {
+    transform: scale(1.1);
+    transition: transform 0.5s ease-out 0.2s;
+}
+
+.present-opened .bow {
+    transform: translateY(-40px) scale(0.5);
+    opacity: 0;
+    transition: transform 0.5s ease-out, opacity 0.3s ease-out;
+}

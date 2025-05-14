@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sliding Puzzle</title>
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.5/lib/p5.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/addons/p5.sound.min.js"></script>
+    <style>
+
+        @font-face {
+            font-family: jordan;
+            src: url('font.ttf');
+        }
+        body {
+            margin: 0;
+            display: flex;
+            flex-direction: column; /* Stack children vertically */
+            align-items: center;    /* Center children (h1, game-area) horizontally */
+            justify-content: flex-start; /* Align content to the top, use with min-height */
+            min-height: 100vh;
+            background-color: #2c3e50;
+            
+            font-family: 'jordan', sans-serif;
+            padding: 30px 20px; /* More top padding, then horiz, then bottom */
+            box-sizing: border-box;
+        }
+
+        
+
+        
+
+        h1.game-title { /* Added a class for specific styling */
+            color: #B08D57;
+            /*color: #ecf0f1; */
+            margin-bottom: 25px; /* Space between title and game area */
+            font-size: 2.8em; /* Make it prominent */
+            font-weight: bold;
+            /*text-shadow: 2px 2px 4px rgba(0,0,0,0.3);*/
+            text-align: center; /* Ensure text is centered if it wraps */
+        }
+
+        #game-area {
+            display: flex;
+            align-items: flex-start;
+            gap: 30px;
+            padding: 20px;
+            background-color: #34495e;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            margin-bottom: 20px; /* Add space for the button below */
+        }
+
+        #canvas-container {
+            /* p5.js canvas will be parented here */
+        }
+
+        #canvas-container canvas {
+            border: 3px solid #ecf0f1;
+            display: block; /* Important to prevent extra space under canvas */
+        }
+
+        #reference-area {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #reference-area p {
+            color: #ecf0f1;
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        /* Style for instruction text for better readability */
+        #reference-area .instructions-text {
+            
+            font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+            font-weight: normal;
+            font-size: 1em; /* Smaller than titles */
+            text-align: center; /* Center instruction lines */
+            max-width: 300px; /* Prevent very long lines */
+        }
+        #reference-area .instructions-text p { /* Target p inside .instructions-text */
+            margin-bottom: 3px; /* Smaller gap between instruction lines */
+            line-height: 1.1;
+        }
+
+
+        #reference-image {
+            border: 2px solid #7f8c8d;
+            object-fit: contain;
+            background-color: #000;
+            margin-bottom: 15px; /* Space between image and "Instructions:" */
+            /* Dimensions will be set by JavaScript */
+        }
+
+        .game-button {
+            /*padding: 12px 25px;*/
+            font-size: 1.1em;
+            color: #fff;
+            background-color: #3498db; /* Blue */
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .game-button:hover {
+            background-color: #2980b9; /* Darker blue */
+        }
+        .game-button:active {
+            background-color: #1f6a9c; /* Even darker blue */
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);
+        }
+
+    </style>
+</head>
+<body>
+    <h1 class="game-title">The Horn of Valere: The Sliding Puzzle Challenge</h1>
+
+    <div id="game-area">
+        <div id="canvas-container">
+            <!-- p5.js canvas will be created and placed here by sketch.js -->
+        </div>
+        <div id="reference-area">
+            <p>Goal:</p>
+            <img id="reference-image" src="pic.jfif" alt="Reference Puzzle Image" style="display: none;">
+            <p>Instructions:</p>
+            <div class="instructions-text"> <!-- Wrapped instructions for better control -->
+                <p>Matrim has gone and cocked shit up once again and broken the Horn of Valere!</p>
+                <p>Click on a tile to slide it into the empty space.</p>
+                <p>Arrange the tiles to form the complete image and call forth the heroes of the ages.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add the Reset Button here -->
+    <button id="reset-button" class="game-button">Reset Game</button>
+
+    <script src="sketch.js"></script> <!-- Keep this at the end of body -->
+</body>
+</html>

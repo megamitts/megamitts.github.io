@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sliding Puzzle</title>
+    <link rel="icon" href="favicon.png" type="image/png">
+    <title>WOT Sliding Puzzle</title>
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.5/lib/p5.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/addons/p5.sound.min.js"></script>
     <style>
@@ -24,6 +25,7 @@
             font-family: 'jordan', sans-serif;
             padding: 30px 20px; /* More top padding, then horiz, then bottom */
             box-sizing: border-box;
+            
         }
 
         
@@ -49,6 +51,7 @@
             border-radius: 8px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.2);
             margin-bottom: 20px; /* Add space for the button below */
+            cursor: url('pointer_resized1.png'), auto; /* Custom cursor */
         }
 
         #canvas-container {
@@ -138,6 +141,10 @@
 
     <!-- Add the Reset Button here -->
     <button id="reset-button" class="game-button">Reset Game</button>
+
+    <p style = "color:gold">“Thus is our treaty written; thus is agreement made.
+Thought is the arrow of time; memory never fades.
+What was asked is given. The price is paid.”</p>
 
     <script src="sketch.js"></script> <!-- Keep this at the end of body -->
 </body>

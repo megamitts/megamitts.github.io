@@ -1,4 +1,8 @@
+
+
 let sourceImg; // The p5.Image object for the puzzle
+let music; // The p5.SoundFile object for the background music
+let tileSlide; // The p5.SoundFile object for the tile slide sound
 let tiles = [];
 let board = []; // Stores originalIndex of tiles on the board
 
@@ -11,7 +15,28 @@ let p5Canvas;
 
 const IMAGE_FILENAME = 'pic.jfif'; // Define the filename here for consistency
 
+let musicHasStarted = false; // Flag to track if background music has started
+
 function preload() {
+    music = loadSound('battleground_remastered_doge.mp3', 
+        () => {
+            console.log("Background music loaded successfully.");
+        },
+        (err) => { // Error callback
+            console.error("Failed to load background music:", err);
+            // Optionally, handle music loading failure (e.g., disable music features)
+        }
+    );
+
+    tileSlide = loadSound('slide.flac', 
+        () => {
+            console.log("Tile slide loaded successfully.");
+        },
+        (err) => { // Error callback
+            console.error("Failed to load tile slide sound:", err);
+        }
+    );
+
     sourceImg = loadImage(IMAGE_FILENAME,
         () => {
             console.log("Image loaded successfully. Original Dims:", sourceImg.width, "x", sourceImg.height);
@@ -145,6 +170,13 @@ function shuffleBoard() {
 function resetGame() {
     console.log("Resetting game...");
 
+    // Stop music and reset the flag so it can start again on the next interaction
+    // if (music && music.isLoaded()) { // Check if music object exists and is loaded
+    //     music.stop();
+    //     console.log("Background music stopped for reset.");
+    // }
+    //musicHasStarted = false; // Reset the flag
+
     // 1. Re-initialize the board to the solved state
     // We don't need to recreate 'tiles' array, only 'board' and 'emptySlotIndex'
     board = [];
@@ -207,7 +239,7 @@ function draw() {
         textSize(min(width/10, 20)); text("Error loading game.", width/2, height/2);
         return;
     }
-
+    
     background(30);
 
     for (let i = 0; i < board.length; i++) {
@@ -241,10 +273,10 @@ function draw() {
         rect(0, 0, width, height);
         fill(255);
         let winTextSize = min(width / 7, height / 7, 55);
-        textSize(winTextSize);
+        textSize(32);
         textAlign(CENTER, CENTER);
         textStyle(BOLD);
-        text("YOU WIN!", width / 2, height / 2 - winTextSize * 0.1);
+        text("FOR MANETHEREN!", width / 2, height / 2 - winTextSize * 0.1);
 
         textSize(winTextSize * 0.4);
         textStyle(NORMAL);
@@ -270,6 +302,20 @@ function mousePressed() {
     let isAdjacent = (r === emptyR && abs(c - emptyC) === 1) || (c === emptyC && abs(r - emptyR) === 1);
 
     if (isAdjacent) {
+        // Start background music on the first successful tile move
+        if (music && music.isLoaded() && !musicHasStarted) {
+            music.loop();
+            musicHasStarted = true;
+            console.log("Background music loop started.");
+        }
+         
+        // Play tile slide sound
+        if (tileSlide && tileSlide.isLoaded()) { // Check if tileSlide is loaded
+            tileSlide.play(); 
+        } else if (tileSlide) {
+            console.warn("Tile slide sound not loaded yet, cannot play.");
+        } // else: tileSlide object doesn't exist, logged in preload error
+        
         swapTiles(clickedIndex, emptySlotIndex);
         emptySlotIndex = clickedIndex;
         checkWinCondition();
@@ -287,6 +333,9 @@ function checkWinCondition() {
         console.log("Puzzle Solved!");
         // If you want to stop draw() from running after win, uncomment:
         // noLoop();
+        // If you want music to stop on win:
+        // if (music && music.isLoaded()) { music.stop(); }
+        // musicHasStarted = false; // if you want it to restart on next game
     }
     return true;
 }

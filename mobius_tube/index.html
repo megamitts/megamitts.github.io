@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mobius Tube Animation with Slider and Switch</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/p5.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/addons/p5.dom.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.2/addons/p5.sound.min.js"></script>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; }
+        canvas { display: block; }
+        #controlsContainer {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #sliderLabel, #switchLabel {
+            color: white;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="controlsContainer">
+        <div id="sliderLabel">Tube Segments: <span id="segmentValue">50</span></div>
+        <input type="range" id="tubeSegmentsSlider" min="1" max="100" value="50">
+        <div id="switchLabel">Texture: <span id="textureStatus">Off</span></div>
+        <input type="checkbox" id="textureSwitch">
+    </div>
+    <script>
+        let angle = 0;
+        let radius = 100;
+        let tubeRadius = 20;
+        let tubeSegments = 50;
+        let textureYes = false;
+        let slider;
+        let textureSwitch;
+
+        function preload() {
+            img = loadImage('khan.png');
+        }
+        function setup() {
+            createCanvas(800, 600, WEBGL);
+            angleMode(DEGREES);
+            noFill();
+            stroke(255);
+
+            // Create slider and switch
+            slider = select('#tubeSegmentsSlider');
+            slider.input(updateTubeSegments);
+            textureSwitch = select('#textureSwitch');
+            textureSwitch.changed(toggleTexture);
+            updateTubeSegments();
+            toggleTexture();
+        }
+
+    
+
+    function draw() {
+    background(30);
+    rotateX(frameCount * 0.5);
+    rotateY(frameCount * 0.3);
+    rotateZ(frameCount * 0.2);
+    translate(50,50,50);
+
+    if (textureYes) {
+        noStroke();
+        texture(img);
+        textureMode(NORMAL);
+
+        beginShape();
+        for (let i = 0; i <= 360; i += 1) {
+            let t = map(i, 0, 360, 0, 360);
+            let x = (radius + tubeRadius * cos(t * tubeSegments)) * cos(t);
+            let y = (radius + tubeRadius * cos(t * tubeSegments)) * sin(t);
+            let z = tubeRadius * sin(t * tubeSegments);
+
+            vertex(x, y, z, 0, 0);
+            vertex(x, y, z, 0, 1);
+            vertex(x, y, z, 1, 0);
+            vertex(x, y, z, 1, 1);
+        }
+        endShape(CLOSE);
+    } else {
+        
+       normalMaterial();      // In case transformations or texture state are stuck
+        noFill();           //  remove fill
+        stroke(255);        
+        strokeWeight(1);    
+
+        beginShape();
+        for (let i = 0; i <= 360; i += 1) {
+            let t = map(i, 0, 360, 0, 360);
+            let x = (radius + tubeRadius * cos(t * tubeSegments)) * cos(t);
+            let y = (radius + tubeRadius * cos(t * tubeSegments)) * sin(t);
+            let z = tubeRadius * sin(t * tubeSegments);
+
+            // stroke(
+            //     map(sin(frameCount + i * 10), -1, 1, 0, 255),
+            //     map(cos(frameCount + i * 10), -1, 1, 0, 255),
+            //     map(sin(frameCount + i * 10), -1, 1, 0, 255)
+            // );
+
+            vertex(x, y, z);
+        }
+        endShape(CLOSE);
+    }
+}
+
+        function updateTubeSegments() {
+            tubeSegments = parseInt(slider.value());
+            select('#segmentValue').html(tubeSegments);
+        }
+
+        function toggleTexture() {
+            textureYes = textureSwitch.checked();
+            select('#textureStatus').html(texture ? 'On' : 'Off');
+        }
+    </script>
+</body>
+</html>

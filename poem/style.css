@@ -17,6 +17,22 @@
 }
 
 @font-face {
+  font-family: 'Atkinson';
+  src: url('AtkinsonHyperlegibleNext-Regular.otf');
+}
+
+@font-face {
+  font-family: 'Destroyx';
+  src: url('destroyx.ttf');
+}
+
+@font-face {
+  font-family: 'Crazy';
+  src: url('crazy.ttf');
+}
+
+
+@font-face {
   font-family: 'Destruction';
   src: url('destruction.ttf');
   
@@ -178,8 +194,51 @@ body {
     
 }
 
+/* scrolling text */
 
+.scroller {
+  height: 1.2em;
+  line-height: 1.2em;
+  position: relative;
+  overflow: hidden;
+  width: 10em;
+}
+.scroller > span {
+  position: absolute;
+  top: 0;
+  animation: slide 5s infinite;
+  font-weight: bold;
+  
+}
+@keyframes slide {
+  0% {
+    top: 0;
+  }
+  25% {
+    top: -1.2em;
+  }
+  50% {
+    top: -2.4em;
+  }
+  75% {
+    top: -3.6em;
+  }
+}
 
+.blind {
+  font-family: Atkinson;
+  font-size: 10px
+}
+
+.crippled {
+  font-family: Destroyx;
+  font-size: 15px;
+}
+
+.demented {
+  font-family: Crazy;
+  font-size: 20px;
+}
 
 
 .earthquake {

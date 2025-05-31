@@ -43,8 +43,7 @@ or<br>
 you're going to create in a small room with 3 children<br>
 while you're on<br>
 welfare,<br>
-you're going to create with part of your mind and <span class ="explosive-text">your<br>
-body blown<br>
+you're going to create with part of your mind and your body<span class ="explosive-text"> blown<br>
 away</span>,<br>
 you're going to create blind<br>
 crippled<br>
@@ -65,12 +64,57 @@ baby, air and <span class = "light dark">light</span> and
 
 <span class = "time">E</span>
 
- <svg class="clock-hands" width="200" height="200" style="position:absolute; top:0; left:0; pointer-events:none;">
-    <!-- Hour hand -->
-    <line x1="100" y1="100" x2="100" y2="50" stroke="black" stroke-width="6"/>
-    <!-- Minute hand -->
-    <line x1="100" y1="100" x2="160" y2="100" stroke="black" stroke-width="4"/>
-  </svg>
+<!-- ...existing code... -->
+<svg class="clock-hands" width="200" height="200" style="position:absolute; top:0; left:0; pointer-events:none;">
+  <!-- Hour hand -->
+  <line id="hourHand" x1="100" y1="100" x2="100" y2="50" stroke="black" stroke-width="6"/>
+  <!-- Minute hand -->
+  <line id="minuteHand" x1="100" y1="100" x2="160" y2="100" stroke="black" stroke-width="4"/>
+  <!-- Second hand -->
+  <line id="secondHand" x1="100" y1="100" x2="180" y2="100" stroke="red" stroke-width="2"/>
+</svg>
+
+<script>
+function setClockHands() {
+  const now = new Date();
+  const hour = now.getHours() % 12;
+  const minute = now.getMinutes();
+  const second = now.getSeconds();
+
+  // Center of the clock
+  const cx = 100, cy = 100;
+
+  // Lengths
+  const hourLen = 50;
+  const minLen = 60;
+  const secLen = 80;
+
+  // Angles in radians
+  const hourAngle = ((hour + minute/60 + second/3600) * 30 - 90) * Math.PI / 180;
+  const minAngle = ((minute + second/60) * 6 - 90) * Math.PI / 180;
+  const secAngle = (second * 6 - 90) * Math.PI / 180;
+
+  // Calculate end points
+  const hourX = cx + hourLen * Math.cos(hourAngle);
+  const hourY = cy + hourLen * Math.sin(hourAngle);
+  const minX = cx + minLen * Math.cos(minAngle);
+  const minY = cy + minLen * Math.sin(minAngle);
+  const secX = cx + secLen * Math.cos(secAngle);
+  const secY = cy + secLen * Math.sin(secAngle);
+
+  document.getElementById('hourHand').setAttribute('x2', hourX);
+  document.getElementById('hourHand').setAttribute('y2', hourY);
+  document.getElementById('minuteHand').setAttribute('x2', minX);
+  document.getElementById('minuteHand').setAttribute('y2', minY);
+  document.getElementById('secondHand').setAttribute('x2', secX);
+  document.getElementById('secondHand').setAttribute('y2', secY);
+}
+
+setInterval(setClockHands, 1000);
+setClockHands();
+</script>
+
+
 
 </div>
 

@@ -23,6 +23,13 @@
 }
 
 @font-face {
+  font-family: 'Broken';
+  src: url('broken.otf');
+  
+}
+
+
+@font-face {
   font-family: 'Waves';
   src: url('waves.woff');
   
@@ -72,6 +79,8 @@ body {
 }
 
 .explosive-text:hover {
+    font-family: Broken;
+    
     transform: scale(10);
 }
 
@@ -145,7 +154,7 @@ body {
 
 .house:after{
 	font-size: 40px;
-    content:'house';
+    content:'🏠';
 }
 .house:hover:after{
     font-size: 80px;

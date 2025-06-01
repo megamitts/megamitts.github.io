@@ -83,43 +83,148 @@ away</span>,<br>
 </svg>
 
 <script>
-function setClockHands() {
-  const now = new Date();
-  const hour = now.getHours() % 12;
-  const minute = now.getMinutes();
-  const second = now.getSeconds();
+  // Variables to manage speed up and clock state
+  let isSpedUp = false;
+  let timeOffset = 0; // in milliseconds, accumulates the "extra" time during speedup
+  const speedMultiplier = 150;
+  const speedUpDuration = 2000000; //  seconds in milliseconds
+  let clockIntervalId; // To store the ID of the interval (either normal or fast)
+  let speedUpTimeoutId; // To store the ID of the timeout that ends the speedup
+  let lastTickTime = Date.now(); // To calculate deltaTime for accurate offset accumulation
 
-  // Center of the clock
-  const cx = 100, cy = 100;
+  /**
+   * Updates the clock hands to a specific given time.
+   * @param {Date} displayTime The Date object representing the time to display.
+   */
+  function setClockHands(displayTime) {
+    const now = displayTime; // This function now expects the exact time to display
+    const hour = now.getHours() % 12;
+    const minute = now.getMinutes();
+    const second = now.getSeconds();
 
-  // Lengths
-  const hourLen = 50;
-  const minLen = 60;
-  const secLen = 80;
+    // Center of the clock
+    const cx = 100, cy = 100;
 
-  // Angles in radians
-  const hourAngle = ((hour + minute/60 + second/3600) * 30 - 90) * Math.PI / 180;
-  const minAngle = ((minute + second/60) * 6 - 90) * Math.PI / 180;
-  const secAngle = (second * 6 - 90) * Math.PI / 180;
+    // Lengths of hands
+    const hourLen = 50;
+    const minLen = 60;
+    const secLen = 80;
 
-  // Calculate end points
-  const hourX = cx + hourLen * Math.cos(hourAngle);
-  const hourY = cy + hourLen * Math.sin(hourAngle);
-  const minX = cx + minLen * Math.cos(minAngle);
-  const minY = cy + minLen * Math.sin(minAngle);
-  const secX = cx + secLen * Math.cos(secAngle);
-  const secY = cy + secLen * Math.sin(secAngle);
+    // Angles in radians (0 degrees is 3 o'clock)
+    // Offset by -90 degrees to make 0 degrees 12 o'clock
+    const hourAngle = ((hour + minute / 60 + second / 3600) * 30 - 90) * Math.PI / 180;
+    const minAngle = ((minute + second / 60) * 6 - 90) * Math.PI / 180;
+    const secAngle = (second * 6 - 90) * Math.PI / 180;
 
-  document.getElementById('hourHand').setAttribute('x2', hourX);
-  document.getElementById('hourHand').setAttribute('y2', hourY);
-  document.getElementById('minuteHand').setAttribute('x2', minX);
-  document.getElementById('minuteHand').setAttribute('y2', minY);
-  document.getElementById('secondHand').setAttribute('x2', secX);
-  document.getElementById('secondHand').setAttribute('y2', secY);
-}
+    // Calculate end points of hands
+    const hourX = cx + hourLen * Math.cos(hourAngle);
+    const hourY = cy + hourLen * Math.sin(hourAngle);
+    const minX = cx + minLen * Math.cos(minAngle);
+    const minY = cy + minLen * Math.sin(minAngle);
+    const secX = cx + secLen * Math.cos(secAngle);
+    const secY = cy + secLen * Math.sin(secAngle);
 
-setInterval(setClockHands, 1000);
-setClockHands();
+    // Get hand elements
+    const hourHandEl = document.getElementById('hourHand');
+    const minuteHandEl = document.getElementById('minuteHand');
+    const secondHandEl = document.getElementById('secondHand');
+
+    // Update SVG attributes if elements exist
+    if (hourHandEl) {
+      hourHandEl.setAttribute('x2', hourX);
+      hourHandEl.setAttribute('y2', hourY);
+    }
+    if (minuteHandEl) {
+      minuteHandEl.setAttribute('x2', minX);
+      minuteHandEl.setAttribute('y2', minY);
+    }
+    if (secondHandEl) {
+      secondHandEl.setAttribute('x2', secX);
+      secondHandEl.setAttribute('y2', secY);
+    }
+  }
+
+  /**
+   * This function is called at each interval (tick) to update the clock.
+   * It calculates the effective time to display based on whether the clock is sped up.
+   */
+  function tick() {
+    const currentTime = Date.now(); // Real current time
+    
+    if (isSpedUp) {
+      const deltaTime = currentTime - lastTickTime; // Time elapsed since last fast tick
+      // Accumulate (multiplier-1) extra time because one part of real time already passes
+      timeOffset += deltaTime * (speedMultiplier - 1); 
+    }
+    
+    lastTickTime = currentTime; // Update for the next tick's deltaTime calculation
+    
+    // The time to display is the real current time plus any accumulated offset
+    setClockHands(new Date(currentTime + timeOffset));
+  }
+
+  /**
+   * Starts or restarts the clock at its normal speed.
+   */
+  function startNormalClock() {
+    isSpedUp = false; 
+    // timeOffset should be 0 when starting normal clock after speedup
+    lastTickTime = Date.now(); // Initialize for consistent deltaTime calculation
+    
+    clearInterval(clockIntervalId); // Clear any existing interval
+    clockIntervalId = setInterval(tick, 1000); // Tick every 1 second
+    tick(); // Call immediately to set hands to current time
+  }
+
+  /**
+   * Starts the clock in its sped-up state.
+   */
+  function startFastClock() {
+    isSpedUp = true;
+    // timeOffset starts from its current value (which should be 0 if transitioning from normal)
+    lastTickTime = Date.now(); // Reset for accurate delta calculation at the start of speedup
+    
+    clearInterval(clockIntervalId); // Stop normal/previous ticking
+    // Tick more frequently for smoother animation during speedup
+    clockIntervalId = setInterval(tick, 1000 / speedMultiplier); 
+    tick(); // Update hands immediately for responsiveness
+  }
+
+  // Find the clock container element to attach the click listener
+  const clockContainer = document.querySelector('.circle');
+
+  if (clockContainer) {
+    clockContainer.addEventListener('click', () => {
+      if (isSpedUp) {
+        // --- Clock is currently sped up, revert to normal time immediately ---
+        clearTimeout(speedUpTimeoutId);   // Cancel the scheduled return to normal
+        clearInterval(clockIntervalId);     // Stop the fast ticking interval
+        
+        timeOffset = 0;                  // Reset any accumulated time offset
+        setClockHands(new Date());       // Immediately set hands to the *actual* current time
+        
+        startNormalClock();              // Resume normal clock operation (this will set isSpedUp to false)
+      } else {
+        // --- Clock is normal, so speed it up ---
+        startFastClock(); // Switch to fast clock mode (this will set isSpedUp to true)
+
+        // Set a timeout to automatically return to normal speed
+        clearTimeout(speedUpTimeoutId); // Clear any pre-existing timeout just in case
+        speedUpTimeoutId = setTimeout(() => {
+          // This block runs if the speedUpDuration completes without another click
+          clearInterval(clockIntervalId); // Stop the fast ticking
+          
+          timeOffset = 0; // Reset the accumulated time offset
+          setClockHands(new Date()); // Explicitly update hands to the current *real* time
+
+          startNormalClock(); // Resume normal clock ticking
+        }, speedUpDuration);
+      }
+    });
+  }
+
+  // Initial clock start when the script loads
+  startNormalClock();
 </script>
 
 
@@ -136,19 +241,164 @@ setClockHands();
   </section>
 
 	<svg width="600" height="200" viewBox="0 0 600 200">
-  <path id="lineAC" d="M 15 30 Q 300 30 570 420" stroke= none stroke-width="2" fill="none"/>
+  <path id="lineAC" d="M 15 30 Q 300 30 570 420" stroke="none" stroke-width="2" fill="none"/>
   <text style="fill:red;font-size:40px;">
-    <textPath href="#lineAC" startOffset="15">and don't create anything</textPath>
+    <textPath href="#lineAC" startOffset="15">
+      and don't create <tspan font-style="italic" font-size="100px">anything</tspan>
+    </textPath>
   </text>
 </svg>
 
 
-
 <br>
+<span class = "bluebird">
 <span class ="final-stanza"><span class ="scribble">except maybe a longer life to find<br>
 new excuses<br>
-for.</span></span><br>
+for.</span></span><br></span>
+
+<script>
+
+// Place this in a <script> tag, for example, before your </body> tag,
+// or at the end of your main clock script.
+
+document.body.addEventListener('click', function(event) {
+    // --- Elements to IGNORE for splattering ---
+    // If the click originated on or inside any of these, don't splatter.
+    const ignoreSplatterOn = [
+        '.circle_fake',        // Your clock
+        'button',         // Any buttons
+        'a',              // Any links
+        'input',          // Any input fields
+        'textarea',       // Any text areas
+        'select'          // Any select dropdowns
+        // Add other selectors for elements you don't want splatters on
+    ];
+
+    for (const selector of ignoreSplatterOn) {
+        if (event.target.closest(selector)) {
+            // console.log('Splatter ignored: click on or inside', selector);
+            return; // Stop if the click was on an ignored element
+        }
+    }
+
+    // --- Create the splatter image element ---
+    const splatterImage = document.createElement('img');
+    splatterImage.src = 'ink-splatter.png'; // Ensure this path is correct!
+
+    // --- Style the splatter ---
+    splatterImage.style.position = 'absolute';
+    splatterImage.style.pointerEvents = 'none';
+    splatterImage.style.zIndex = '1000'; // Should be on top
+
+    const baseSize = 20 + Math.random() * 30; // Random size between 20px and 50px
+    splatterImage.style.width = `${baseSize}px`;
+    splatterImage.style.height = 'auto'; // Maintain aspect ratio
+
+    const randomRotation = Math.random() * 360; // 0-359 degrees
+
+    // Position using pageX/pageY for coordinates relative to the whole document
+    // This is generally more reliable than clientX/Y if there's scrolling.
+    splatterImage.style.left = `${event.pageX}px`;
+    splatterImage.style.top = `${event.pageY}px`;
+
+    splatterImage.style.transform = `translate(-50%, -50%) rotate(${randomRotation}deg)`;
+    splatterImage.style.transformOrigin = 'center center';
+
+    // --- Add to body ---
+    document.body.appendChild(splatterImage);
+    // console.log('Splatter added at:', event.pageX, event.pageY);
+
+    // --- Optional: Fade out and remove ---
+    splatterImage.style.opacity = '0.7'; // Start slightly transparent if you like
+    splatterImage.style.transition = 'opacity 1s ease-out 20s'; // Fade after 2s, over 1s
+
+    // Set opacity to 0 to trigger the fade after the delay
+    // Need a tiny delay for the transition to register properly if opacity is set immediately
+    setTimeout(() => {
+        splatterImage.style.opacity = '0';
+    }, 50); // Small delay
+
+    // Remove from DOM after transition
+    splatterImage.addEventListener('transitionend', function() {
+        if (splatterImage.parentNode) {
+            splatterImage.parentNode.removeChild(splatterImage);
+            // console.log('Splatter removed');
+        }
+    });
+
+    // Fallback removal in case transitionend doesn't fire (e.g., element hidden before transition)
+    setTimeout(() => {
+        if (splatterImage.parentNode) {
+            splatterImage.parentNode.removeChild(splatterImage);
+        }
+    }, 22000); // Remove after x seconds regardless
+});
+</script>
 
 
+<div id="dark-overlay"></div>
+<div id="flame-overlay">
+  <div class="flames">
+    <div class="flame"></div>
+    <div class="flame"></div>
+    <div class="flame"></div>
+    <div class="flame"></div>
+    <div class="flame"></div>
+  </div>
+</div>
+
+<script>
+
+
+// Highlight/dark mode toggle for .light.dark
+const lightDarkSpan = document.querySelector('.light.dark');
+const darkOverlay = document.getElementById('dark-overlay');
+
+if (lightDarkSpan && darkOverlay) {
+  let isDark = false;
+
+  function toggleDark() {
+    isDark = !isDark;
+    if (isDark) {
+      darkOverlay.style.display = 'block';
+      lightDarkSpan.classList.add('highlighted');
+      // Optionally, scroll to the span
+      lightDarkSpan.scrollIntoView({behavior: "smooth", block: "center"});
+    } else {
+      darkOverlay.style.display = 'none';
+      lightDarkSpan.classList.remove('highlighted');
+    }
+  }
+
+  lightDarkSpan.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleDark();
+  });
+
+  // Clicking the overlay also restores the page
+  darkOverlay.addEventListener('click', toggleDark);
+}
+</script>
+
+<script>
+  
+const flameOverlay = document.getElementById('flame-overlay');
+const fireSpan = document.querySelector('.fire');
+const floodSpan = document.querySelector('.flood');
+
+if (flameOverlay && fireSpan && floodSpan) {
+  fireSpan.addEventListener('click', (e) => {
+    e.stopPropagation();
+    flameOverlay.classList.add('active');
+    floodSpan.classList.add('overlay-active'); // ADD THIS LINE
+  });
+  
+  floodSpan.addEventListener('click', (e) => {
+    e.stopPropagation();
+    flameOverlay.classList.remove('active');
+    floodSpan.classList.remove('overlay-active'); // ADD THIS LINE
+  });
+}
+</script>
 </body>
 </html>

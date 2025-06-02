@@ -587,7 +587,7 @@ section *::after {
   z-index: 9998;
   top: 0; left: 0; right: 0; bottom: 0;
   background: rgba(0,0,0,0.96);
-  pointer-events: auto;
+  pointer-events: auto; 
   transition: opacity 0.4s;
 }
 .light.dark.highlighted {
@@ -599,15 +599,22 @@ section *::after {
   border-radius: 8px;
   padding: 0.2em 0.5em;
   transition: box-shadow 0.4s;
+  font-family: Scribble;
 }
 
+.mo-fire svg {
+  width: 100%;
+  height: auto;
+  position:relative;
+  right:-20px;
+}
 
 #flame-overlay {
   display: none;
   position: fixed;
-  z-index: 99999;
-  top: 0; left: 0; width: 100vw; height: 100vh;
-  background: rgba(30, 10, 0, 0.7);
+  z-index: 100002;
+  top: 100px; left: 0; width: 100vw; height: 100vh;
+  
   pointer-events: auto;
   transition: opacity 0.7s;
 }
@@ -628,6 +635,8 @@ section *::after {
   align-items: flex-end;
   pointer-events: auto;
 }
+
+/* old flames 
 .flame {
   width: 80px;
   height: 180px;
@@ -669,14 +678,294 @@ section *::after {
 }
 @keyframes flame-move {
   0% { transform: scaleY(1) translateY(0) scaleX(1); }
-  30% { transform: scaleY(1.05) translateY(-10px) scaleX(0.95); }
-  60% { transform: scaleY(1.1) translateY(-20px) scaleX(1.05); }
-  100% { transform: scaleY(1.2) translateY(-40px) scaleX(0.9); }
+  30% { transform: scaleY(1.05) translateY(0) scaleX(0.95); }
+  60% { transform: scaleY(1.1) translateY(0) scaleX(1.05); }
+  100% { transform: scaleY(1.2) translateY(0) scaleX(0.9); }
 }
+*/
+
+
+.flame {
+  animation-name: flameDisappear;
+  animation-duration: 2s;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  opacity: 0.5;
+  transform-origin: 45% 45% 0;
+}
+.flame.one {
+  animation-delay: 1s;
+  animation-duration: 3s;
+}
+.flame.two{
+  animation-duration: 5s;
+  animation-delay: 1s;
+}
+
+
+.flame-main {
+  animation-name: flameMovement;
+  animation-duration: 2s;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+.flame-main.one {
+  animation-duration: 2.2s;
+  animation-delay: 1s;
+}
+.flame-main.two {
+  animation-duration: 2s;
+  animation-delay: 1s;
+}
+.flame-main.three {
+  animation-duration: 2.1s;
+  animation-delay: 3s;
+}
+.flame-main.four {
+  animation-duration: 3.2s;
+  animation-delay: 4s;
+}
+.flame-main.five {
+  animation-duration: 2.5s;
+  animation-delay: 5s;
+}
+@keyframes flameMovement {
+  50% {
+    transform: scale(0.98,1.0) translate(0, 2px) rotate(-1deg);
+  }
+}
+@keyframes flameDisappear {
+  0%{
+    transform: translate(0) rotate(180deg);
+  }
+  50% {
+     opacity: 1;
+  }
+  100% {
+    transform: translate(-10px, -40px) rotate(180deg);
+    opacity: 0;
+  }
+}
+
+
 
 .flood.overlay-active {
   position: relative;
-  z-index: 100000; /* Higher than overlay */
-  
+  z-index: 100004; /* Higher than overlay */
+  pointer-events: auto;
   display: inline-block;
+}
+
+
+/* Coal overlay styling */
+.coal-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(20, 20, 20, 0.92);
+  color: #fff;
+  z-index: 3000;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  font-size: 30px;
+  cursor: url("cursor.cur"), auto;
+}
+.coal-overlay.active {
+  display: flex;
+}
+.coal-overlay-content {
+  /*width: 80vw;
+  height:80vh;   change size of overlay */
+  padding: 2em;
+  background: rgba(0,0,0,0.5);
+  border-radius: 8em;
+}
+
+/* meteor */
+
+#meteor-overlay {
+  display: none;
+  position: fixed;
+  z-index: 100005;
+  top: 0; left: 0; width: 100vw; height: 100vh;
+  background: linear-gradient(to bottom, #000428, #004e92);
+  pointer-events: auto;
+  opacity: 0.6;
+  overflow: hidden;
+}
+
+#meteor-overlay.active {
+  display: block;
+  pointer-events: auto;
+  animation: meteor-overlay-fadein 0.5s;
+}
+
+@keyframes meteor-overlay-fadein {
+  from { opacity: 0; }
+  to { opacity: 0.6; }
+}
+
+.meteor {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 
+    0 0 6px #fff,
+    0 0 12px #ff4444,
+    0 0 18px #ff8800;
+  animation: meteor-fall linear;
+  opacity: 0;
+}
+
+.meteor::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 2px;
+  background: linear-gradient(45deg, transparent, #fff 40%, #ff4444 60%, transparent);
+  transform: translate(-50%, -50%) rotate(45deg);
+  transform-origin: center;
+  transition: width 0.2s;
+}
+
+.meteor.active::before {
+  width: 60px;
+}
+
+@keyframes meteor-fall {
+  0% {
+    opacity: 0;
+    transform: translateY(-20px) translateX(-20px);
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(100vh) translateX(100px);
+  }
+}
+
+.meteor.small {
+  width: 2px;
+  height: 2px;
+}
+
+.meteor.large {
+  width: 6px;
+  height: 6px;
+  box-shadow: 
+    0 0 8px #fff,
+    0 0 16px #ff4444,
+    0 0 24px #ff8800,
+    0 0 32px #ffaa00;
+}
+
+.meteor.large.active::before {
+  width: 80px;
+  height: 3px;
+}
+
+
+
+.text-meteor {
+  position: absolute;
+  color: #fff;
+  font-family: 'Destruction', Arial, sans-serif;
+  font-size: 24px;
+  font-weight: bold;
+  text-shadow: 
+    0 0 10px #fff,
+    0 0 20px #ff4444,
+    0 0 30px #ff8800,
+    2px 2px 4px rgba(0,0,0,0.8);
+  animation: text-meteor-fall linear;
+  opacity: 0;
+  transform-origin: center;
+  pointer-events: none;
+  z-index: 99999;
+}
+
+@keyframes text-meteor-fall {
+  0% {
+    opacity: 0;
+    transform: translateY(-30px) translateX(-30px) rotate(-15deg) scale(0.5);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(0px) translateX(0px) rotate(-15deg) scale(1);
+  }
+  85% {
+    opacity: 1;
+    transform: translateY(80vh) translateX(80px) rotate(-15deg) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(100vh) translateX(100px) rotate(-15deg) scale(1.2);
+  }
+}
+
+/* Variation for different text meteor sizes */
+.text-meteor.large-text {
+  font-size: 32px;
+  text-shadow: 
+    0 0 15px #fff,
+    0 0 25px #ff4444,
+    0 0 35px #ff8800,
+    0 0 45px #ffaa00,
+    3px 3px 6px rgba(0,0,0,0.9);
+}
+
+.text-meteor.small-text {
+  font-size: 16px;
+  text-shadow: 
+    0 0 8px #fff,
+    0 0 15px #ff4444,
+    0 0 20px #ff8800,
+    1px 1px 2px rgba(0,0,0,0.7);
+}
+
+#wave-overlay {
+  display: none;
+  position: fixed;
+  z-index: 100010;
+  left: 0; top: 0; right: 0; bottom: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.wave, .wave2 {
+  position: absolute;
+  left: 0; bottom: 0;
+  width: 200%;
+  height: 40vh;
+  background: rgba(0, 120, 255, 0.7);
+  border-radius: 43% 57% 60% 40% / 60% 40% 60% 40%;
+  animation: wave-move 2.5s linear forwards;
+  transform: translateY(100%);
+}
+
+.wave2 {
+  background: rgba(0, 180, 255, 0.5);
+  animation-delay: 0.3s;
+}
+
+@keyframes wave-move {
+  0% {
+    transform: translateY(100%);
+  }
+  70% {
+    transform: translateY(-10%);
+  }
+  100% {
+    transform: translateY(-5%);
+  }
 }

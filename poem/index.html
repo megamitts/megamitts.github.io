@@ -626,12 +626,17 @@ if (flameOverlay && fireSpan && floodSpan && waveOverlay) {
     e.stopPropagation();
     // Show wave overlay
     waveOverlay.style.display = 'block';
-    // Remove flames after wave animation (2.5s)
+    // Remove flames after a split second
     setTimeout(() => {
       flameOverlay.classList.remove('active');
-      floodSpan.classList.remove('overlay-active');
+    }, 100);
+
+    // remove water after 4.5 seconds
+
+    setTimeout(() => {
+            floodSpan.classList.remove('overlay-active');
       waveOverlay.style.display = 'none';
-    }, 2500);
+    }, 4500);
   });
 }
 </script>

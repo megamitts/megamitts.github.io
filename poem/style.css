@@ -603,9 +603,10 @@ section *::after {
 }
 
 .mo-fire svg {
-  width: 100%;
+  width: 1200px;
   height: auto;
-  position:relative;
+  position: relative;
+  top: 200px;
   right:-20px;
 }
 
@@ -942,30 +943,68 @@ section *::after {
   overflow: hidden;
 }
 
-.wave, .wave2 {
+ .wave2 {
   position: absolute;
   left: 0; bottom: 0;
   width: 200%;
   height: 40vh;
   background: rgba(0, 120, 255, 0.7);
-  border-radius: 43% 57% 60% 40% / 60% 40% 60% 40%;
-  animation: wave-move 2.5s linear forwards;
-  transform: translateY(100%);
+  /*border-radius: 43% 57% 60% 40% / 60% 40% 60% 40%; */
+  animation: wave-move 4.5s;
+  
+  /*transform: translateY(20%);*/ 
 }
 
-.wave2 {
+.wave .wave2 {
   background: rgba(0, 180, 255, 0.5);
   animation-delay: 0.3s;
 }
 
+
+
+
 @keyframes wave-move {
   0% {
+    transform: translateY(0);
+  }
+
+  10% {
+    transform: translateY(10%);
+  }
+  
+  20% {
+    transform: translateY(20%);
+  }
+
+   
+  30% {
+    transform: translateY(30%);
+  }
+  40% {
+    transform: translateY(40%);
+  }
+  
+  50% {
+    transform: translateY(50%);
+  } 
+
+  60% {
+    transform: translateY(60%);
+  }
+
+  70% {
+    transform: translateY(70%);
+  }
+  80% {
+    transform: translateY(80%);
+  }
+  90% {
+    transform: translateY(90%);
+  }
+
+  
+  100% {
     transform: translateY(100%);
   }
-  70% {
-    transform: translateY(-10%);
-  }
-  100% {
-    transform: translateY(-5%);
-  }
+  
 }

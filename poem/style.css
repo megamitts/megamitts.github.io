@@ -1045,7 +1045,7 @@ section *::after {
   font-family: Scribble;
    margin-top: 60px;
   font-size: 40px;
-  
+  cursor: url("cursor.cur"), auto;
 }
 
 .psst {
@@ -1057,6 +1057,7 @@ section *::after {
 }
 #youtube-frame {
   margin-top: 60px;
+  cursor: url("cursor.cur"), auto;
 }
 
 .always {

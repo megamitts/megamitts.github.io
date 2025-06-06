@@ -77,12 +77,12 @@ a {
 
 @font-face {
   font-family: 'Friend';
-  src: url('friend.otf');
+  src: url('Friend.otf');
 }
 
 @font-face{
   font-family: 'Friend-italic';
-  src: url('friend-italic.otf');
+  src: url('Friend-Italic.otf');
 }
 
 
@@ -1061,8 +1061,10 @@ section *::after {
 
 .always {
   font-family: Friend-italic;
+  font-size: 25px;
 }
 
 .friend {
   font-family: Friend;
+  font-size: 25px;
 }

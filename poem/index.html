@@ -22,7 +22,7 @@
 has <i>always</i> been in the<br>
 way<br>
 but now<br>
-I've sold my <span class = "house"></span>, I've found this<br>
+I've sold my <span class = "house">🏠</span>, I've found this<br>
 place, a large studio, you should see the space and<br>
 the <span class = "light2">l</span>
 <span class = "light2">i</span>
@@ -42,7 +42,7 @@ the time to<br>
 <span class ="scribble">you're going to create whether you work</span><br>
 <span class ="scribble">16 hours a day in a <span class="coal">coal mine</span></span><br>
 <span class ="scribble">or</span><br>
-<span class ="scribble">you're going to create in a small room with 3 children</span><br>
+<span class ="scribble">you're going to create in a <span class="video-link" data-yt="https://www.youtube.com/embed/dyBcmmEppGY?si=HGEJRGaapaeC5xPC">small room</span> with 3 children</span><br>
 <span class ="scribble">while you're on</span><br>
 <span class ="scribble">welfare,</span><br>
 <span class ="scribble">you're going to create with part of your mind and your body</span><span class ="explosive-text"> blown<br>
@@ -532,7 +532,7 @@ document.body.addEventListener('click', function(event) {
 
 <div id="coal-overlay" class="coal-overlay">
   <div class="coal-overlay-content">
-    It's All Gravy<br>
+    It's All Gravy (after Hank)<br>
     <br>
     I live on paracetamol<br>
     and gravy<br>
@@ -548,228 +548,89 @@ document.body.addEventListener('click', function(event) {
   </div>
 </div>
 
+
+
+<div id="house-overlay" class="house-overlay">
+  <div class="house-overlay-content">
+    safe<br>
+    <br>
+    the house next door makes me<br>
+sad.<br>
+both man and wife rise early and<br>
+go to work.<br>
+they arrive home in early evening.<br>
+they have a young boy and a girl.<br>
+by 9 p.m. all the lights in the house<br>
+are out.<br>
+the next morning both man and<br>
+wife rise early again and go to<br>
+work.<br>
+they return in early evening.<br>
+By 9 p.m. all the lights are<br>
+out.<br>
+<br>
+the house next door makes me<br>
+sad.<br>
+the people are nice people, I<br>
+like them.<br>
+<br>
+but I feel them drowning.<br>
+and I can't save them.<br>
+<br>
+they are surviving.<br>
+they are not<br>
+homeless.<br>
+<br>
+but the price is<br>
+terrible.<br>
+
+sometimes during the day<br>
+I will look at the house<br>
+and the house will look at<br>
+me<br>
+and the house will<br>
+weep, yes, it does, I<br>
+feel it.<br>
+  </div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
 <div id="wave-overlay">
   <div class="wave"></div>
   <div class="wave wave2"></div>
 </div>
 
-<script>
 
-document.addEventListener('DOMContentLoaded', function() {
-  const coalSpan = document.querySelector('.coal');
-  const coalOverlay = document.getElementById('coal-overlay');
+<!-- barfly trailer -->
+<div id="video-overlay" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.8); z-index:9999; justify-content:center; align-items:center;">
+  <div style="position:relative; width:80vw; max-width:800px;">
+    <iframe id="youtube-frame" width="560" height="315" src="" title="YouTube video player" style ="border: 100px solid; border-radius: 50px;" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+    <button id="close-video" style="border-radius:50%; position:absolute; top:10px; right:100px; z-index:10000;">X</button>
+  </div>
+</div>
 
-  if (coalSpan && coalOverlay) {
-    coalSpan.addEventListener('click', function(e) {
-      e.stopPropagation();
-      coalOverlay.classList.add('active');
-    });
 
-    coalOverlay.addEventListener('click', function() {
-      coalOverlay.classList.remove('active');
-    });
-  }
-});
+
+
+
+
+
+
+<script src="scripts.js">
+
+
 </script>
 
 
-
-
-<script>
-
-
-// Highlight/dark mode toggle for .light.dark
-const lightDarkSpan = document.querySelector('.light.dark');
-const darkOverlay = document.getElementById('dark-overlay');
-
-if (lightDarkSpan && darkOverlay) {
-  let isDark = false;
-
-  function toggleDark() {
-    isDark = !isDark;
-    if (isDark) {
-      darkOverlay.style.display = 'block';
-      lightDarkSpan.classList.add('highlighted');
-      // Optionally, scroll to the span
-      lightDarkSpan.scrollIntoView({behavior: "smooth", block: "center"});
-    } else {
-      darkOverlay.style.display = 'none';
-      lightDarkSpan.classList.remove('highlighted');
-    }
-  }
-
-  lightDarkSpan.addEventListener('click', (e) => {
-    e.stopPropagation();
-    toggleDark();
-  });
-
-  // Clicking the overlay also restores the page
-  /* darkOverlay.addEventListener('click', toggleDark); */
-}
-</script>
-
-<script>
-  
-const flameOverlay = document.getElementById('flame-overlay');
-const fireSpan = document.querySelector('.fire');
-const floodSpan = document.querySelector('.flood');
-const waveOverlay = document.getElementById('wave-overlay');
-
-if (flameOverlay && fireSpan && floodSpan && waveOverlay) {
-  fireSpan.addEventListener('click', (e) => {
-    e.stopPropagation();
-    flameOverlay.classList.add('active');
-    floodSpan.classList.add('overlay-active');
-  });
-
-  floodSpan.addEventListener('click', (e) => {
-    e.stopPropagation();
-    // Show wave overlay
-    waveOverlay.style.display = 'block';
-    // Remove flames after a split second
-    setTimeout(() => {
-      flameOverlay.classList.remove('active');
-    }, 100);
-
-    // remove water after 4.5 seconds
-
-    setTimeout(() => {
-            floodSpan.classList.remove('overlay-active');
-      waveOverlay.style.display = 'none';
-    }, 4500);
-  });
-}
-</script>
-
-
-
-<script>
-
-  //meteor script
-
-document.addEventListener('DOMContentLoaded', function() {
-  const bombardmentSpan = document.querySelector('.bombardment');
-  const meteorOverlay = document.getElementById('meteor-overlay');
-
-  if (bombardmentSpan && meteorOverlay) {
-    let meteorInterval;
-    let meteorTimeout;
-
-    // Array of bombardment-related words
-    const bombardmentWords = [
-      'CRASH', 'BLAST', 'SMASH', 'BANG', 'FIRE', 'BURN', 
-      'DESTROY', 'SHATTER', 'EXPLODE', 'IMPACT', 'STRIKE', 'HIT',
-      'WAR', 'CHAOS', 'RUIN', 'WRECK', 'CRUSH'
-    ];
-
-    function createMeteor() {
-      const meteor = document.createElement('div');
-      meteor.className = 'meteor';
-      
-      // Random size variation
-      const size = Math.random();
-      if (size < 0.3) {
-        meteor.classList.add('small');
-      } else if (size > 0.8) {
-        meteor.classList.add('large');
-      }
-      
-      // Random starting position
-      const startX = Math.random() * window.innerWidth;
-      const startY = Math.random() * window.innerHeight * 0.3;
-      
-      meteor.style.left = startX + 'px';
-      meteor.style.top = startY + 'px';
-      
-      // Random fall duration
-      const duration = 1.5 + Math.random() * 2;
-      meteor.style.animationDuration = duration + 's';
-      
-      meteorOverlay.appendChild(meteor);
-      
-      setTimeout(() => {
-        meteor.classList.add('active');
-      }, 100);
-      
-      setTimeout(() => {
-        if (meteor.parentNode) {
-          meteor.parentNode.removeChild(meteor);
-        }
-      }, duration * 1000 + 500);
-    }
-
-    function createTextMeteor() {
-      const textMeteor = document.createElement('span');
-      textMeteor.className = 'text-meteor';
-      
-      // Random word from the bombardment array
-      const randomWord = bombardmentWords[Math.floor(Math.random() * bombardmentWords.length)];
-      textMeteor.textContent = randomWord;
-      
-      // Random starting position
-      const startX = Math.random() * window.innerWidth;
-      const startY = Math.random() * window.innerHeight * 0.3;
-      
-      textMeteor.style.left = startX + 'px';
-      textMeteor.style.top = startY + 'px';
-      
-      // Random fall duration
-      const duration = 2 + Math.random() * 2; // Slightly slower than regular meteors
-      textMeteor.style.animationDuration = duration + 's';
-      
-      meteorOverlay.appendChild(textMeteor);
-      
-      // Remove after animation
-      setTimeout(() => {
-        if (textMeteor.parentNode) {
-          textMeteor.parentNode.removeChild(textMeteor);
-        }
-      }, duration * 1000 + 500);
-    }
-
-    function startMeteorShower() {
-      meteorOverlay.classList.add('active');
-      
-      // Create regular meteors frequently
-      meteorInterval = setInterval(() => {
-        createMeteor();
-        
-        // Sometimes create a text meteor instead (30% chance)
-        if (Math.random() < 0.3) {
-          createTextMeteor();
-        }
-      }, 200);
-      
-      // Stop after 4 seconds
-      meteorTimeout = setTimeout(() => {
-        clearInterval(meteorInterval);
-        
-        setTimeout(() => {
-          meteorOverlay.classList.remove('active');
-          meteorOverlay.innerHTML = '';
-        }, 2000);
-      }, 4000);
-    }
-
-    function stopMeteorShower() {
-      clearInterval(meteorInterval);
-      clearTimeout(meteorTimeout);
-      meteorOverlay.classList.remove('active');
-      meteorOverlay.innerHTML = '';
-    }
-
-    bombardmentSpan.addEventListener('click', function(e) {
-      e.stopPropagation();
-      
-      if (meteorOverlay.classList.contains('active')) {
-        stopMeteorShower();
-      } else {
-        startMeteorShower();
-      }
-    });
-  }
-});
-</script>
 
 </body>
 </html>

@@ -196,14 +196,7 @@ body {
 		}
 
 
-.house:after{
-	font-size: 20px;
-    content:'🏠';
-}
-.house:hover:after{
-    font-size: 40px;
-	content:'🏠';
-}
+
 
 .scribble {
   font-family: Scribble;
@@ -783,6 +776,33 @@ section *::after {
   border-radius: 8em;
 }
 
+/* House overlay styling */
+
+.house-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(20, 20, 20, 0.92);
+  color: #fff;
+  z-index: 3000;
+  justify-content: center;
+  align-items: center;
+  /*text-align: center; */
+  font-size: 30px;
+  cursor: url("cursor.cur"), auto;
+}
+.house-overlay.active {
+  display: flex;
+}
+.house-overlay-content {
+  width: 40vw;
+  height: 80vh;   /* change size of overlay*/ 
+  padding: 2em;
+  background: rgba(0,0,0,0.5);
+  /*border-radius: 8em; */
+  overflow: auto;  /* make scrollable */
+}
+
 /* meteor */
 
 #meteor-overlay {
@@ -1006,5 +1026,11 @@ section *::after {
   100% {
     transform: translateY(100%);
   }
+  
+}
+
+#close-video {
+  font-family: Scribble;
+  font-size: 40px;
   
 }

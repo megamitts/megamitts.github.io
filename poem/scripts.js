@@ -245,7 +245,7 @@ document.querySelectorAll('.video-link').forEach(el => {
   el.addEventListener('click', function(e) {
     e.stopPropagation();
     const yt = this.getAttribute('data-yt');
-    document.getElementById('youtube-frame').src = yt;
+    document.getElementById('youtube-frame').src = yt ;
     document.getElementById('video-overlay').style.display = 'flex';
   });
 });

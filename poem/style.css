@@ -32,7 +32,7 @@ a {
   src: url('typewriter.ttf');
 }
 
- ;
+
 
 
 @font-face {
@@ -74,6 +74,17 @@ a {
   font-family: 'Scribble';
   src: url('scribble.otf');
 }
+
+@font-face {
+  font-family: 'Friend';
+  src: url('friend.otf');
+}
+
+@font-face{
+  font-family: 'Friend-italic';
+  src: url('friend-italic.otf');
+}
+
 
 body {
 	background-color: #FFE5B4; /* peach */
@@ -189,7 +200,7 @@ body {
 
 	
 .something {
-		font-size: 5vw;
+		font-size: 30px;
 		border-radius: 30%;
 		background: #87CEEB; /* sky blue */
 		font-weight: 700;
@@ -1030,7 +1041,28 @@ section *::after {
 }
 
 #close-video {
+  
   font-family: Scribble;
+   margin-top: 60px;
   font-size: 40px;
   
+}
+
+.psst {
+  font-family: Scribble;
+  font-size: 20px;
+  
+  color: yellow;
+
+}
+#youtube-frame {
+  margin-top: 60px;
+}
+
+.always {
+  font-family: Friend-italic;
+}
+
+.friend {
+  font-family: Friend;
 }

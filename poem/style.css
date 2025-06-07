@@ -5,12 +5,19 @@
   --shadow-color-light: white;
   
 	--noOfItems: 4;
-
+  scrollbar-width: thin; 
+  scrollbar-color:gray #FFE5B4;
+  
+  background-color: #FFE5B4; /* peach */
+  
 }
 
 body {
+ 
     cursor: url("cursor.cur"), auto;
     user-select: none; 
+    
+
 }
 
 a {
@@ -86,9 +93,7 @@ a {
 }
 
 
-body {
-	background-color: #FFE5B4; /* peach */
-	}
+
 
 .light {
   color: white;
@@ -181,23 +186,7 @@ body {
 	}
 	
 
-/*  
-.author {
-	background: #CC5500;
-	font-style: italic;
-	display: inline-block;
-	}
 
-.author:hover {
-	width: 200px;
-	height: 200px;
-	
-	background-image: url('bukowski.png');
-	background-size: cover;
-	background-position: center;
-	
-}
-*/
 
 
 
@@ -424,12 +413,7 @@ svg {
 }
 
 .speech-bubble {
-  /*
-  position: relative;
-  display: inline-block;
-  border: 10px solid;
-  border-radius: 10%;
-  */
+ 
 
   position: relative;
   
@@ -621,20 +605,23 @@ section *::after {
   z-index: 3000;
   justify-content: center;
   align-items: center;
-  /*text-align: center; */
+  
   font-size: 30px;
   cursor: url("cursor.cur"), auto;
 }
 .house-overlay.active, .letter-overlay.active, .create1-overlay.active, .create2-overlay.active, .dreamlessly-overlay.active {
   display: flex;
+  
 }
 .house-overlay-content, .letter-overlay-content, .create1-overlay-content, .create2-overlay-content, .dreamlessly-overlay-content {
   width: 40vw;
   height: 80vh;   /* change size of overlay*/ 
   padding: 2em;
   background: rgba(0,0,0,0.5);
-  /*border-radius: 8em; */
+  
   overflow: auto;  /* make scrollable */
+  scrollbar-width: thin;
+  scrollbar-color: gray rgba(0,0,0,0.5);
 }
 
 

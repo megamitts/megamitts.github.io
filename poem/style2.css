@@ -70,10 +70,101 @@
   100% { transform: translate(1px, -2px) rotate(-1deg); }
 }
 
+.scribbled-note {
+  position: absolute;
+  top: 40%;
+  right: 5%;
+  transform: rotate(30deg);
+ 
+  padding: 1em 2em;
+  font-family: Scribble;
+  font-size: 1.5em;
+  
+  z-index: 9999;
+  pointer-events: none; /* so it doesn't block clicks */
+}
 
+.scribbled-note1 {
+  position: absolute;
+  top: 1800px;
+  right: 5%;
+  transform: rotate(75deg);
+ 
+  padding: 1em 2em;
+  font-family: Scribble;
+  font-size: 1.5em;
+  
+  z-index: 9999;
+  pointer-events: none; /* so it doesn't block clicks */
+}
 
+.scribbled-note2 {
+  position: absolute;
+  top: 2600px;
+  right: 5%;
+  transform: rotate(170deg);
+ 
+  padding: 1em 2em;
+  font-family: Scribble;
+  font-size: 1.5em;
+  
+  z-index: 9999;
+  pointer-events: none; /* so it doesn't block clicks */
+}
 
+.john {
+  position: absolute;
+  top: 2000px;
+  right: 5%;
+  transform: rotate(97deg);
+ 
+  padding: 1em 2em;
+  font-family: Scribble;
+  font-size: 1.5em;
+  
+  z-index: 9999;
+  pointer-events: none; /* so it doesn't block clicks */
+}
 
+.linda {
+  position: absolute;
+  top: 600px;
+  right: 20%;
+  
+  transform: rotate(295deg);
+ text-decoration: line-through;
+    text-decoration-style: double;
+  padding: 1em 2em;
+  font-family: Scribble;
+  font-size: 1.5em;
+  
+  z-index: 9999;
+  pointer-events: none; /* so it doesn't block clicks */
+}
+
+.bloodspot {
+  position: absolute;
+  top: 1800px;
+  right: 15%;
+  transform: rotate(180deg);
+ 
+  
+  
+  z-index: 9999;
+  pointer-events: none; /* so it doesn't block clicks */
+}
+
+.receipt {
+  position: absolute;
+  top: 2200px;
+  right: 25%;
+  transform: rotate(29deg);
+ 
+  
+  
+  z-index: 9999;
+  pointer-events: none; /* so it doesn't block clicks */
+}
 
 /* meteor */
 

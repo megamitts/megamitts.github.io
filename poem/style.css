@@ -596,7 +596,7 @@ section *::after {
 
 /* House letter create1 create2 overlay styling */
 
-.house-overlay, .letter-overlay, .create1-overlay, .create2-overlay, .dreamlessly-overlay {
+.house-overlay, .letter-overlay, .create1-overlay, .create2-overlay, .dreamlessly-overlay, .work-overlay {
   display: none;
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -609,11 +609,11 @@ section *::after {
   font-size: 30px;
   cursor: url("cursor.cur"), auto;
 }
-.house-overlay.active, .letter-overlay.active, .create1-overlay.active, .create2-overlay.active, .dreamlessly-overlay.active {
+.house-overlay.active, .letter-overlay.active, .create1-overlay.active, .create2-overlay.active, .dreamlessly-overlay.active, .work-overlay.active {
   display: flex;
   
 }
-.house-overlay-content, .letter-overlay-content, .create1-overlay-content, .create2-overlay-content, .dreamlessly-overlay-content {
+.house-overlay-content, .letter-overlay-content, .create1-overlay-content, .create2-overlay-content, .dreamlessly-overlay-content, .work-overlay-content {
   width: 40vw;
   height: 80vh;   /* change size of overlay*/ 
   padding: 2em;

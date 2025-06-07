@@ -1,25 +1,50 @@
-/* house overlay script */
-
 document.addEventListener('DOMContentLoaded', function() {
-  const houseSpan = document.querySelector('.house');
-  const houseOverlay = document.getElementById('house-overlay');
+  // Select all elements that are designated as overlay triggers
+  const overlayTriggers = document.querySelectorAll('[data-overlay-target]');
 
-  if (houseSpan && houseOverlay) {
-    houseSpan.addEventListener('click', function(e) {
-      e.stopPropagation();
-      houseOverlay.classList.add('active');
-    });
+  overlayTriggers.forEach(trigger => {
+    const overlayId = trigger.dataset.overlayTarget; // Gets the value of data-overlay-target
+    const overlayElement = document.getElementById(overlayId);
 
-    houseOverlay.addEventListener('click', function() {
-      houseOverlay.classList.remove('active');
-    });
-  }
+    if (overlayElement) {
+      trigger.addEventListener('click', function(e) {
+        e.stopPropagation();
+
+        // Optional: Close any other active overlays first
+        document.querySelectorAll('.overlay.active').forEach(activeOverlay => {
+          if (activeOverlay !== overlayElement) { // Don't close if it's the one we're opening
+            activeOverlay.classList.remove('active');
+          }
+        });
+        
+        overlayElement.classList.add('active');
+      });
+
+      // Add click listener to the overlay itself to close it
+      overlayElement.addEventListener('click', function(e) {
+        // Only close if the click is directly on the overlay, not its children
+        if (e.target === overlayElement) { 
+          overlayElement.classList.remove('active');
+        }
+      });
+
+    } else {
+      console.warn(`Overlay with ID "${overlayId}" not found for trigger:`, trigger);
+    }
+  });
+
+  /* Optional: Add a way to close overlays with the Escape key
+  document.addEventListener('keydown', function(e) {
+    if (e.key === "Escape") {
+      document.querySelectorAll('.overlay.active').forEach(activeOverlay => {
+        activeOverlay.classList.remove('active');
+      });
+    }
+  }); */
 });
 
 
-
-
-/* coal mine overlay script */
+/* coal mine overlay script 
 
 document.addEventListener('DOMContentLoaded', function() {
   const coalSpan = document.querySelector('.coal');
@@ -35,7 +60,8 @@ document.addEventListener('DOMContentLoaded', function() {
       coalOverlay.classList.remove('active');
     });
   }
-});
+}); */
+
 
 
 

@@ -3,6 +3,7 @@
 <html>
 <head>
  <link rel="stylesheet" href="style.css">
+ <link rel="stylesheet" href="style2.css">
 </head>
 
 
@@ -22,7 +23,7 @@
 has <i class = "always">always</i> been in the<br>
 way<br>
 but now<br>
-I've sold my <span class = "house">🏠</span>, I've found this<br>
+I've sold my <span class = "house" data-overlay-target="house-overlay">🏠</span>, I've found this<br>
 place, a large studio, you should see the space and<br>
 the <span class = "light2">l</span>
 <span class = "light2">i</span>
@@ -32,19 +33,19 @@ the <span class = "light2">l</span>
 <br>
 for the first time in my life I'm going to have a place and<br>
 the time to<br>
-  <span class = "create">create.</span>
+  <span class = "create" data-overlay-target="create1-overlay">create.</span>
  <br>
 </div>
 <br>
 
 <span class ="scribble">no baby, if you're going to</span> 
-<span class="create">create</span><br>
+<span class="create" data-overlay-target="create2-overlay">create</span><br>
 <span class ="scribble">you're going to create whether you work</span><br>
-<span class ="scribble">16 hours a day in a <span class="coal">coal mine</span></span><br>
+<span class ="scribble">16 hours a day in a <span class="coal" data-overlay-target="coal-overlay">coal mine</span></span><br>
 <span class ="scribble">or</span><br>
 <span class ="scribble">you're going to create in a <span class="video-link" data-yt="https://www.youtube.com/embed/dyBcmmEppGY?si=HGEJRGaapaeC5xPC">small room</span> with 3 children</span><br>
 <span class ="scribble">while you're on</span><br>
-<span class ="scribble">welfare,</span><br>
+<span class ="scribble"><span class="letter" data-overlay-target="letter-overlay">welfare,</span></span><br>
 <span class ="scribble">you're going to create with part of your mind and your body</span><span class ="explosive-text"> blown<br>
 away</span>,<br>
 <span class ="scribble">you're going to create</span><br>
@@ -53,7 +54,7 @@ away</span>,<br>
 <span class = "blind">blind</span>
 <br>
 <span class = "crippled">crippled</span><br>
-<span class ="demented">demented</span>,<br>
+<span class ="demented" data-overlay-target="dreamlessly-overlay">demented</span>,<br>
 </span>
 </div>
 <span class ="scribble">you're going to create with a cat crawling up your</span><br>
@@ -82,149 +83,12 @@ away</span>,<br>
   <line id="secondHand" x1="100" y1="100" x2="180" y2="100" stroke="red" stroke-width="2"/>
 </svg>
 
-<script>
-  // Variables to manage speed up and clock state
-  let isSpedUp = false;
-  let timeOffset = 0; // in milliseconds, accumulates the "extra" time during speedup
-  const speedMultiplier = 150;
-  const speedUpDuration = 2000000; //  seconds in milliseconds
-  let clockIntervalId; // To store the ID of the interval (either normal or fast)
-  let speedUpTimeoutId; // To store the ID of the timeout that ends the speedup
-  let lastTickTime = Date.now(); // To calculate deltaTime for accurate offset accumulation
+<script src="clock.js">
+ 
+ //clock code
 
-  /**
-   * Updates the clock hands to a specific given time.
-   * @param {Date} displayTime The Date object representing the time to display.
-   */
-  function setClockHands(displayTime) {
-    const now = displayTime; // This function now expects the exact time to display
-    const hour = now.getHours() % 12;
-    const minute = now.getMinutes();
-    const second = now.getSeconds();
 
-    // Center of the clock
-    const cx = 100, cy = 100;
 
-    // Lengths of hands
-    const hourLen = 50;
-    const minLen = 60;
-    const secLen = 80;
-
-    // Angles in radians (0 degrees is 3 o'clock)
-    // Offset by -90 degrees to make 0 degrees 12 o'clock
-    const hourAngle = ((hour + minute / 60 + second / 3600) * 30 - 90) * Math.PI / 180;
-    const minAngle = ((minute + second / 60) * 6 - 90) * Math.PI / 180;
-    const secAngle = (second * 6 - 90) * Math.PI / 180;
-
-    // Calculate end points of hands
-    const hourX = cx + hourLen * Math.cos(hourAngle);
-    const hourY = cy + hourLen * Math.sin(hourAngle);
-    const minX = cx + minLen * Math.cos(minAngle);
-    const minY = cy + minLen * Math.sin(minAngle);
-    const secX = cx + secLen * Math.cos(secAngle);
-    const secY = cy + secLen * Math.sin(secAngle);
-
-    // Get hand elements
-    const hourHandEl = document.getElementById('hourHand');
-    const minuteHandEl = document.getElementById('minuteHand');
-    const secondHandEl = document.getElementById('secondHand');
-
-    // Update SVG attributes if elements exist
-    if (hourHandEl) {
-      hourHandEl.setAttribute('x2', hourX);
-      hourHandEl.setAttribute('y2', hourY);
-    }
-    if (minuteHandEl) {
-      minuteHandEl.setAttribute('x2', minX);
-      minuteHandEl.setAttribute('y2', minY);
-    }
-    if (secondHandEl) {
-      secondHandEl.setAttribute('x2', secX);
-      secondHandEl.setAttribute('y2', secY);
-    }
-  }
-
-  /**
-   * This function is called at each interval (tick) to update the clock.
-   * It calculates the effective time to display based on whether the clock is sped up.
-   */
-  function tick() {
-    const currentTime = Date.now(); // Real current time
-    
-    if (isSpedUp) {
-      const deltaTime = currentTime - lastTickTime; // Time elapsed since last fast tick
-      // Accumulate (multiplier-1) extra time because one part of real time already passes
-      timeOffset += deltaTime * (speedMultiplier - 1); 
-    }
-    
-    lastTickTime = currentTime; // Update for the next tick's deltaTime calculation
-    
-    // The time to display is the real current time plus any accumulated offset
-    setClockHands(new Date(currentTime + timeOffset));
-  }
-
-  /**
-   * Starts or restarts the clock at its normal speed.
-   */
-  function startNormalClock() {
-    isSpedUp = false; 
-    // timeOffset should be 0 when starting normal clock after speedup
-    lastTickTime = Date.now(); // Initialize for consistent deltaTime calculation
-    
-    clearInterval(clockIntervalId); // Clear any existing interval
-    clockIntervalId = setInterval(tick, 1000); // Tick every 1 second
-    tick(); // Call immediately to set hands to current time
-  }
-
-  /**
-   * Starts the clock in its sped-up state.
-   */
-  function startFastClock() {
-    isSpedUp = true;
-    // timeOffset starts from its current value (which should be 0 if transitioning from normal)
-    lastTickTime = Date.now(); // Reset for accurate delta calculation at the start of speedup
-    
-    clearInterval(clockIntervalId); // Stop normal/previous ticking
-    // Tick more frequently for smoother animation during speedup
-    clockIntervalId = setInterval(tick, 1000 / speedMultiplier); 
-    tick(); // Update hands immediately for responsiveness
-  }
-
-  // Find the clock container element to attach the click listener
-  const clockContainer = document.querySelector('.circle');
-
-  if (clockContainer) {
-    clockContainer.addEventListener('click', () => {
-      if (isSpedUp) {
-        // --- Clock is currently sped up, revert to normal time immediately ---
-        clearTimeout(speedUpTimeoutId);   // Cancel the scheduled return to normal
-        clearInterval(clockIntervalId);     // Stop the fast ticking interval
-        
-        timeOffset = 0;                  // Reset any accumulated time offset
-        setClockHands(new Date());       // Immediately set hands to the *actual* current time
-        
-        startNormalClock();              // Resume normal clock operation (this will set isSpedUp to false)
-      } else {
-        // --- Clock is normal, so speed it up ---
-        startFastClock(); // Switch to fast clock mode (this will set isSpedUp to true)
-
-        // Set a timeout to automatically return to normal speed
-        clearTimeout(speedUpTimeoutId); // Clear any pre-existing timeout just in case
-        speedUpTimeoutId = setTimeout(() => {
-          // This block runs if the speedUpDuration completes without another click
-          clearInterval(clockIntervalId); // Stop the fast ticking
-          
-          timeOffset = 0; // Reset the accumulated time offset
-          setClockHands(new Date()); // Explicitly update hands to the current *real* time
-
-          startNormalClock(); // Resume normal clock ticking
-        }, speedUpDuration);
-      }
-    });
-  }
-
-  // Initial clock start when the script loads
-  startNormalClock();
 </script>
 
 
@@ -256,81 +120,10 @@ away</span>,<br>
 new excuses<br>
 for.</span></span><br></span>
 
-<script>
+<script src = "splatter.js">
 
+//splatter code
 
-document.body.addEventListener('click', function(event) {
-    // --- Elements to IGNORE for splattering ---
-    // If the click originated on or inside any of these, don't splatter.
-    const ignoreSplatterOn = [
-        '.circle_fake',        // Your clock
-        'button',         // Any buttons
-        'a',              // Any links
-        'input',          // Any input fields
-        'textarea',       // Any text areas
-        'select'          // Any select dropdowns
-        // Add other selectors for elements you don't want splatters on
-    ];
-
-    for (const selector of ignoreSplatterOn) {
-        if (event.target.closest(selector)) {
-            // console.log('Splatter ignored: click on or inside', selector);
-            return; // Stop if the click was on an ignored element
-        }
-    }
-
-    // --- Create the splatter image element ---
-    const splatterImage = document.createElement('img');
-    splatterImage.src = 'ink-splatter.png'; // Ensure this path is correct!
-
-    // --- Style the splatter ---
-    splatterImage.style.position = 'absolute';
-    splatterImage.style.pointerEvents = 'none';
-    splatterImage.style.zIndex = '1000'; // Should be on top
-
-    const baseSize = 20 + Math.random() * 30; // Random size between 20px and 50px
-    splatterImage.style.width = `${baseSize}px`;
-    splatterImage.style.height = 'auto'; // Maintain aspect ratio
-
-    const randomRotation = Math.random() * 360; // 0-359 degrees
-
-    // Position using pageX/pageY for coordinates relative to the whole document
-    // This is generally more reliable than clientX/Y if there's scrolling.
-    splatterImage.style.left = `${event.pageX}px`;
-    splatterImage.style.top = `${event.pageY}px`;
-
-    splatterImage.style.transform = `translate(-50%, -50%) rotate(${randomRotation}deg)`;
-    splatterImage.style.transformOrigin = 'center center';
-
-    // --- Add to body ---
-    document.body.appendChild(splatterImage);
-    // console.log('Splatter added at:', event.pageX, event.pageY);
-
-    // --- Optional: Fade out and remove ---
-    splatterImage.style.opacity = '0.7'; // Start slightly transparent if you like
-    splatterImage.style.transition = 'opacity 1s ease-out 20s'; // Fade after 2s, over 1s
-
-    // Set opacity to 0 to trigger the fade after the delay
-    // Need a tiny delay for the transition to register properly if opacity is set immediately
-    setTimeout(() => {
-        splatterImage.style.opacity = '0';
-    }, 50); // Small delay
-
-    // Remove from DOM after transition
-    splatterImage.addEventListener('transitionend', function() {
-        if (splatterImage.parentNode) {
-            splatterImage.parentNode.removeChild(splatterImage);
-            // console.log('Splatter removed');
-        }
-    });
-
-    // Fallback removal in case transitionend doesn't fire (e.g., element hidden before transition)
-    setTimeout(() => {
-        if (splatterImage.parentNode) {
-            splatterImage.parentNode.removeChild(splatterImage);
-        }
-    }, 22000); // Remove after x seconds regardless
-});
 </script>
 
 
@@ -548,6 +341,94 @@ document.body.addEventListener('click', function(event) {
   </div>
 </div>
 
+<div id="create1-overlay" class="create1-overlay">
+  <div class="create1-overlay-content">
+Friendly Advice to a Lot of Young Men<br>
+<br>
+<br>
+Go to Tibet<br>
+Ride a camel.<br>
+Read the bible.<br>
+Dye your shoes blue.<br>
+Grow a beard.<br>
+Circle the world in a paper canoe.<br>
+Subscribe to The Saturday Evening Post.<br>
+Chew on the left side of your mouth only.<br>
+Marry a woman with one leg and shave with a straight razor.<br>
+And carve your name in her arm.<br>
+<br>
+Brush your teeth with gasoline.<br>
+Sleep all day and climb trees at night.<br>
+Be a monk and drink buckshot and beer.<br>
+Hold your head under water and play the violin.<br>
+Do a belly dance before pink candles.<br>
+Kill your dog.<br>
+Run for mayor.<br>
+Live in a barrel.<br>
+Break your head with a hatchet.<br>
+Plant tulips in the rain.<br>
+<br>
+But don’t write poetry.<br>
+<br>
+</div>
+</div>
+
+<div id="create2-overlay" class="create2-overlay">
+  <div class="create2-overlay-content">
+
+Roll the Dice<br>
+<br>
+if you’re going to try, go all the<br>
+way.<br>
+otherwise, don’t even start.<br>
+<br>
+if you’re going to try, go all the<br>
+way. this could mean losing girlfriends,<br>
+wives, relatives, jobs and<br>
+maybe your mind.<br>
+<br>
+go all the way.<br>
+it could mean not eating for 3 or<br>
+4 days.<br>
+it could mean freezing on a<br>
+park bench.<br>
+it could mean jail,<br>
+it could mean derision,<br>
+mockery,<br>
+isolation.<br>
+isolation is the gift,<br>
+all the others are a test of your
+endurance, of<br>
+how much you really want to<br>
+do it.<br>
+and you’ll do it<br>
+despite rejection and the<br>
+worst odds<br>
+and it will be better than<br>
+anything else<br>
+you can imagine.<br>
+<br>
+if you’re going to try,<br>
+go all the way.<br>
+there is no other feeling like<br>
+that.<br>
+you will be alone with the<br>
+gods<br>
+and the nights will flame with<br>
+fire.<br>
+<br>
+do it, do it, do it.<br>
+do it.<br>
+<br>
+all the way<br>
+all the way.<br>
+you will ride life straight to<br>
+perfect laughter,<br>
+it’s the only good fight<br>
+there is.<br>
+<br>
+</div>
+</div>
 
 
 <div id="house-overlay" class="house-overlay">
@@ -594,7 +475,96 @@ feel it.<br>
   </div>
 </div>
 
+<div id="dreamlessly-overlay" class="dreamlessly-overlay">
+  <div class="dreamlessly-overlay-content">
+Dreamlessly<br>
+<br>
+Old, grey-haired waitresses<br>
+in cafes at night<br>
+have given it up,<br>
+and as I walk down sidewalks of<br>
+light and look into windows<br>
+of nursing homes<br>
+I can see that it is no longer<br>
+with them.<br>
+<br>
+I see people sitting on park benches<br>
+and I can see by the way they<br>
+sit and look<br>
+that it is gone.<br>
+<br>
+I see people driving cars<br>
+and I see by the way<br>
+they drive their cars<br>
+that they neither love nor are
+loved -<br>
+nor do they consider<br>
+sex. It is all forgotten<br>
+like an old movie.<br>
+<br>
+I see people in department stores and<br>
+supermarkets<br>
+walking down aisles<br>
+buying things<br>
+and I can see by the way their clothing<br>
+fits them and by the way they walk<br>
+and by their faces and their eyes<br>
+that they care for nothing<br>
+and that nothing cares<br>
+for them.<br>
+<br>
+I see a hundred people a day<br>
+who have given up<br>
+entirely.<br>
+<br>
+If I go to the racetrack<br>
+or a sporting event<br>
+I can see thousands<br>
+that feel for nothing or<br>
+no one<br>
+and get no feeling<br>
+back.<br>
+<br>
+Everywhere I see those who<br>
+crave nothing but<br>
+food, shelter, and<br>
+clothing; they concentrate<br>
+on that,<br>
+dreamlessly<br>
+I do not understand why these people do not<br>
+vanish<br>
+I do not understand why these people do not<br>
+expire<br>
+why the clouds<br>
+do not murder them<br>
+or why the dogs<br>
+do not murder them<br>
+or why the flowers and the children<br>
+do not murder them,<br>
+I do not understand.<br>
+<br>
+I suppose they are murdered<br>
+yet I can’t adjust to the<br>
+fact of them<br>
+because they are so many.<br>
+<br>
+Each day,<br>
+each night,<br>
+there are more of them<br>
+in the subways and<br>
+in the buildings and<br>
+in the parks<br>
+they feel no terror<br>
+at not loving<br>
+or at not<br>
+being loved<br>
+so many many many<br>
+of my fellow<br>
+creatures.<br>
 
+
+</div>
+</div>
 
 
 
@@ -636,11 +606,55 @@ feel it.<br>
 </div>
 
 
+<div id = "letter-overlay" class = "letter-overlay">
+  <div class ="letter-overlay-content">
+    8–12-86<br>
+<br>
+Hello John:<br>
+<br>
+Thanks for the good letter. I don’t think it hurts, sometimes, to remember where you came from. You know the places where I came from. Even the people who try to write about that or make films about it, they don’t get it right. They call it “9 to 5.” It’s never 9 to 5, there’s no free lunch break at those places, in fact, at many of them in order to keep your job you don’t take lunch. Then there’s OVERTIME and the books never seem to get the overtime right and if you complain about that, there’s another sucker to take your place.
+<br><br>
+You know my old saying, “Slavery was never abolished, it was only extended to include all the colors.”
+<br><br>
+And what hurts is the steadily diminishing humanity of those fighting to hold jobs they don’t want but fear the alternative worse. People simply empty out. They are bodies with fearful and obedient minds. The color leaves the eye. The voice becomes ugly. And the body. The hair. The fingernails. The shoes. Everything does.
+<br><br>
+As a young man I could not believe that people could give their lives over to those conditions. As an old man, I still can’t believe it. What do they do it for? Sex? TV? An automobile on monthly payments? Or children? Children who are just going to do the same things that they did?
+<br><br>
+Early on, when I was quite young and going from job to job I was foolish enough to sometimes speak to my fellow workers: “Hey, the boss can come in here at any moment and lay all of us off, just like that, don’t you realize that?”
+<br><br>
+They would just look at me. I was posing something that they didn’t want to enter their minds.
+<br><br>
+Now in industry, there are vast layoffs (steel mills dead, technical changes in other factors of the work place). They are layed off by the hundreds of thousands and their faces are stunned:
+<br><br>
+“I put in 35 years…”
+<br><br>
+“It ain’t right…”
+<br><br>
+“I don’t know what to do…”
+<br><br>
+They never pay the slaves enough so they can get free, just enough so they can stay alive and come back to work. I could see all this. Why couldn’t they? I figured the park bench was just as good or being a barfly was just as good. Why not get there first before they put me there? Why wait?
+<br><br>
+I just wrote in disgust against it all, it was a relief to get the shit out of my system. And now that I’m here, a so-called professional writer, after giving the first 50 years away, I’ve found out that there are other disgusts beyond the system.
+<br><br>
+I remember once, working as a packer in this lighting fixture company, one of the packers suddenly said: “I’ll never be free!”
+<br><br>
+One of the bosses was walking by (his name was Morrie) and he let out this delicious cackle of a laugh, enjoying the fact that this fellow was trapped for life.
+<br><br>
+So, the luck I finally had in getting out of those places, no matter how long it took, has given me a kind of joy, the jolly joy of the miracle. I now write from an old mind and an old body, long beyond the time when most men would ever think of continuing such a thing, but since I started so late I owe it to myself to continue, and when the words begin to falter and I must be helped up stairways and I can no longer tell a bluebird from a paperclip, I still feel that something in me is going to remember (no matter how far I’m gone) how I’ve come through the murder and the mess and the moil, to at least a generous way to die.
+<br><br>
+To not to have entirely wasted one’s life seems to be a worthy accomplishment, if only for myself.
+<br><br>
+yr boy,
+<br><br>
+Hank
+<br><br>
+  </div>
+
+</div>
 
 
 
-
-
+<!-- main js scripts-->
 
 <script src="scripts.js">
 

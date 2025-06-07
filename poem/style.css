@@ -139,6 +139,7 @@ a {
     font-family: Broken;
     
     transform: scale(10);
+    z-index: 1;
 }
 
 .explosive-text:before,
@@ -602,7 +603,7 @@ section *::after {
   top: 0; left: 0; right: 0; bottom: 0;
   background: rgba(20, 20, 20, 0.92);
   color: #fff;
-  z-index: 3000;
+  z-index: 99999;
   justify-content: center;
   align-items: center;
   

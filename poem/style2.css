@@ -100,9 +100,9 @@
 
 .scribbled-note2 {
   position: absolute;
-  top: 2600px;
+  top: 2550px;
   right: 5%;
-  transform: rotate(170deg);
+  transform: rotate(7deg);
  
   padding: 1em 2em;
   font-family: Scribble;
@@ -156,9 +156,81 @@
 
 .receipt {
   position: absolute;
-  top: 2200px;
+  top: 2300px;
   right: 25%;
   transform: rotate(29deg);
+ 
+  
+  
+  z-index: 9999;
+  pointer-events: none; /* so it doesn't block clicks */
+}
+
+.matches {
+  position: absolute;
+  top: 800px;
+  right: 25%;
+  transform: rotate(235deg);
+ 
+  
+  
+  z-index: 0;
+  pointer-events: none; /* so it doesn't block clicks */
+}
+
+.quarter {
+  position: absolute;
+  top: 900px;
+  right: 15%;
+  transform: rotate(225deg);
+ 
+  
+  
+  z-index: 9999;
+  pointer-events: none; /* so it doesn't block clicks */
+}
+
+.quarter2 {
+  position: absolute;
+  top: 940px;
+  right: 15%;
+  transform: rotate(235deg);
+ 
+  
+  
+  z-index: 9999;
+  pointer-events: none; /* so it doesn't block clicks */
+}
+
+.quarter3 {
+  position: absolute;
+  top: 910px;
+  right: 13%;
+  transform: rotate(280deg);
+ 
+  
+  
+  z-index: 9999;
+  pointer-events: none; /* so it doesn't block clicks */
+}
+
+.sketch {
+  position: absolute;
+  top: 2700px;
+  right: 13%;
+  transform: rotate(1deg);
+ 
+  
+  
+  z-index: 9999;
+  pointer-events: none; /* so it doesn't block clicks */
+}
+
+.pen {
+  position: absolute;
+  top: 100px;
+  right: 13%;
+  transform: rotate(1deg);
  
   
   

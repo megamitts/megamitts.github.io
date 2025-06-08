@@ -570,8 +570,8 @@ section *::after {
 
 
 
-/* Coal overlay styling */
-.coal-overlay {
+/* Coal, marina overlay styling */
+.coal-overlay, .marina-overlay {
   display: none;
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -584,10 +584,11 @@ section *::after {
   font-size: 30px;
   cursor: url("cursor.cur"), auto;
 }
-.coal-overlay.active {
+.coal-overlay.active, .marina-overlay.active {
   display: flex;
 }
-.coal-overlay-content {
+.coal-overlay-content, .marina-overlay-content {
+  width: 40vw; 
   /*width: 80vw;
   height:80vh;   change size of overlay */
   padding: 2em;
@@ -597,7 +598,7 @@ section *::after {
 
 /* House letter create1 create2 overlay styling */
 
-.house-overlay, .letter-overlay, .create1-overlay, .create2-overlay, .dreamlessly-overlay, .work-overlay {
+.house-overlay, .letter-overlay, .create1-overlay, .create2-overlay, .dreamlessly-overlay, .work-overlay, .eyes-overlay {
   display: none;
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -610,11 +611,42 @@ section *::after {
   font-size: 30px;
   cursor: url("cursor.cur"), auto;
 }
-.house-overlay.active, .letter-overlay.active, .create1-overlay.active, .create2-overlay.active, .dreamlessly-overlay.active, .work-overlay.active {
+.house-overlay.active, .letter-overlay.active, .create1-overlay.active, .create2-overlay.active, .dreamlessly-overlay.active, .work-overlay.active, .eyes-overlay.active {
   display: flex;
   
 }
-.house-overlay-content, .letter-overlay-content, .create1-overlay-content, .create2-overlay-content, .dreamlessly-overlay-content, .work-overlay-content {
+.house-overlay-content, .letter-overlay-content, .create1-overlay-content, .create2-overlay-content, .dreamlessly-overlay-content, .work-overlay-content, .eyes-overlay-content {
+  width: 40vw;
+  height: 80vh;   /* change size of overlay*/ 
+  padding: 2em;
+  background: rgba(0,0,0,0.5);
+  
+  overflow: auto;  /* make scrollable */
+  scrollbar-width: thin;
+  scrollbar-color: gray rgba(0,0,0,0.5);
+}
+
+/* time1, crippled, cats, space, beasts, writer, challenge overlay styling */
+
+
+.time1-overlay, .crippled-overlay, .cats-overlay, .space-overlay, .beasts-overlay, .writer-overlay, .challenge-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(20, 20, 20, 0.92);
+  color: #fff;
+  z-index: 99999;
+  justify-content: center;
+  align-items: center;
+  
+  font-size: 30px;
+  cursor: url("cursor.cur"), auto;
+}
+.time1-overlay.active, .crippled-overlay.active, .cats-overlay.active, .space-overlay.active, .beasts-overlay.active, .writer-overlay.active, .challenge-overlay.active {
+  display: flex;
+  
+}
+.time1-overlay-content, .crippled-overlay-content, .cats-overlay-content, .space-overlay-content, .beasts-overlay-content, .writer-overlay-content, .challenge-overlay-content {
   width: 40vw;
   height: 80vh;   /* change size of overlay*/ 
   padding: 2em;

@@ -109,7 +109,7 @@
   font-size: 1.5em;
   
   z-index: 9999;
-  pointer-events: none; /* so it doesn't block clicks */
+  /*pointer-events: none; so it doesn't block clicks */
 }
 
 .john {

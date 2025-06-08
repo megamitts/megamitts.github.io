@@ -112,6 +112,8 @@
   /*pointer-events: none; so it doesn't block clicks */
 }
 
+
+
 .john {
   position: absolute;
   top: 2000px;
@@ -223,7 +225,7 @@
   
   
   z-index: 9999;
-  pointer-events: none; /* so it doesn't block clicks */
+  pointer-events: auto; /* so it doesn't block clicks */
 }
 
 .pen {

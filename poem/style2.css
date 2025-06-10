@@ -164,7 +164,7 @@
  
   
   
-  z-index: 9999;
+  z-index: 1;
   pointer-events: none; /* so it doesn't block clicks */
 }
 

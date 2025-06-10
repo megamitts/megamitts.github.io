@@ -133,7 +133,7 @@
   top: 600px;
   right: 20%;
   
-  transform: rotate(295deg);
+  transform: rotate(295deg); 
  text-decoration: line-through;
     text-decoration-style: double;
   padding: 1em 2em;
@@ -142,14 +142,17 @@
   
   z-index: 9999;
   pointer-events: none; /* so it doesn't block clicks */
+ 
 }
+
+
 
 .bloodspot {
   position: absolute;
   top: 1800px;
   right: 15%;
   transform: rotate(180deg);
- 
+  display: none;
   
   
   z-index: 9999;
@@ -188,7 +191,7 @@
  
   
   
-  z-index: 9999;
+  z-index: 1001;
   pointer-events: none; /* so it doesn't block clicks */
 }
 
@@ -200,7 +203,7 @@
  
   
   
-  z-index: 9999;
+  z-index: 1001;
   pointer-events: none; /* so it doesn't block clicks */
 }
 
@@ -212,7 +215,7 @@
  
   
   
-  z-index: 9999;
+  z-index: 1001;
   pointer-events: none; /* so it doesn't block clicks */
 }
 

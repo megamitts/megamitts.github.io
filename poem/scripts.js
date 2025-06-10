@@ -74,7 +74,7 @@ document.addEventListener('DOMContentLoaded', function() {
 // Highlight/dark mode toggle for .light.dark
 const lightDarkSpan = document.querySelector('.light.dark');
 const darkOverlay = document.getElementById('dark-overlay');
-
+const bloodspot = document.querySelector('.bloodspot');
 if (lightDarkSpan && darkOverlay) {
   let isDark = false;
 
@@ -82,11 +82,13 @@ if (lightDarkSpan && darkOverlay) {
     isDark = !isDark;
     if (isDark) {
       darkOverlay.style.display = 'block';
+      bloodspot.style.display = 'inline'; // show blood
       lightDarkSpan.classList.add('highlighted');
       // Optionally, scroll to the span
       lightDarkSpan.scrollIntoView({behavior: "smooth", block: "center"});
     } else {
       darkOverlay.style.display = 'none';
+      bloodspot.style.display = 'none'; // hide blood
       lightDarkSpan.classList.remove('highlighted');
     }
   }
@@ -129,6 +131,7 @@ if (flameOverlay && fireSpan && floodSpan && waveOverlay) {
 
     setTimeout(() => {
             floodSpan.classList.remove('overlay-active');
+            flameOverlay.classList.remove('active'); /* if user clicks flames again whilst flood on they will be removed */
       waveOverlay.style.display = 'none';
     }, 4500);
   });

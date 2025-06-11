@@ -168,7 +168,7 @@
   
   
   z-index: 1;
-  pointer-events: none; /* so it doesn't block clicks */
+  pointer-events: auto; /* so it doesn't block clicks */
 }
 
 .matches {
@@ -180,7 +180,7 @@
   
   
   z-index: 0;
-  pointer-events: none; /* so it doesn't block clicks */
+  pointer-events: auto; /* so it doesn't block clicks */
 }
 
 .quarter {
@@ -216,7 +216,7 @@
   
   
   z-index: 1001;
-  pointer-events: none; /* so it doesn't block clicks */
+  pointer-events: auto; /* so it doesn't block clicks */
 }
 
 .sketch {

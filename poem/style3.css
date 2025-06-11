@@ -1,0 +1,27 @@
+.something-overlay, .ticket-overlay, .leaders-overlay, .grave-overlay, .christmas-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(20, 20, 20, 0.92);
+  color: #fff;
+  z-index: 99999;
+  justify-content: center;
+  align-items: center;
+  
+  font-size: 30px;
+  cursor: url("cursor.cur"), auto;
+}
+.something-overlay.active, .ticket-overlay.active, .leaders-overlay.active, .grave-overlay.active,.christmas-overlay.active {
+  display: flex;
+  
+}
+.something-overlay-content, .ticket-overlay-content, .leaders-overlay-content, .grave-overlay-content, .christmas-overlay-content {
+  width: 40vw;
+  height: 80vh;   /* change size of overlay*/ 
+  padding: 2em;
+  background: rgba(0,0,0,0.5);
+  
+  overflow: auto;  /* make scrollable */
+  scrollbar-width: thin;
+  scrollbar-color: gray rgba(0,0,0,0.5);
+}

@@ -199,6 +199,7 @@ a {
     display: inline-block;
     position: relative; /* Needed for pseudo-element positioning */
     transition: width 1s, height 1s, background 1s;
+    
 }
 
 /* Add a pseudo-element for the image */
@@ -212,6 +213,7 @@ a {
     background-size: cover;
     background-position: center;
     z-index: 1;
+    border-radius: 50%;
     pointer-events: none;
 }
 
@@ -219,6 +221,7 @@ a {
 .author:hover {
     width: 200px;
     height: 200px;
+    border-radius: 50%;
 }
 
 .author:hover::after {
@@ -226,6 +229,13 @@ a {
     transition: opacity 1.5s;
 }
 
+.hank {
+  display: inline;
+}
+
+.hank:hover {
+  color: transparent;
+}
 
 
 

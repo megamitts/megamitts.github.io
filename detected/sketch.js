@@ -12,6 +12,7 @@ let y1 = 0;
 
 function preload() {
   detected = loadSound('detected.mp3');
+  //astronaut = loadImage('astro_cursor.gif');
 }
 
 function setup() {
@@ -19,6 +20,7 @@ function setup() {
   noFill();
   stroke(255, 0, 0);
   strokeWeight(2);
+  cursor('spaceman.png');
   
   //detected.loop(); // play "Enemy detected" sound.
 }

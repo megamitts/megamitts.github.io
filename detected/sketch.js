@@ -26,11 +26,12 @@ function setup() {
 function draw() {
   background(30);
   
-  if (mouseX >= 350){
+  rect(100,100, 100, 100);
+  //console.log('MouseX', mouseX, ' MouseY', mouseY);
+  if (mouseX >= 300 && mouseX <= 400 && mouseY >= 300 && mouseY <= 400){
        detected.stop();
     stroke(255, 100, 150);
      }
-  
   
   
   if (caught){
@@ -61,7 +62,7 @@ function mousePressed(){
   caught = true;
   if (!detected_played) {
   mouse_pressed = true;
-    console.log('mouse pressed', mouse_pressed);
+    //console.log('mouse pressed', mouse_pressed);
     stroke('red');
     
       detected.loop();
@@ -77,17 +78,17 @@ function mouseMoved(){
       detected.loop(); // Only start playing once if not already playing
     }
    
-  if (mouseX >= 350){
+  if (mouseX >= 300 && mouseX <= 400 && mouseY >= 300 && mouseY <= 400){
        detected.stop();
     caught = false;
-    console.log('caught mouse moved', caught);
+    //console.log('caught mouse moved', caught);
     //mouse_pressed = false;
     stroke(255, 100, 150);
      }
-    else if (mouseX <= 349){
+    else if (mouseX <= 299){
       stroke('red');
      caught = true;
-     console.log('caught mouse moved', caught);
+    // console.log('caught mouse moved', caught);
     
   
 }
@@ -113,3 +114,4 @@ function updateN() {
     }
   }
 }
+

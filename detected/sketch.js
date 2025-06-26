@@ -17,7 +17,7 @@ function preload() {
 function setup() {
   createCanvas(400, 400, WEBGL);
   noFill();
-  stroke(255, 100, 150);
+  stroke(255, 0, 0);
   strokeWeight(2);
   
   //detected.loop(); // play "Enemy detected" sound.
@@ -26,7 +26,15 @@ function setup() {
 function draw() {
   background(30);
   
-  rect(100,100, 100, 100);
+  noStroke();
+  fill(0,0,0,0);
+  
+  rect(-200, -200, 100, 100); //safe zone 1
+  rect(100,100, 100, 100); // safe zone 4
+  
+  noFill();
+  
+  stroke(255, 0, 0);
   //console.log('MouseX', mouseX, ' MouseY', mouseY);
   if (mouseX >= 300 && mouseX <= 400 && mouseY >= 300 && mouseY <= 400){
        detected.stop();
@@ -46,7 +54,7 @@ function draw() {
   }
   endShape(CLOSE);
 
-  // Optional: Animate the phase difference
+  // Animate the phase difference
   delta += 0.01;
   updateN();
   }
@@ -85,13 +93,29 @@ function mouseMoved(){
     //mouse_pressed = false;
     stroke(255, 100, 150);
      }
-    else if (mouseX <= 299){
+    else if (mouseX >= 200 || mouseX <= 299){
       stroke('red');
      caught = true;
-    // console.log('caught mouse moved', caught);
+     console.log(mouseX);
+     }
+    //console.log('caught mouse moved', caught);
     
+    if (mouseX >= 0 && mouseX <= 100 && mouseY >= 0 && mouseY <= 100){
+       detected.stop();
+    caught = false;
+    //console.log('caught mouse moved', caught);
+    //mouse_pressed = false;
+    stroke(255, 100, 150);
+     }
+     
+     /*
+    else if (mouseX >= 101 || mouseX <= 399){
+      stroke('red');
+     caught = true;
+     console.log(mouseX);
+    */
   
-}
+
 }
 }
 

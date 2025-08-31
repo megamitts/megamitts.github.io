@@ -9,9 +9,9 @@ const rectY = 0;
 const rectWidth = 400;
 const rectHeight = 200;
 
-const accumulationThreshold = 10;
+const accumulationThreshold = 30;
 
-
+let windscreenpic;
 let question;
 let nixon;
 let wow;
@@ -26,6 +26,7 @@ function preload() {
   question = loadSound('question.mp3');
   nixon = loadSound('nixon.mp3');
   wow = loadSound('wow.mp3');
+  windscreenpic = loadImage('windscreen.png');
 }
 
 function setup() {
@@ -102,6 +103,10 @@ function draw() {
     text(radio3, 40, 250);
   } 
   
+  
+  
+  
+  
   // windscreen snow
 
 // Add a new snowflake every few frames
@@ -154,11 +159,19 @@ function draw() {
     // Calculate the total height of the snow pile from the bottom
     const snowPileHeight = (rectY + rectHeight) - highestSnowPoint;
 
+    
+  
+    
     // If the pile is high enough, start the wiper
     if (snowPileHeight >= accumulationThreshold) {
       wiping = true;
       wiper.startWiping();
     }
+    
+    
+    
+    
+    
   }
 
   // Update and display the wiper if it's active
@@ -193,6 +206,8 @@ function draw() {
   noFill();
   stroke(255);
   rect(0,0,400,200); // windscreen
+  
+  image(windscreenpic,0,0);
   
 }
 
@@ -280,7 +295,7 @@ class WindscreenSnowFlake {
   }
 
   display() {
-    fill(255,255,255,0);
+    fill(255,255,255,100);
     noStroke();
     rect(this.pos.x, this.pos.y, this.r, this.r, random(this.r), random(this.r), random(this.r),random(this.r));
   }

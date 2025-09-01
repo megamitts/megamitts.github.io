@@ -2,6 +2,7 @@ let windscreenSnowFlakes = [];
 let accumulatedSnow = [];
 let wiper;
 let wiping = false;
+let radioplaying = false;
 
 // Rectangle properties
 const rectX = 0;
@@ -11,6 +12,8 @@ const rectHeight = 200;
 
 const accumulationThreshold = 30;
 
+let carradiopic;
+let steeringwheelpic;
 let windscreenpic;
 let question;
 let nixon;
@@ -27,6 +30,8 @@ function preload() {
   nixon = loadSound('nixon.mp3');
   wow = loadSound('wow.mp3');
   windscreenpic = loadImage('windscreen.png');
+  carradiopic = loadImage('carradio.png');
+  steeringwheelpic = loadImage('steeringwheel.png');
 }
 
 function setup() {
@@ -73,14 +78,17 @@ function draw() {
   noStroke();
   rect(0,210, 400, 190); // dashboard
   stroke(255);
-  circle(290,300,180); //steering wheel
-  line(200,300,380,300);
-  line(290,300, 290, 390);
+  
+  image(steeringwheelpic, 150,165, 290, 290);
+  // circle(290,300,180); //steering wheel
+  // line(200,300,380,300);
+  // line(290,300, 290, 390);
   
   fill(50);
-  stroke(255);
-  rect(20, 220, 100, 50); //radio
-
+  //stroke(255);
+  //rect(20, 220, 100, 50); //radio
+  image(carradiopic, 20, 220);
+  
   fill(0, 255, 0);
   noStroke();
   textSize(14);
@@ -90,17 +98,17 @@ function draw() {
   
   if (currentStation === 0) {
     textAlign(LEFT);
-    text(radio0, 40, 250);
+    text(radio0, 50, 240);
   } 
   if (currentStation === 1) {
-    text(radio1, 40, 250);
+    text(radio1, 50, 240);
   } 
   if (currentStation === 2) {
-    text(radio2, 40, 250);
+    text(radio2, 50, 240);
   } 
   
   if (currentStation === 3) {
-    text(radio3, 40, 250);
+    text(radio3, 50, 240);
   } 
   
   
@@ -205,9 +213,10 @@ function draw() {
   
   noFill();
   stroke(255);
-  rect(0,0,400,200); // windscreen
+  
   
   image(windscreenpic,0,0);
+  rect(0,0,400,210, 20 ); // windscreen
   
 }
 
@@ -250,31 +259,50 @@ class Snowflake {
 }
 
 function mousePressed() {
+  // First, handle the station change button press
+  // This should only work if the radio is already on.
   if (
-    mouseX > 20 && mouseX < 120 &&
+    radioplaying &&
+    mouseX > 85 && mouseX < 115 &&
     mouseY > 220 && mouseY < 270
   ) {
-    // Stop all sounds first
+    // Stop all sounds before switching
     question.stop();
     nixon.stop();
     wow.stop();
-    
-    // Toggle station in a cycle
-    
-    if (currentStation === 0) {
-      currentStation = 1;
-      question.play();
-    } else if (currentStation === 1) {
+
+    // Cycle to the next station
+    if (currentStation === 1) {
       currentStation = 2;
       nixon.play();
     } else if (currentStation === 2) {
       currentStation = 3;
       wow.play();
     } else if (currentStation === 3) {
+      currentStation = 1;
+      question.play();
+    }
+    return; // Exit the function after changing the station
+  }
+
+  // Second, handle the on/off button press
+  if (
+    mouseX > 22 && mouseX < 50 &&
+    mouseY > 250 && mouseY < 270
+  ) {
+    // Toggle the radio's playing state
+    radioplaying = !radioplaying;
+
+    if (radioplaying) {
+      // If the radio was just turned ON, start at station 1
+      currentStation = 1;
+      question.play();
+    } else {
+      // If the radio was just turned OFF, stop all sounds
       currentStation = 0;
       question.stop();
-    nixon.stop();
-    wow.stop();
+      nixon.stop();
+      wow.stop();
     }
   }
 }

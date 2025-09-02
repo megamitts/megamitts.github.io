@@ -12,6 +12,8 @@ const rectHeight = 200;
 
 const accumulationThreshold = 30;
 
+let horn;
+let equalizer;
 let carradiopic;
 let steeringwheelpic;
 let windscreenpic;
@@ -30,15 +32,16 @@ function preload() {
   nixon = loadSound('nixon.mp3');
   wow = loadSound('wow.mp3');
   windscreenpic = loadImage('windscreen.png');
-  carradiopic = loadImage('carradio.png');
+  carradiopic = loadImage('carradio.jpeg');
   steeringwheelpic = loadImage('steeringwheel.png');
+  horn = loadSound('horn.mp3');
 }
 
 function setup() {
   createCanvas(400, 400);
   angleMode(DEGREES);
-  
-  wiper = new Wiper(rectWidth / 2, rectY + rectHeight, 200);
+  frameRate(60);
+  wiper = new Wiper(rectWidth / 2, rectY + rectHeight, 215);
   
   
   
@@ -64,6 +67,8 @@ function draw() {
   noStroke();
   circle(340, 45, 20);
 
+  
+  
   for (let flake of snowflakes) {
     flake.update(currentTime1);
     flake.display();
@@ -84,10 +89,12 @@ function draw() {
   // line(200,300,380,300);
   // line(290,300, 290, 390);
   
+  
+  
   fill(50);
   //stroke(255);
   //rect(20, 220, 100, 50); //radio
-  image(carradiopic, 20, 220);
+  image(carradiopic, 20, 220, 100, 50);
   
   fill(0, 255, 0);
   noStroke();
@@ -97,18 +104,29 @@ function draw() {
   
   
   if (currentStation === 0) {
-    textAlign(LEFT);
-    text(radio0, 50, 240);
+    // textAlign(LEFT);
+    text(radio0, 60, 240);
   } 
   if (currentStation === 1) {
     text(radio1, 50, 240);
+    
+    equalisers();
+    // rect(30, 232, 4, 8);
+    // rect(35, 230, 4, 10);
+    
   } 
   if (currentStation === 2) {
     text(radio2, 50, 240);
+    equalisers();
+    // rect(30, 230, 4, 10);
+    // rect(35, 232, 4, 8);
   } 
   
   if (currentStation === 3) {
-    text(radio3, 50, 240);
+    text(radio3, 60, 240);
+    equalisers();
+    // rect(30, 230, 4, 10);
+    // rect(35, 232, 4, 8);
   } 
   
   
@@ -259,6 +277,24 @@ class Snowflake {
 }
 
 function mousePressed() {
+  // console.log(mouseX, mouseY)
+  if (
+    mouseX > 280 && mouseX < 300 &&
+    mouseY > 290 && mouseY < 320
+     
+     ){
+    horn.play();
+  }
+  
+  if (
+      mouseX > 205 && mouseX < 220 &&
+      mouseY > 290 && mouseY < 317
+    
+    ){
+    wiping = true;
+      wiper.startWiping();
+    }
+  
   // First, handle the station change button press
   // This should only work if the radio is already on.
   if (
@@ -274,13 +310,13 @@ function mousePressed() {
     // Cycle to the next station
     if (currentStation === 1) {
       currentStation = 2;
-      nixon.play();
+      nixon.loop();
     } else if (currentStation === 2) {
       currentStation = 3;
-      wow.play();
+      wow.loop();
     } else if (currentStation === 3) {
       currentStation = 1;
-      question.play();
+      question.loop();
     }
     return; // Exit the function after changing the station
   }
@@ -296,7 +332,7 @@ function mousePressed() {
     if (radioplaying) {
       // If the radio was just turned ON, start at station 1
       currentStation = 1;
-      question.play();
+      question.loop();
     } else {
       // If the radio was just turned OFF, stop all sounds
       currentStation = 0;
@@ -400,3 +436,16 @@ function distToSegment(p, v, w) {
   return dist(p.x, p.y, projX, projY);
 }
 
+function equalisers() {
+  // Use integer division to determine which 30-frame interval we are in
+  // Then use modulo 2 to flip between the two states
+  if (floor(frameCount / 30) % 2 === 0) {
+    // For the first 30 frames (0-29), then 60-89, etc.
+    rect(30, 232, 4, 8);
+    rect(35, 230, 4, 10);
+  } else {
+    // For the next 30 frames (30-59), then 90-119, etc.
+    rect(30, 230, 4, 10);
+    rect(35, 232, 4, 8);
+  }
+}

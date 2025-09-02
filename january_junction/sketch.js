@@ -286,7 +286,7 @@ function mousePressed() {
     horn.play();
   }
   
-  if (
+  if (!wiping &&
       mouseX > 205 && mouseX < 220 &&
       mouseY > 290 && mouseY < 317
     

@@ -25,6 +25,7 @@ let radio0 = "Off";
 let radio1 = "102.6FM";
 let radio2 = "1215MW";
 let radio3 = "252LW";
+let engine;
 let currentStation = 0; // 0 for off, 1 for question, 2 for nixon, 3 for wow
 
 function preload() {
@@ -35,6 +36,7 @@ function preload() {
   carradiopic = loadImage('carradio.jpeg');
   steeringwheelpic = loadImage('steeringwheel.png');
   horn = loadSound('horn.mp3');
+  engine = loadSound('engine.wav');
 }
 
 function setup() {
@@ -43,7 +45,8 @@ function setup() {
   frameRate(60);
   wiper = new Wiper(rectWidth / 2, rectY + rectHeight, 215);
   
-  
+  engine.loop();
+  engine.setVolume(0.2);
   
   
   for (let i = 0; i < 150; i++) {
@@ -52,8 +55,10 @@ function setup() {
 }
 
 function draw() {
+	
   background(0);
 
+	
   
   let currentTime1 = frameCount / 30;
 

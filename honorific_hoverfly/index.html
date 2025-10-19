@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="style.css" rel="stylesheet" />
+    <title>Honorific Hoverfly</title>
+    <script defer src = "script.js"></script>
+</head>
+<body>
+
+  
+
+    <svg width="0" height="0" aria-hidden="true">
+  <filter id="squircle" primitiveUnits="objectBoundingBox">
+    <feGaussianBlur stdDeviation="0.2"></feGaussianBlur>
+    <feComponentTransfer>
+      <feFuncA type="discrete" tableValues="0 1"></feFuncA>
+    </feComponentTransfer>
+    <feComposite in="SourceGraphic" operator="in"></feComposite>
+  </filter>
+  <filter id="shadow">
+    <!-- SourceAlpha because Firefox bug-->
+    <feGaussianBlur in="SourceAlpha" stdDeviation="8"></feGaussianBlur>
+    <feOffset dx="6" dy="8"></feOffset>
+    <feComposite in="SourceAlpha" operator="out"></feComposite>
+    <feBlend in2="SourceGraphic" mode="multiply"></feBlend>
+  </filter>
+  <filter id="smooth">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="32"></feGaussianBlur>
+    <feComponentTransfer>
+      <feFuncA type="table" tableValues="-8 7"></feFuncA>
+    </feComponentTransfer>
+    <feComposite in="SourceGraphic" operator="in"></feComposite>
+  </filter>
+</svg>
+
+
+
+    <div class="container">
+        <!-- 
+        <h1>Interactive Flip Book</h1>
+        <p class="subtitle">Click the arrows to flip through pages</p>
+    -->
+
+    <!--
+        <div class="controls">
+            <button id="prev-btn">
+                <span>◀</span> Previous
+            </button>
+            <button id="next-btn">
+                Next <span>▶</span>
+            </button>
+        </div>
+
+    -->
+
+   
+        <div class="book-container">
+            <!-- Clickable areas -->
+            <div class="left-click-area" id="left-click"></div>
+            <div class="right-click-area" id="right-click"></div>
+
+            <div class="book" id="book">
+                <div class="spine"></div>
+                
+                <!-- Cover Page -->
+                <div class="page cover" id="page0">
+
+                    <img src="cover.png" width="800" height="600" alt="Cover Image" style ="border-radius: 0 10px 10px 0;">
+
+                    <!--<h2>Honorific Hoverfly</h2> -->
+                    <!-- <p>A digital interactive book with photos and text</p> -->
+                </div>
+                
+                <!-- Page 1 -->
+                <div class="page" id="page1">
+                    <div class="page-content">
+                        <div class="page-header">
+                            <h2>Honorific Hoverfly</h2>
+                        </div>
+
+                    
+
+                        <div class="photo-section">
+                            <div>
+                                <!-- <i>📷</i> -->
+                                
+                                <a href="https://en.wikipedia.org/wiki/Helophilus_pendulus" target="_blank"><img class="rounded-image"src="gfx/footballer.png" width="250" height="250">
+                            
+                                <p>Footballer/Helophilus pendulus</a></p>
+                            </div>
+                            <div>
+                                <a href="https://www.naturespot.org/species/bog-hoverfly" target="_blank"><img class="rounded-image" src="gfx/bog.png" width="250" height="250">
+                                <p>Bog/Sericomyia silentis</a></p>
+                            </div>
+                            <div >
+                                <a href="https://www.wildlifetrusts.org/wildlife-explorer/invertebrates/flies/batman-hoverfly" target="_blank"><img class="rounded-image" src="gfx/batman.png" width="250" height="250">
+                                <p>Batman/Myathropa florea</a></p>
+                            </div>
+                        </div>
+                        <div class="text-section">
+                        
+                            <p> Hoverflies, also called flower flies or syrphids, make up the insect family Syrphidae. As their common name suggests, they are often seen hovering or nectaring at flowers.</p>
+                            <p></p>
+                            <p>Hoverflies are common throughout the world and can be found on all continents except Antarctica. Hoverflies are harmless to most mammals, though many species are mimics of stinging wasps and bees, a mimicry which may serve to ward off predators.</p>
+                        </div>
+                        
+                    </div>
+                </div>
+                
+                <!-- Page 2 -->
+                <div class="page" id="page2">
+                    <div class="page-content">
+                        <div class="page-header">
+                            <h2>Honorific Hoverfly</h2>
+                        </div>
+                        <div class="photo-section">
+                            <div>
+                             <a href="https://www.naturespot.org/species/xanthogramma-pedissequum" target="_blank"><img class="rounded-image"src="gfx/xantho.png" width="250" height="250">
+                            
+                                <p>Xanthogramma pedissequum</a></p>
+                            </div>
+                            <div>
+                               <a href="https://www.naturespot.org/species/long-hoverfly" target="_blank"><img class="rounded-image"src="gfx/long.png" width="250" height="250">
+                            
+                                <p>Long/Sphaerophoria scripta (female)</a></p>
+                            </div>
+                            <div>
+                                <a href="https://en.wikipedia.org/wiki/Eupeodes_corollae" target="_blank"><img class="rounded-image"src="gfx/eupeodes.png" width="250" height="250">
+                            
+                                <p>Eupeodes corollae</a></p>
+                            </div>
+                        </div>
+                        <div class="text-section">
+                            <p>Hoverflies are a vital and colourful part of a healthy garden. They are brilliant pollinators that are often overlooked. The larvae of many species feed on aphids while others are efficient nutrient recyclers, making a valuable contribution to a natural balance in gardens.</p></div>
+                        
+                    </div>
+                </div>
+                
+                <!-- Page 3 -->
+                <div class="page" id="page3">
+                    <div class="page-content">
+                        <div class="page-header">
+                            <h2>Honorific Hoverfly</h2>
+                        </div>
+                        <div class="photo-section">
+                            <div>
+                            <a href="https://www.wildlifetrusts.org/wildlife-explorer/invertebrates/flies/marmalade-fly" target="_blank"><img class="rounded-image"src="gfx/marmalade.png" width="250" height="250">
+                            
+                                <p>Marmalade/Episyrphus balteatus</a></p>
+                            </div>
+                            <div>
+                                <a href="https://www.naturespot.org/species/syrphus-ribesii" target="_blank"><img class="rounded-image"src="gfx/syrphus.png" width="250" height="250">
+                            
+                                <p>Syrphus ribesii</a></p>
+                            </div>
+                            <div >
+                                <a href="https://www.naturespot.org/species/eupeodes-luniger" target="_blank"><img class="rounded-image"src="gfx/eupeodesL.png" width="250" height="250">
+                            
+                                <p>Eupeodes luniger</a></p>
+                            </div>
+                        </div>
+                        <div class="text-section">
+                            <p>Hoverflies are true flies and belong to the order Diptera, family Syrphidae. There are over 270 species of hoverfly in the UK. They range in size depending on the species from a few millimetres to 2 cm. The characteristic feature of true flies is that they have only two wings (one pair) compared to most other insects such as bees and wasps which have four wings (two pairs).</p></div>
+                        
+                    </div>
+                </div>
+                
+                <!-- Back Cover -->
+                <div class="page back-cover" id="page4">
+                    <div class = "back-cover-content">
+                    <h2 class = >Credits</h2>
+                    <p>Photos:<img src ="instagram.png" width="20" height="20"> <a href="https://www.instagram.com/tsuyoikochan" target="_blank"> @tsuyoikochan</a></p>
+                    <p>Code: megamitts</p>
+                    </div>
+                    <div class = "back-cover-photo">
+                    
+                                <img class="rounded-image" src="gfx/batman.png" width="250" height="250">
+                                
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

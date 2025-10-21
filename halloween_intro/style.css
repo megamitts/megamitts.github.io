@@ -1,0 +1,19 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  backgound-color: black;
+}
+canvas {
+  display: block;
+  margin:25px;
+  width:250px;
+  height:250px;
+  
+  border: solid yellow;
+  border-color: yellow;
+  float:left; 
+  
+  border-width: 3px 4px 3px 5px;
+  border-radius:95% 4% 92% 5%/4% 95% 6% 95%;
+  transform: rotate(2deg);
+}

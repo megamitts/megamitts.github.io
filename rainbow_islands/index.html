@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rainbow Islands JS (With Enemy Bullets)</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: #111;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        canvas {
+            border: 2px solid white;
+            background: #4ab4ff;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="480" height="640"></canvas>
+
+    <script>
+    // --- 1. SETUP ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // --- GAME CONSTANTS ---
+    const GRAVITY = 0.4;
+    const PLAYER_SPEED = 4;
+    const PLAYER_JUMP_FORCE = 11;
+    const RAINBOW_LIFESPAN = 240;
+    const ENEMY_SPEED = 1;
+    const BULLET_SPEED = 4;
+
+    // Rainbow shape constants
+    const PARABOLIC_RAINBOW_SPEED = 7;
+    const PARABOLIC_RAINBOW_LENGTH = 30;
+    const SEMICIRCLE_RAINBOW_RADIUS = 60;
+    const SEMICIRCLE_FORMATION_FRAMES = 15;
+
+    // --- GAME STATE ---
+    let score = 0, lives = 3, cameraY = 0, gameOver = false;
+    let player, platforms = [], enemies = [], rainbows = [], gems = [], bullets = [];
+    const keys = { ArrowLeft: false, ArrowRight: false, ArrowUp: false, Space: false };
+
+    // --- 2. GAME OBJECT CLASSES ---
+
+    class Player {
+        constructor() {
+            this.width = 30; this.height = 30;
+            this.x = canvas.width / 2 - this.width / 2;
+            this.y = canvas.height - 50;
+            this.dx = 0; this.dy = 0;
+            this.onGround = false; this.canShoot = true;
+            this.color = '#ffdd00'; this.currentPlatform = null;
+        }
+
+        jump() {
+            if (this.onGround) {
+                this.dy = -PLAYER_JUMP_FORCE;
+                this.onGround = false; this.currentPlatform = null;
+            }
+        }
+
+        shoot() {
+            if (this.canShoot) {
+                const isDiagonal = keys.ArrowLeft || keys.ArrowRight;
+                const type = isDiagonal ? 'parabolic' : 'semicircle';
+                let angle = -Math.PI / 2;
+                if (keys.ArrowRight) angle = -Math.PI / 4;
+                if (keys.ArrowLeft) angle = -3 * Math.PI / 4;
+                rainbows.push(new Rainbow(this.x + this.width / 2, this.y, type, angle));
+                this.canShoot = false;
+            }
+        }
+
+        update() {
+            if (keys.ArrowLeft) this.x -= PLAYER_SPEED;
+            if (keys.ArrowRight) this.x += PLAYER_SPEED;
+            this.dy += GRAVITY; this.y += this.dy;
+            this.onGround = false; this.currentPlatform = null;
+            if (this.x < 0) this.x = 0;
+            if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
+            if (this.y > cameraY + canvas.height) this.reset();
+        }
+
+        reset() {
+            lives--;
+            if (lives <= 0) { gameOver = true; return; }
+            platforms = platforms.filter(p => !p.isRespawnPlatform);
+            this.x = canvas.width / 2 - this.width / 2;
+            this.y = cameraY + canvas.height / 2; this.dy = 0;
+            const safetyPlatform = new Platform(this.x - 45, this.y + 80, 120, false, true);
+            platforms.push(safetyPlatform);
+        }
+
+        draw() {
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y - cameraY, this.width, this.height);
+        }
+    }
+
+    class Rainbow { /* ... (no changes) ... */ 
+        constructor(x, y, type, angle) {
+            this.type = type; this.lifespan = RAINBOW_LIFESPAN;
+            this.isSolid = false; this.path = []; this.height = 15;
+            this.color = `hsl(${Math.random() * 360}, 100%, 70%)`;
+
+            if (this.type === 'semicircle') {
+                this.center = { x, y }; this.radius = SEMICIRCLE_RAINBOW_RADIUS;
+                this.currentAngle = Math.PI; this.targetAngle = 0;
+                this.angleStep = (this.targetAngle - this.currentAngle) / SEMICIRCLE_FORMATION_FRAMES;
+                this.framesLeftToForm = SEMICIRCLE_FORMATION_FRAMES;
+                this.path.push({ x: this.center.x - this.radius, y: this.center.y });
+            } else {
+                this.x = x; this.y = y;
+                this.dx = Math.cos(angle) * PARABOLIC_RAINBOW_SPEED;
+                this.dy = Math.sin(angle) * PARABOLIC_RAINBOW_SPEED;
+            }
+        }
+
+        update() {
+            this.lifespan--;
+            if (this.isSolid) return;
+
+            if (this.type === 'semicircle') {
+                if (this.framesLeftToForm > 0) {
+                    this.currentAngle += this.angleStep;
+                    const px = this.center.x + this.radius * Math.cos(this.currentAngle);
+                    const py = this.center.y - this.radius * Math.sin(this.currentAngle);
+                    this.path.push({ x: px, y: py });
+                    this.framesLeftToForm--;
+                } else { this.isSolid = true; }
+            } else {
+                this.dy += GRAVITY / 2.5; this.x += this.dx; this.y += this.dy;
+                this.path.push({ x: this.x, y: this.y });
+                if (this.path.length > PARABOLIC_RAINBOW_LENGTH) this.isSolid = true;
+            }
+        }
+
+        break() {
+            const index = rainbows.indexOf(this);
+            if (index > -1) rainbows.splice(index, 1);
+        }
+
+        draw() {
+            if (this.path.length < 2) return;
+            ctx.strokeStyle = this.color; ctx.lineWidth = this.height;
+            ctx.lineCap = 'round'; ctx.beginPath();
+            ctx.moveTo(this.path[0].x, this.path[0].y - cameraY);
+            for (let i = 1; i < this.path.length; i++) {
+                ctx.lineTo(this.path[i].x, this.path[i].y - cameraY);
+            }
+            ctx.stroke();
+        }
+    }
+    
+    class Platform { /* ... (no changes) ... */ 
+        constructor(x, y, width, isMoving = false, isRespawnPlatform = false) {
+            this.x = x; this.y = y; this.width = width;
+            this.height = 20; this.isMoving = isMoving;
+            this.isRespawnPlatform = isRespawnPlatform;
+            this.speed = isMoving ? (Math.random() > 0.5 ? 1 : -1) : 0;
+            this.color = isRespawnPlatform ? '#888' : '#2ECC40';
+        }
+        update() {
+            if (this.isMoving) {
+                this.x += this.speed;
+                if (this.x < 0 || this.x + this.width > canvas.width) this.speed *= -1;
+            }
+        }
+        draw() {
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y - cameraY, this.width, this.height);
+        }
+    }
+    
+    // *** MODIFICATION START: Updated Enemy class to shoot bullets ***
+    class Enemy {
+        constructor(x, y, platform) {
+            this.width = 25; this.height = 25;
+            this.x = x; this.y = y - this.height;
+            this.platform = platform; this.speed = ENEMY_SPEED;
+            this.color = '#FF4136';
+            this.shootCooldown = Math.random() * 180 + 120; // Fire every 2-5 seconds
+        }
+
+        shoot() {
+            // Calculate angle towards player
+            const angle = Math.atan2(
+                (player.y + player.height / 2) - (this.y + this.height / 2),
+                (player.x + player.width / 2) - (this.x + this.width / 2)
+            );
+            bullets.push(new Bullet(this.x + this.width / 2, this.y + this.height / 2, angle));
+            this.shootCooldown = Math.random() * 180 + 120; // Reset cooldown
+        }
+
+        update() {
+            // Patrol movement
+            this.x += this.platform.speed; this.x += this.speed;
+            if (this.speed > 0 && (this.x + this.width) > (this.platform.x + this.platform.width)) {
+                this.speed *= -1; this.x = this.platform.x + this.platform.width - this.width;
+            } else if (this.speed < 0 && this.x < this.platform.x) {
+                this.speed *= -1; this.x = this.platform.x;
+            }
+
+            // Shooting logic
+            this.shootCooldown--;
+            const distanceToPlayer = Math.hypot(player.x - this.x, player.y - this.y);
+            if (this.shootCooldown <= 0 && distanceToPlayer < 400) { // Only shoot if player is reasonably close
+                this.shoot();
+            }
+        }
+
+        draw() {
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y - cameraY, this.width, this.height);
+        }
+    }
+    // *** MODIFICATION END ***
+
+    class Gem { /* ... (no changes) ... */ 
+        constructor(x, y) {
+            this.x = x; this.y = y; this.width = 12; this.height = 12;
+            this.color = '#B10DC9'; this.lifespan = 300;
+        }
+        update() { this.lifespan--; }
+        draw() {
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y - cameraY, this.width, this.height);
+        }
+    }
+    
+    // *** NEW: Bullet Class ***
+    class Bullet {
+        constructor(x, y, angle) {
+            this.x = x; this.y = y;
+            this.width = 8; this.height = 8;
+            this.dx = Math.cos(angle) * BULLET_SPEED;
+            this.dy = Math.sin(angle) * BULLET_SPEED;
+            this.color = 'white';
+        }
+        update() {
+            this.x += this.dx;
+            this.y += this.dy;
+        }
+        draw() {
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y - cameraY, this.width, this.height);
+        }
+    }
+
+    // --- 3. GAME LOGIC & HELPERS ---
+    
+    function resetGame() {
+        score = 0; lives = 3; cameraY = 0; gameOver = false;
+        platforms = []; enemies = []; rainbows = []; gems = []; bullets = [];
+        player = new Player(); createLevel(); gameLoop();
+    }
+
+    function createLevel() {
+        platforms.push(new Platform(0, canvas.height - 20, canvas.width));
+        for (let i = 1; i < 100; i++) {
+            const y = canvas.height - (i * 100);
+            const x = Math.random() * (canvas.width - 120);
+            const width = 80 + Math.random() * 70;
+            const isMoving = Math.random() < 0.2;
+            const p = new Platform(x, y, width, isMoving);
+            platforms.push(p);
+            if (Math.random() < 0.5) enemies.push(new Enemy(p.x + p.width / 2, p.y, p));
+        }
+    }
+    
+    function manageSafetyPlatform() { /* ... (no changes) ... */ 
+        const safetyPlatform = platforms.find(p => p.isRespawnPlatform);
+        if (!safetyPlatform) return;
+        if (player.currentPlatform && player.currentPlatform !== safetyPlatform) {
+            platforms = platforms.filter(p => !p.isRespawnPlatform);
+        }
+    }
+    
+    // *** MODIFICATION START: Updated to handle bullet collisions ***
+    function checkCollisions() {
+        // Player vs Platforms
+        platforms.forEach(p => {
+            if (player.dy >= 0 && player.x + player.width > p.x && player.x < p.x + p.width && player.y + player.height > p.y && player.y + player.height <= p.y + p.height) {
+                player.dy = 0; player.y = p.y - player.height;
+                player.onGround = true; player.currentPlatform = p;
+                if (p.isMoving) player.x += p.speed;
+            }
+        });
+
+        // Player vs Rainbows
+        rainbows.forEach(r => {
+            if (r.isSolid && player.dy >= 0 && r.path.length > 0) {
+                let collisionPoint = null, minDistanceX = Infinity;
+                const playerCenterX = player.x + player.width / 2;
+                for (const point of r.path) {
+                    const distanceX = Math.abs(point.x - playerCenterX);
+                    if (distanceX < minDistanceX) { minDistanceX = distanceX; collisionPoint = point; }
+                }
+                if (collisionPoint && minDistanceX < (player.width / 2) + 5) {
+                    const rainbowSurfaceY = collisionPoint.y - r.height / 2;
+                    const playerFeetY = player.y + player.height;
+                    if (playerFeetY >= rainbowSurfaceY && playerFeetY < rainbowSurfaceY + player.dy + 1) {
+                        player.y = rainbowSurfaceY - player.height; player.dy = 0;
+                        player.onGround = true; player.currentPlatform = r;
+                        if (keys.ArrowUp) r.break();
+                    }
+                }
+            }
+        });
+        
+        // Rainbows vs Enemies
+        rainbows.forEach(rainbow => { enemies.forEach((enemy, index) => {
+            for (const point of rainbow.path) {
+                if (point.x > enemy.x && point.x < enemy.x + enemy.width && point.y > enemy.y && point.y < enemy.y + enemy.height) {
+                    score += 100; gems.push(new Gem(enemy.x, enemy.y));
+                    enemies.splice(index, 1); rainbow.break(); return;
+                }
+            }
+        });});
+
+        // Player vs Enemies
+        enemies.forEach(enemy => { if (player.x < enemy.x + enemy.width && player.x + player.width > enemy.x && player.y < enemy.y + enemy.height && player.y + player.height > enemy.y) { player.reset(); } });
+        
+        // Player vs Gems
+        gems.forEach((gem, index) => { if (player.x < gem.x + gem.width && player.x + player.width > gem.x && player.y < gem.y + gem.height && player.y + player.height > gem.y) { score += 50; gems.splice(index, 1); } });
+
+        // Player vs Bullets
+        for (let i = bullets.length - 1; i >= 0; i--) {
+            const bullet = bullets[i];
+            if (bullet.x < player.x + player.width && bullet.x + bullet.width > player.x && bullet.y < player.y + player.height && bullet.y + bullet.height > player.y) {
+                player.reset();
+                bullets.splice(i, 1);
+                break; // Player can only be hit once per frame
+            }
+        }
+
+        // Bullets vs Rainbows
+        for (let i = bullets.length - 1; i >= 0; i--) {
+            const bullet = bullets[i];
+            let hit = false;
+            for (let j = rainbows.length - 1; j >= 0; j--) {
+                const rainbow = rainbows[j];
+                for (const point of rainbow.path) {
+                    if (bullet.x < point.x + rainbow.height/2 && bullet.x + bullet.width > point.x - rainbow.height/2 &&
+                        bullet.y < point.y + rainbow.height/2 && bullet.y + bullet.height > point.y - rainbow.height/2) {
+                        bullets.splice(i, 1);
+                        rainbows.splice(j, 1);
+                        hit = true;
+                        break; // Exit point loop
+                    }
+                }
+                if (hit) break; // Exit rainbow loop
+            }
+        }
+    }
+    // *** MODIFICATION END ***
+
+    function drawUI() { /* ... (no changes) ... */ 
+        ctx.fillStyle = 'white'; ctx.font = '24px "Courier New"'; ctx.textAlign = 'left';
+        ctx.fillText(`SCORE: ${score}`, 10, 30);
+        ctx.fillText(`LIVES: ${lives}`, canvas.width - 120, 30);
+        if (gameOver) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.font = '48px "Courier New"';
+            ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 40);
+            ctx.font = '24px "Courier New"';
+            ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 10);
+            ctx.fillText('Press Enter to Play Again', canvas.width / 2, canvas.height / 2 + 50);
+        }
+    }
+    
+    // *** MODIFICATION START: Updated to handle bullets ***
+    function gameLoop() {
+        if (gameOver) { drawUI(); return; }
+        
+        // UPDATE
+        player.update();
+        platforms.forEach(p => p.update()); 
+        enemies.forEach(e => e.update());
+        rainbows.forEach(r => r.update()); 
+        gems.forEach(g => g.update());
+        bullets.forEach(b => b.update());
+
+        // Cleanup off-screen/old objects
+        rainbows = rainbows.filter(r => r.lifespan > 0);
+        gems = gems.filter(g => g.lifespan > 0);
+        bullets = bullets.filter(b => b.x > 0 && b.x < canvas.width && b.y > cameraY && b.y < cameraY + canvas.height);
+        
+        checkCollisions();
+        manageSafetyPlatform();
+
+        if (player.y < cameraY + canvas.height / 3) cameraY = player.y - canvas.height / 3;
+        
+        // DRAW
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#4ab4ff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        platforms.forEach(p => p.draw()); 
+        gems.forEach(g => g.draw());
+        bullets.forEach(b => b.draw());
+        rainbows.forEach(r => r.draw()); 
+        enemies.forEach(e => e.draw());
+        player.draw(); 
+        drawUI();
+        
+        requestAnimationFrame(gameLoop);
+    }
+    // *** MODIFICATION END ***
+
+    // --- 4. EVENT LISTENERS ---
+    window.addEventListener('keydown', (e) => {
+        if (gameOver) { if (e.key === 'Enter') resetGame(); return; }
+        if (keys.hasOwnProperty(e.key)) { e.preventDefault(); keys[e.key] = true; }
+        if (e.code === 'Space') { e.preventDefault(); player.shoot(); }
+        if (e.key === 'ArrowUp') { e.preventDefault(); player.jump(); }
+    });
+    window.addEventListener('keyup', (e) => {
+        if (keys.hasOwnProperty(e.key)) { e.preventDefault(); keys[e.key] = false; }
+        if (e.code === 'Space') { e.preventDefault(); player.canShoot = true; }
+    });
+
+    // --- 5. START GAME ---
+    player = new Player();
+    createLevel();
+    gameLoop();
+
+    </script>
+</body>
+</html>

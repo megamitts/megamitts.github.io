@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rainbow Islands JS (With Enemy Bullets)</title>
+    <title>Rainbow Islands JS (Sticky Key Fix)</title>
     <style>
         body {
             margin: 0;
@@ -50,7 +50,7 @@
 
     // --- 2. GAME OBJECT CLASSES ---
 
-    class Player {
+    class Player { /* ... (no changes) ... */
         constructor() {
             this.width = 30; this.height = 30;
             this.x = canvas.width / 2 - this.width / 2;
@@ -105,7 +105,7 @@
         }
     }
 
-    class Rainbow { /* ... (no changes) ... */ 
+    class Rainbow { /* ... (no changes) ... */
         constructor(x, y, type, angle) {
             this.type = type; this.lifespan = RAINBOW_LIFESPAN;
             this.isSolid = false; this.path = []; this.height = 15;
@@ -123,11 +123,9 @@
                 this.dy = Math.sin(angle) * PARABOLIC_RAINBOW_SPEED;
             }
         }
-
         update() {
             this.lifespan--;
             if (this.isSolid) return;
-
             if (this.type === 'semicircle') {
                 if (this.framesLeftToForm > 0) {
                     this.currentAngle += this.angleStep;
@@ -142,25 +140,18 @@
                 if (this.path.length > PARABOLIC_RAINBOW_LENGTH) this.isSolid = true;
             }
         }
-
-        break() {
-            const index = rainbows.indexOf(this);
-            if (index > -1) rainbows.splice(index, 1);
-        }
-
+        break() { const index = rainbows.indexOf(this); if (index > -1) rainbows.splice(index, 1); }
         draw() {
             if (this.path.length < 2) return;
             ctx.strokeStyle = this.color; ctx.lineWidth = this.height;
             ctx.lineCap = 'round'; ctx.beginPath();
             ctx.moveTo(this.path[0].x, this.path[0].y - cameraY);
-            for (let i = 1; i < this.path.length; i++) {
-                ctx.lineTo(this.path[i].x, this.path[i].y - cameraY);
-            }
+            for (let i = 1; i < this.path.length; i++) ctx.lineTo(this.path[i].x, this.path[i].y - cameraY);
             ctx.stroke();
         }
     }
     
-    class Platform { /* ... (no changes) ... */ 
+    class Platform { /* ... (no changes) ... */
         constructor(x, y, width, isMoving = false, isRespawnPlatform = false) {
             this.x = x; this.y = y; this.width = width;
             this.height = 20; this.isMoving = isMoving;
@@ -168,125 +159,72 @@
             this.speed = isMoving ? (Math.random() > 0.5 ? 1 : -1) : 0;
             this.color = isRespawnPlatform ? '#888' : '#2ECC40';
         }
-        update() {
-            if (this.isMoving) {
-                this.x += this.speed;
-                if (this.x < 0 || this.x + this.width > canvas.width) this.speed *= -1;
-            }
-        }
-        draw() {
-            ctx.fillStyle = this.color;
-            ctx.fillRect(this.x, this.y - cameraY, this.width, this.height);
-        }
+        update() { if (this.isMoving) { this.x += this.speed; if (this.x < 0 || this.x + this.width > canvas.width) this.speed *= -1; } }
+        draw() { ctx.fillStyle = this.color; ctx.fillRect(this.x, this.y - cameraY, this.width, this.height); }
     }
     
-    // *** MODIFICATION START: Updated Enemy class to shoot bullets ***
-    class Enemy {
+    class Enemy { /* ... (no changes) ... */
         constructor(x, y, platform) {
             this.width = 25; this.height = 25;
             this.x = x; this.y = y - this.height;
             this.platform = platform; this.speed = ENEMY_SPEED;
-            this.color = '#FF4136';
-            this.shootCooldown = Math.random() * 180 + 120; // Fire every 2-5 seconds
+            this.color = '#FF4136'; this.shootCooldown = Math.random() * 180 + 120;
         }
-
         shoot() {
-            // Calculate angle towards player
-            const angle = Math.atan2(
-                (player.y + player.height / 2) - (this.y + this.height / 2),
-                (player.x + player.width / 2) - (this.x + this.width / 2)
-            );
+            const angle = Math.atan2((player.y + player.height / 2) - (this.y + this.height / 2), (player.x + player.width / 2) - (this.x + this.width / 2));
             bullets.push(new Bullet(this.x + this.width / 2, this.y + this.height / 2, angle));
-            this.shootCooldown = Math.random() * 180 + 120; // Reset cooldown
+            this.shootCooldown = Math.random() * 180 + 120;
         }
-
         update() {
-            // Patrol movement
             this.x += this.platform.speed; this.x += this.speed;
-            if (this.speed > 0 && (this.x + this.width) > (this.platform.x + this.platform.width)) {
-                this.speed *= -1; this.x = this.platform.x + this.platform.width - this.width;
-            } else if (this.speed < 0 && this.x < this.platform.x) {
-                this.speed *= -1; this.x = this.platform.x;
-            }
-
-            // Shooting logic
+            if (this.speed > 0 && (this.x + this.width) > (this.platform.x + this.platform.width)) { this.speed *= -1; this.x = this.platform.x + this.platform.width - this.width; }
+            else if (this.speed < 0 && this.x < this.platform.x) { this.speed *= -1; this.x = this.platform.x; }
             this.shootCooldown--;
             const distanceToPlayer = Math.hypot(player.x - this.x, player.y - this.y);
-            if (this.shootCooldown <= 0 && distanceToPlayer < 400) { // Only shoot if player is reasonably close
-                this.shoot();
-            }
+            if (this.shootCooldown <= 0 && distanceToPlayer < 400) this.shoot();
         }
-
-        draw() {
-            ctx.fillStyle = this.color;
-            ctx.fillRect(this.x, this.y - cameraY, this.width, this.height);
-        }
+        draw() { ctx.fillStyle = this.color; ctx.fillRect(this.x, this.y - cameraY, this.width, this.height); }
     }
-    // *** MODIFICATION END ***
 
-    class Gem { /* ... (no changes) ... */ 
-        constructor(x, y) {
-            this.x = x; this.y = y; this.width = 12; this.height = 12;
-            this.color = '#B10DC9'; this.lifespan = 300;
-        }
+    class Gem { /* ... (no changes) ... */
+        constructor(x, y) { this.x = x; this.y = y; this.width = 12; this.height = 12; this.color = '#B10DC9'; this.lifespan = 300; }
         update() { this.lifespan--; }
-        draw() {
-            ctx.fillStyle = this.color;
-            ctx.fillRect(this.x, this.y - cameraY, this.width, this.height);
-        }
+        draw() { ctx.fillStyle = this.color; ctx.fillRect(this.x, this.y - cameraY, this.width, this.height); }
     }
     
-    // *** NEW: Bullet Class ***
-    class Bullet {
+    class Bullet { /* ... (no changes) ... */
         constructor(x, y, angle) {
-            this.x = x; this.y = y;
-            this.width = 8; this.height = 8;
-            this.dx = Math.cos(angle) * BULLET_SPEED;
-            this.dy = Math.sin(angle) * BULLET_SPEED;
+            this.x = x; this.y = y; this.width = 8; this.height = 8;
+            this.dx = Math.cos(angle) * BULLET_SPEED; this.dy = Math.sin(angle) * BULLET_SPEED;
             this.color = 'white';
         }
-        update() {
-            this.x += this.dx;
-            this.y += this.dy;
-        }
-        draw() {
-            ctx.fillStyle = this.color;
-            ctx.fillRect(this.x, this.y - cameraY, this.width, this.height);
-        }
+        update() { this.x += this.dx; this.y += this.dy; }
+        draw() { ctx.fillStyle = this.color; ctx.fillRect(this.x, this.y - cameraY, this.width, this.height); }
     }
 
     // --- 3. GAME LOGIC & HELPERS ---
     
-    function resetGame() {
+    function resetGame() { /* ... (no changes) ... */
         score = 0; lives = 3; cameraY = 0; gameOver = false;
         platforms = []; enemies = []; rainbows = []; gems = []; bullets = [];
         player = new Player(); createLevel(); gameLoop();
     }
-
-    function createLevel() {
+    function createLevel() { /* ... (no changes) ... */
         platforms.push(new Platform(0, canvas.height - 20, canvas.width));
         for (let i = 1; i < 100; i++) {
-            const y = canvas.height - (i * 100);
-            const x = Math.random() * (canvas.width - 120);
-            const width = 80 + Math.random() * 70;
-            const isMoving = Math.random() < 0.2;
-            const p = new Platform(x, y, width, isMoving);
-            platforms.push(p);
+            const y = canvas.height - (i * 100); const x = Math.random() * (canvas.width - 120);
+            const width = 80 + Math.random() * 70; const isMoving = Math.random() < 0.2;
+            const p = new Platform(x, y, width, isMoving); platforms.push(p);
             if (Math.random() < 0.5) enemies.push(new Enemy(p.x + p.width / 2, p.y, p));
         }
     }
-    
-    function manageSafetyPlatform() { /* ... (no changes) ... */ 
+    function manageSafetyPlatform() { /* ... (no changes) ... */
         const safetyPlatform = platforms.find(p => p.isRespawnPlatform);
         if (!safetyPlatform) return;
-        if (player.currentPlatform && player.currentPlatform !== safetyPlatform) {
-            platforms = platforms.filter(p => !p.isRespawnPlatform);
-        }
+        if (player.currentPlatform && player.currentPlatform !== safetyPlatform) platforms = platforms.filter(p => !p.isRespawnPlatform);
     }
     
-    // *** MODIFICATION START: Updated to handle bullet collisions ***
-    function checkCollisions() {
-        // Player vs Platforms
+    function checkCollisions() { /* ... (no changes) ... */
         platforms.forEach(p => {
             if (player.dy >= 0 && player.x + player.width > p.x && player.x < p.x + p.width && player.y + player.height > p.y && player.y + player.height <= p.y + p.height) {
                 player.dy = 0; player.y = p.y - player.height;
@@ -294,16 +232,11 @@
                 if (p.isMoving) player.x += p.speed;
             }
         });
-
-        // Player vs Rainbows
         rainbows.forEach(r => {
             if (r.isSolid && player.dy >= 0 && r.path.length > 0) {
                 let collisionPoint = null, minDistanceX = Infinity;
                 const playerCenterX = player.x + player.width / 2;
-                for (const point of r.path) {
-                    const distanceX = Math.abs(point.x - playerCenterX);
-                    if (distanceX < minDistanceX) { minDistanceX = distanceX; collisionPoint = point; }
-                }
+                for (const point of r.path) { const distanceX = Math.abs(point.x - playerCenterX); if (distanceX < minDistanceX) { minDistanceX = distanceX; collisionPoint = point; } }
                 if (collisionPoint && minDistanceX < (player.width / 2) + 5) {
                     const rainbowSurfaceY = collisionPoint.y - r.height / 2;
                     const playerFeetY = player.y + player.height;
@@ -315,8 +248,6 @@
                 }
             }
         });
-        
-        // Rainbows vs Enemies
         rainbows.forEach(rainbow => { enemies.forEach((enemy, index) => {
             for (const point of rainbow.path) {
                 if (point.x > enemy.x && point.x < enemy.x + enemy.width && point.y > enemy.y && point.y < enemy.y + enemy.height) {
@@ -325,45 +256,29 @@
                 }
             }
         });});
-
-        // Player vs Enemies
-        enemies.forEach(enemy => { if (player.x < enemy.x + enemy.width && player.x + player.width > enemy.x && player.y < enemy.y + enemy.height && player.y + player.height > enemy.y) { player.reset(); } });
-        
-        // Player vs Gems
+        enemies.forEach(enemy => { if (player.x < enemy.x + enemy.width && player.x + player.width > enemy.x && player.y < enemy.y + enemy.height && player.y + player.height > enemy.y) player.reset(); });
         gems.forEach((gem, index) => { if (player.x < gem.x + gem.width && player.x + player.width > gem.x && player.y < gem.y + gem.height && player.y + player.height > gem.y) { score += 50; gems.splice(index, 1); } });
-
-        // Player vs Bullets
         for (let i = bullets.length - 1; i >= 0; i--) {
             const bullet = bullets[i];
             if (bullet.x < player.x + player.width && bullet.x + bullet.width > player.x && bullet.y < player.y + player.height && bullet.y + bullet.height > player.y) {
-                player.reset();
-                bullets.splice(i, 1);
-                break; // Player can only be hit once per frame
+                player.reset(); bullets.splice(i, 1); break;
             }
         }
-
-        // Bullets vs Rainbows
         for (let i = bullets.length - 1; i >= 0; i--) {
-            const bullet = bullets[i];
-            let hit = false;
+            const bullet = bullets[i]; let hit = false;
             for (let j = rainbows.length - 1; j >= 0; j--) {
                 const rainbow = rainbows[j];
                 for (const point of rainbow.path) {
-                    if (bullet.x < point.x + rainbow.height/2 && bullet.x + bullet.width > point.x - rainbow.height/2 &&
-                        bullet.y < point.y + rainbow.height/2 && bullet.y + bullet.height > point.y - rainbow.height/2) {
-                        bullets.splice(i, 1);
-                        rainbows.splice(j, 1);
-                        hit = true;
-                        break; // Exit point loop
+                    if (bullet.x < point.x + rainbow.height/2 && bullet.x + bullet.width > point.x - rainbow.height/2 && bullet.y < point.y + rainbow.height/2 && bullet.y + bullet.height > point.y - rainbow.height/2) {
+                        bullets.splice(i, 1); rainbows.splice(j, 1); hit = true; break;
                     }
                 }
-                if (hit) break; // Exit rainbow loop
+                if (hit) break;
             }
         }
     }
-    // *** MODIFICATION END ***
 
-    function drawUI() { /* ... (no changes) ... */ 
+    function drawUI() { /* ... (no changes) ... */
         ctx.fillStyle = 'white'; ctx.font = '24px "Courier New"'; ctx.textAlign = 'left';
         ctx.fillText(`SCORE: ${score}`, 10, 30);
         ctx.fillText(`LIVES: ${lives}`, canvas.width - 120, 30);
@@ -377,54 +292,48 @@
         }
     }
     
-    // *** MODIFICATION START: Updated to handle bullets ***
-    function gameLoop() {
+    function gameLoop() { /* ... (no changes) ... */
         if (gameOver) { drawUI(); return; }
-        
-        // UPDATE
         player.update();
-        platforms.forEach(p => p.update()); 
-        enemies.forEach(e => e.update());
-        rainbows.forEach(r => r.update()); 
-        gems.forEach(g => g.update());
+        platforms.forEach(p => p.update()); enemies.forEach(e => e.update());
+        rainbows.forEach(r => r.update()); gems.forEach(g => g.update());
         bullets.forEach(b => b.update());
-
-        // Cleanup off-screen/old objects
         rainbows = rainbows.filter(r => r.lifespan > 0);
         gems = gems.filter(g => g.lifespan > 0);
         bullets = bullets.filter(b => b.x > 0 && b.x < canvas.width && b.y > cameraY && b.y < cameraY + canvas.height);
-        
-        checkCollisions();
-        manageSafetyPlatform();
-
+        checkCollisions(); manageSafetyPlatform();
         if (player.y < cameraY + canvas.height / 3) cameraY = player.y - canvas.height / 3;
-        
-        // DRAW
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = '#4ab4ff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        platforms.forEach(p => p.draw()); 
-        gems.forEach(g => g.draw());
-        bullets.forEach(b => b.draw());
-        rainbows.forEach(r => r.draw()); 
-        enemies.forEach(e => e.draw());
-        player.draw(); 
-        drawUI();
-        
+        platforms.forEach(p => p.draw()); gems.forEach(g => g.draw());
+        bullets.forEach(b => b.draw()); rainbows.forEach(r => r.draw()); 
+        enemies.forEach(e => e.draw()); player.draw(); drawUI();
         requestAnimationFrame(gameLoop);
     }
-    // *** MODIFICATION END ***
 
     // --- 4. EVENT LISTENERS ---
+    // *** MODIFICATION START: Added window 'blur' event listener to prevent sticky keys ***
     window.addEventListener('keydown', (e) => {
         if (gameOver) { if (e.key === 'Enter') resetGame(); return; }
         if (keys.hasOwnProperty(e.key)) { e.preventDefault(); keys[e.key] = true; }
         if (e.code === 'Space') { e.preventDefault(); player.shoot(); }
         if (e.key === 'ArrowUp') { e.preventDefault(); player.jump(); }
     });
+
     window.addEventListener('keyup', (e) => {
         if (keys.hasOwnProperty(e.key)) { e.preventDefault(); keys[e.key] = false; }
         if (e.code === 'Space') { e.preventDefault(); player.canShoot = true; }
     });
+
+    // This listener resets all keys if the player clicks outside the game window.
+    window.addEventListener('blur', () => {
+        keys.ArrowLeft = false;
+        keys.ArrowRight = false;
+        keys.ArrowUp = false;
+        keys.Space = false;
+        player.canShoot = true; // Also reset the ability to shoot
+    });
+    // *** MODIFICATION END ***
 
     // --- 5. START GAME ---
     player = new Player();

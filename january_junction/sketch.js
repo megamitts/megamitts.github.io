@@ -292,7 +292,7 @@ function mousePressed() {
   }
   
   if (!wiping &&
-      mouseX > 205 && mouseX < 220 &&
+      mouseX > 370 && mouseX < 383 &&
       mouseY > 290 && mouseY < 317
     
     ){

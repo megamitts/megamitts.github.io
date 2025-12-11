@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rainbow Islands JS (With Clouds)</title>
+    <title>Rainbow Islands JS (Better Fruit)</title>
     <style>
         body {
             margin: 0;
@@ -36,6 +36,7 @@
     const RAINBOW_LIFESPAN = 240;
     const ENEMY_SPEED = 1;
     const BULLET_SPEED = 4;
+    const PLAYER_IMMUNITY_DURATION = 180;
 
     // Rainbow shape constants
     const PARABOLIC_RAINBOW_SPEED = 7;
@@ -52,12 +53,24 @@
     // --- 2. GAME OBJECT CLASSES ---
 
     class Player { /* ... (no changes) ... */
-        constructor() { this.width = 30; this.height = 30; this.x = canvas.width / 2 - this.width / 2; this.y = canvas.height - 50; this.dx = 0; this.dy = 0; this.onGround = false; this.canShoot = true; this.color = '#ffdd00'; this.currentPlatform = null; }
-        jump() { if (this.onGround) { this.dy = -PLAYER_JUMP_FORCE; this.onGround = false; this.currentPlatform = null; } }
+        constructor() { this.width = 30; this.height = 30; this.x = canvas.width / 2 - this.width / 2; this.y = canvas.height - 50; this.dx = 0; this.dy = 0; this.onGround = false; this.canShoot = true; this.color = '#ffdd00'; this.isImmune = false; this.immunityTimer = 0; }
+        jump() { if (this.onGround) { this.dy = -PLAYER_JUMP_FORCE; this.onGround = false; } }
         shoot() { if (this.canShoot) { const isDiagonal = keys.ArrowLeft || keys.ArrowRight; const type = isDiagonal ? 'parabolic' : 'semicircle'; let angle = -Math.PI / 2; if (keys.ArrowRight) angle = -Math.PI / 4; if (keys.ArrowLeft) angle = -3 * Math.PI / 4; rainbows.push(new Rainbow(this.x + this.width / 2, this.y, type, angle)); this.canShoot = false; } }
-        update() { if (keys.ArrowLeft) this.x -= PLAYER_SPEED; if (keys.ArrowRight) this.x += PLAYER_SPEED; this.dy += GRAVITY; this.y += this.dy; this.onGround = false; this.currentPlatform = null; if (this.x < 0) this.x = 0; if (this.x + this.width > canvas.width) this.x = canvas.width - this.width; if (this.y > cameraY + canvas.height) this.reset(); }
-        reset() { lives--; if (lives <= 0) { gameOver = true; return; } platforms = platforms.filter(p => !p.isRespawnPlatform); this.x = canvas.width / 2 - this.width / 2; this.y = cameraY + canvas.height / 2; this.dy = 0; const safetyPlatform = new Platform(this.x - 45, this.y + 80, 120, false, true); platforms.push(safetyPlatform); }
-        draw() { ctx.fillStyle = this.color; ctx.fillRect(this.x, this.y - cameraY, this.width, this.height); }
+        update() { if (this.isImmune) { this.immunityTimer--; if (this.immunityTimer <= 0) this.isImmune = false; } if (keys.ArrowLeft) this.x -= PLAYER_SPEED; if (keys.ArrowRight) this.x += PLAYER_SPEED; this.dy += GRAVITY; this.y += this.dy; this.onGround = false; if (this.x < 0) this.x = 0; if (this.x + this.width > canvas.width) this.x = canvas.width - this.width; if (this.y > cameraY + canvas.height) this.reset(); }
+        takeDamage() { if (this.isImmune) return; lives--; this.isImmune = true; this.immunityTimer = PLAYER_IMMUNITY_DURATION; if (lives <= 0) gameOver = true; }
+        reset() {
+            lives--; if (lives <= 0) { gameOver = true; return; }
+            const groundPlatform = platforms[0]; const isGroundVisible = groundPlatform.y - cameraY <= canvas.height;
+            if (isGroundVisible) { this.x = canvas.width / 2 - this.width / 2; this.y = groundPlatform.y - this.height; } else {
+                const screenCenterY = cameraY + canvas.height / 2; let bestPlatform = null; let minDistance = Infinity;
+                const candidatePlatforms = platforms.filter(p => p.y > cameraY && p.y < cameraY + canvas.height); const safePlatforms = candidatePlatforms.filter(p => !enemies.some(enemy => enemy.platform === p));
+                let platformListToSearch = safePlatforms.length > 0 ? safePlatforms : candidatePlatforms;
+                for (const platform of platformListToSearch) { const distance = Math.abs(platform.y - screenCenterY); if (distance < minDistance) { minDistance = distance; bestPlatform = platform; } }
+                if (bestPlatform) { this.x = bestPlatform.x + (bestPlatform.width / 2) - (this.width / 2); this.y = bestPlatform.y - this.height; } else { this.x = canvas.width / 2 - this.width / 2; this.y = cameraY + canvas.height / 2; }
+            }
+            this.dy = 0;
+        }
+        draw() { if (this.isImmune && Math.floor(this.immunityTimer / 6) % 2 === 0) return; ctx.fillStyle = this.color; ctx.fillRect(this.x, this.y - cameraY, this.width, this.height); }
     }
 
     class Rainbow { /* ... (no changes) ... */
@@ -68,7 +81,7 @@
     }
     
     class Platform { /* ... (no changes) ... */
-        constructor(x, y, width, isMoving = false, isRespawnPlatform = false) { this.x = x; this.y = y; this.width = width; this.height = 20; this.isMoving = isMoving; this.isRespawnPlatform = isRespawnPlatform; this.speed = isMoving ? (Math.random() > 0.5 ? 1 : -1) : 0; this.color = isRespawnPlatform ? '#888' : '#2ECC40'; }
+        constructor(x, y, width, isMoving = false) { this.x = x; this.y = y; this.width = width; this.height = 20; this.isMoving = isMoving; this.speed = isMoving ? (Math.random() > 0.5 ? 1 : -1) : 0; this.color = '#2ECC40'; }
         update() { if (this.isMoving) { this.x += this.speed; if (this.x < 0 || this.x + this.width > canvas.width) this.speed *= -1; } }
         draw() { ctx.fillStyle = this.color; ctx.fillRect(this.x, this.y - cameraY, this.width, this.height); }
     }
@@ -81,9 +94,9 @@
     }
 
     class Gem { /* ... (no changes) ... */
-        constructor(x, y) { this.x = x; this.y = y; this.width = 12; this.height = 12; this.color = '#B10DC9'; this.lifespan = 300; }
-        update() { this.lifespan--; }
-        draw() { ctx.fillStyle = this.color; ctx.fillRect(this.x, this.y - cameraY, this.width, this.height); }
+        constructor(x, y) { this.x = x; this.y = y; this.width = 15; this.height = 20; this.color = '#B10DC9'; this.lifespan = 300; this.sparkleTimer = Math.random() * 120 + 60; }
+        update() { this.lifespan--; this.sparkleTimer--; if (this.sparkleTimer <= 0) this.sparkleTimer = Math.random() * 120 + 60; }
+        draw() { const gemX = this.x; const gemY = this.y - cameraY; const w = this.width; const h = this.height; ctx.fillStyle = this.color; ctx.beginPath(); ctx.moveTo(gemX + w / 2, gemY); ctx.lineTo(gemX + w, gemY + h / 3); ctx.lineTo(gemX + w, gemY + h * 2 / 3); ctx.lineTo(gemX + w / 2, gemY + h); ctx.lineTo(gemX, gemY + h * 2 / 3); ctx.lineTo(gemX, gemY + h / 3); ctx.closePath(); ctx.fill(); if (this.sparkleTimer < 10) { const centerX = gemX + w / 2; const centerY = gemY + h / 2; const sparkleSize = w * 0.4; ctx.strokeStyle = 'white'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(centerX - sparkleSize, centerY); ctx.lineTo(centerX + sparkleSize, centerY); ctx.moveTo(centerX, centerY - sparkleSize); ctx.lineTo(centerX, centerY + sparkleSize); ctx.stroke(); } }
     }
     
     class Bullet { /* ... (no changes) ... */
@@ -92,90 +105,124 @@
         draw() { ctx.fillStyle = this.color; ctx.fillRect(this.x, this.y - cameraY, this.width, this.height); }
     }
 
-    class Fruit { /* ... (no changes) ... */
-        constructor(x, y) { this.x = x; this.y = y; this.width = 20; this.height = 20; this.dy = 0; this.onPlatform = false; this.platform = null; const fruitColors = ['orange', 'red', 'pink']; this.color = fruitColors[Math.floor(Math.random() * fruitColors.length)]; }
-        update() { if (!this.onPlatform) { this.dy += GRAVITY / 2; this.y += this.dy; } else if (this.platform && this.platform.isMoving) { this.x += this.platform.speed; } }
-        draw() { ctx.fillStyle = this.color; ctx.beginPath(); ctx.arc(this.x + this.width / 2, (this.y + this.height / 2) - cameraY, this.width / 2, 0, Math.PI * 2); ctx.fill(); }
-    }
-
-    // *** NEW: Cloud Class ***
-    class Cloud {
+    // *** MODIFICATION START: Fruit class completely overhauled for different shapes ***
+    class Fruit {
         constructor(x, y) {
             this.x = x;
             this.y = y;
-            this.speed = (Math.random() * 0.4) - 0.2; // Random speed, slow left or right
-            this.color = 'rgba(255, 255, 255, 0.85)';
-            // Create a cluster of circles to form a fluffy cloud shape
-            this.parts = [];
-            const numParts = 3 + Math.floor(Math.random() * 4);
-            for (let i = 0; i < numParts; i++) {
-                this.parts.push({
-                    offsetX: (Math.random() - 0.5) * 70,
-                    offsetY: (Math.random() - 0.5) * 25,
-                    radius: 20 + Math.random() * 25
-                });
-            }
+            this.width = 22; // Standardized collision box
+            this.height = 22;
+            this.dy = 0;
+            this.onPlatform = false;
+            this.platform = null;
+            
+            const fruitTypes = ['apple', 'banana', 'strawberry', 'pineapple'];
+            this.type = fruitTypes[Math.floor(Math.random() * fruitTypes.length)];
         }
 
         update() {
-            this.x += this.speed;
-            // Wrap around screen logic
-            if (this.speed > 0 && this.x > canvas.width + 100) {
-                this.x = -100;
-            } else if (this.speed < 0 && this.x < -100) {
-                this.x = canvas.width + 100;
+            if (!this.onPlatform) {
+                this.dy += GRAVITY / 2;
+                this.y += this.dy;
+            } else if (this.platform && this.platform.isMoving) {
+                this.x += this.platform.speed;
             }
+        }
+        
+        // Main draw function that routes to the correct shape
+        draw() {
+            const drawX = this.x;
+            const drawY = this.y - cameraY;
+            switch (this.type) {
+                case 'apple': this._drawApple(drawX, drawY); break;
+                case 'banana': this._drawBanana(drawX, drawY); break;
+                case 'strawberry': this._drawStrawberry(drawX, drawY); break;
+                case 'pineapple': this._drawPineapple(drawX, drawY); break;
+            }
+        }
+        
+        // Private helper methods for drawing each fruit type
+        _drawApple(x, y) {
+            // Stem
+            ctx.fillStyle = '#8B4513'; // Brown
+            ctx.fillRect(x + this.width / 2 - 2, y, 4, 6);
+            // Body
+            ctx.fillStyle = '#FF4136'; // Red
+            ctx.beginPath();
+            ctx.arc(x + this.width / 2 - 5, y + this.height / 2, 8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(x + this.width / 2 + 5, y + this.height / 2, 8, 0, Math.PI * 2);
+            ctx.fill();
         }
 
-        draw() {
-            ctx.fillStyle = this.color;
-            for (const part of this.parts) {
-                const px = this.x + part.offsetX;
-                const py = (this.y - cameraY) + part.offsetY;
-                ctx.beginPath();
-                ctx.arc(px, py, part.radius, 0, Math.PI * 2);
-                ctx.fill();
-            }
+        _drawBanana(x, y) {
+            ctx.fillStyle = '#FFDC00'; // Yellow
+            ctx.beginPath();
+            ctx.moveTo(x, y + this.height);
+            ctx.bezierCurveTo(x + this.width, y + this.height, x + this.width / 2, y, x + this.width, y);
+            ctx.bezierCurveTo(x + this.width * 0.7, y + this.height * 0.3, x + this.width, y + this.height, x, y + this.height);
+            ctx.fill();
         }
+
+        _drawStrawberry(x, y) {
+            // Leaves
+            ctx.fillStyle = '#2ECC40'; // Green
+            ctx.fillRect(x + this.width / 2 - 6, y, 4, 6);
+            ctx.fillRect(x + this.width / 2 + 2, y, 4, 6);
+            // Body
+            ctx.fillStyle = '#FF851B'; // Orange-Red
+            ctx.beginPath();
+            ctx.moveTo(x + this.width / 2, y + this.height);
+            ctx.bezierCurveTo(x, y + this.height * 0.6, x, y + this.height / 4, x + this.width / 2, y + 4);
+            ctx.bezierCurveTo(x + this.width, y + this.height / 4, x + this.width, y + this.height * 0.6, x + this.width / 2, y + this.height);
+            ctx.fill();
+        }
+
+        _drawPineapple(x, y) {
+            // Crown
+            ctx.fillStyle = '#2ECC40'; // Green
+            ctx.beginPath();
+            ctx.moveTo(x + this.width / 2, y);
+            ctx.lineTo(x, y + 8);
+            ctx.lineTo(x + this.width / 2, y + 4);
+            ctx.lineTo(x + this.width, y + 8);
+            ctx.closePath();
+            ctx.fill();
+            // Body
+            ctx.fillStyle = '#FFDC00'; // Yellow
+            ctx.beginPath();
+            ctx.ellipse(x + this.width / 2, y + this.height / 2 + 4, this.width / 2, this.height/2 - 4, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+    // *** MODIFICATION END ***
+
+    class Cloud { /* ... (no changes) ... */
+        constructor(x, y) { this.x = x; this.y = y; this.speed = (Math.random() * 0.4) - 0.2; this.color = 'rgba(255, 255, 255, 0.85)'; this.parts = []; const numParts = 3 + Math.floor(Math.random() * 4); for (let i = 0; i < numParts; i++) { this.parts.push({ offsetX: (Math.random() - 0.5) * 70, offsetY: (Math.random() - 0.5) * 25, radius: 20 + Math.random() * 25 }); } }
+        update() { this.x += this.speed; if (this.speed > 0 && this.x > canvas.width + 100) { this.x = -100; } else if (this.speed < 0 && this.x < -100) { this.x = canvas.width + 100; } }
+        draw() { ctx.fillStyle = this.color; for (const part of this.parts) { const px = this.x + part.offsetX; const py = (this.y - cameraY) + part.offsetY; ctx.beginPath(); ctx.arc(px, py, part.radius, 0, Math.PI * 2); ctx.fill(); } }
     }
 
     // --- 3. GAME LOGIC & HELPERS ---
     
-    function resetGame() {
-        score = 0; lives = 3; cameraY = 0; gameOver = false;
-        platforms = []; enemies = []; rainbows = []; gems = []; bullets = []; fruits = []; clouds = [];
-        player = new Player();
-        createLevel();
-        createClouds(); // Create clouds on reset
-        gameLoop();
+    function resetGame() { /* ... (no changes) ... */
+        score = 0; lives = 3; cameraY = 0; gameOver = false; platforms = []; enemies = []; rainbows = []; gems = []; bullets = []; fruits = []; clouds = [];
+        player = new Player(); createLevel(); createClouds(); gameLoop();
     }
-
     function createLevel() { /* ... (no changes) ... */
         platforms.push(new Platform(0, canvas.height - 20, canvas.width));
         for (let i = 1; i < 100; i++) { const y = canvas.height - (i * 100); const x = Math.random() * (canvas.width - 120); const width = 80 + Math.random() * 70; const isMoving = Math.random() < 0.2; const p = new Platform(x, y, width, isMoving); platforms.push(p); if (Math.random() < 0.5) enemies.push(new Enemy(p.x + p.width / 2, p.y, p)); }
     }
+    function createClouds() { for (let i = 0; i < 50; i++) { const y = canvas.height - (Math.random() * 10000); const x = Math.random() * canvas.width; clouds.push(new Cloud(x, y)); } }
     
-    function createClouds() {
-        for (let i = 0; i < 50; i++) {
-            // Spread clouds across the entire level height
-            const y = canvas.height - (Math.random() * 10000); 
-            const x = Math.random() * canvas.width;
-            clouds.push(new Cloud(x, y));
-        }
-    }
-    
-    function manageSafetyPlatform() { /* ... (no changes) ... */
-        const safetyPlatform = platforms.find(p => p.isRespawnPlatform); if (!safetyPlatform) return;
-        if (player.currentPlatform && player.currentPlatform !== safetyPlatform) platforms = platforms.filter(p => !p.isRespawnPlatform);
-    }
-    
-    function checkCollisions() { /* ... (no changes, fruit collision already added) ... */
-        platforms.forEach(p => { if (player.dy >= 0 && player.x + player.width > p.x && player.x < p.x + p.width && player.y + player.height > p.y && player.y + player.height <= p.y + p.height) { player.dy = 0; player.y = p.y - player.height; player.onGround = true; player.currentPlatform = p; if (p.isMoving) player.x += p.speed; } });
-        rainbows.forEach(r => { if (r.isSolid && player.dy >= 0 && r.path.length > 0) { let collisionPoint = null, minDistanceX = Infinity; const playerCenterX = player.x + player.width / 2; for (const point of r.path) { const distanceX = Math.abs(point.x - playerCenterX); if (distanceX < minDistanceX) { minDistanceX = distanceX; collisionPoint = point; } } if (collisionPoint && minDistanceX < (player.width / 2) + 5) { const rainbowSurfaceY = collisionPoint.y - r.height / 2; const playerFeetY = player.y + player.height; if (playerFeetY >= rainbowSurfaceY && playerFeetY < rainbowSurfaceY + player.dy + 1) { player.y = rainbowSurfaceY - player.height; player.dy = 0; player.onGround = true; player.currentPlatform = r; if (keys.ArrowUp) r.break(); } } } });
+    function checkCollisions() { /* ... (no changes) ... */
+        platforms.forEach(p => { if (player.dy >= 0 && player.x + player.width > p.x && player.x < p.x + p.width && player.y + player.height > p.y && player.y + player.height <= p.y + p.height) { player.dy = 0; player.y = p.y - player.height; player.onGround = true; if (p.isMoving) player.x += p.speed; } });
+        rainbows.forEach(r => { if (r.isSolid && player.dy >= 0 && r.path.length > 0) { let collisionPoint = null, minDistanceX = Infinity; const playerCenterX = player.x + player.width / 2; for (const point of r.path) { const distanceX = Math.abs(point.x - playerCenterX); if (distanceX < minDistanceX) { minDistanceX = distanceX; collisionPoint = point; } } if (collisionPoint && minDistanceX < (player.width / 2) + 5) { const rainbowSurfaceY = collisionPoint.y - r.height / 2; const playerFeetY = player.y + player.height; if (playerFeetY >= rainbowSurfaceY && playerFeetY < rainbowSurfaceY + player.dy + 1) { player.y = rainbowSurfaceY - player.height; player.dy = 0; player.onGround = true; if (keys.ArrowUp) r.break(); } } } });
         rainbows.forEach(rainbow => { enemies.forEach((enemy, index) => { for (const point of rainbow.path) { if (point.x > enemy.x && point.x < enemy.x + enemy.width && point.y > enemy.y && point.y < enemy.y + enemy.height) { score += 100; gems.push(new Gem(enemy.x, enemy.y)); enemies.splice(index, 1); rainbow.break(); return; } } });});
-        enemies.forEach(enemy => { if (player.x < enemy.x + enemy.width && player.x + player.width > enemy.x && player.y < enemy.y + enemy.height && player.y + player.height > enemy.y) player.reset(); });
+        enemies.forEach(enemy => { if (player.x < enemy.x + enemy.width && player.x + player.width > enemy.x && player.y < enemy.y + enemy.height && player.y + player.height > enemy.y) player.takeDamage(); });
+        for (let i = bullets.length - 1; i >= 0; i--) { const bullet = bullets[i]; if (bullet.x < player.x + player.width && bullet.x + bullet.width > player.x && bullet.y < player.y + player.height && bullet.y + bullet.height > player.y) { player.takeDamage(); bullets.splice(i, 1); break; } }
         gems.forEach((gem, index) => { if (player.x < gem.x + gem.width && player.x + player.width > gem.x && player.y < gem.y + gem.height && player.y + player.height > gem.y) { score += 50; gems.splice(index, 1); } });
-        for (let i = bullets.length - 1; i >= 0; i--) { const bullet = bullets[i]; if (bullet.x < player.x + player.width && bullet.x + bullet.width > player.x && bullet.y < player.y + player.height && bullet.y + bullet.height > player.y) { player.reset(); bullets.splice(i, 1); break; } }
         for (let i = bullets.length - 1; i >= 0; i--) { const bullet = bullets[i]; let hit = false; for (let j = rainbows.length - 1; j >= 0; j--) { const rainbow = rainbows[j]; for (const point of rainbow.path) { if (bullet.x < point.x + rainbow.height/2 && bullet.x + bullet.width > point.x - rainbow.height/2 && bullet.y < point.y + rainbow.height/2 && bullet.y + bullet.height > point.y - rainbow.height/2) { bullets.splice(i, 1); rainbows.splice(j, 1); hit = true; break; } } if (hit) break; } }
         for (let i = fruits.length - 1; i >= 0; i--) { const fruit = fruits[i]; if (player.x < fruit.x + fruit.width && player.x + player.width > fruit.x && player.y < fruit.y + fruit.height && player.y + player.height > fruit.y) { score += 200; fruits.splice(i, 1); } }
         for (const fruit of fruits) { if (fruit.dy >= 0 && !fruit.onPlatform) { for (const p of platforms) { if (fruit.x + fruit.width > p.x && fruit.x < p.x + p.width && fruit.y + fruit.height > p.y && fruit.y + fruit.height < p.y + p.height + fruit.dy) { fruit.dy = 0; fruit.y = p.y - fruit.height; fruit.onPlatform = true; fruit.platform = p; break; } } } }
@@ -186,16 +233,14 @@
         if (gameOver) { ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.font = '48px "Courier New"'; ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 40); ctx.font = '24px "Courier New"'; ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 10); ctx.fillText('Press Enter to Play Again', canvas.width / 2, canvas.height / 2 + 50); }
     }
     
-    // *** MODIFICATION: Updated to handle cloud updates and drawing layer ***
     function gameLoop() {
         if (gameOver) { drawUI(); return; }
         
-        // UPDATE
         player.update();
         platforms.forEach(p => p.update()); enemies.forEach(e => e.update());
         rainbows.forEach(r => r.update()); gems.forEach(g => g.update());
         bullets.forEach(b => b.update()); fruits.forEach(f => f.update());
-        clouds.forEach(c => c.update()); // Update clouds
+        clouds.forEach(c => c.update());
 
         const groundPlatformGone = cameraY < canvas.height - 40;
         if (groundPlatformGone) { fruitSpawnTimer--; if (fruitSpawnTimer <= 0) { const spawnX = Math.random() * (canvas.width - 20); fruits.push(new Fruit(spawnX, cameraY - 20)); fruitSpawnTimer = Math.random() * 240 + 180; } }
@@ -204,15 +249,13 @@
         bullets = bullets.filter(b => b.y < cameraY + canvas.height && b.y > cameraY);
         fruits = fruits.filter(f => f.y < cameraY + canvas.height);
         
-        checkCollisions(); manageSafetyPlatform();
+        checkCollisions();
         if (player.y < cameraY + canvas.height / 3) cameraY = player.y - canvas.height / 3;
         
-        // DRAW
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = '#4ab4ff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
         
-        clouds.forEach(c => c.draw()); // Draw clouds first (background)
-
+        clouds.forEach(c => c.draw());
         platforms.forEach(p => p.draw()); gems.forEach(g => g.draw());
         fruits.forEach(f => f.draw()); bullets.forEach(b => b.draw()); 
         rainbows.forEach(r => r.draw()); enemies.forEach(e => e.draw()); 
@@ -229,7 +272,7 @@
     // --- 5. START GAME ---
     player = new Player();
     createLevel();
-    createClouds(); // Create initial clouds
+    createClouds();
     gameLoop();
 
     </script>

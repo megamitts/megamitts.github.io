@@ -1,5 +1,13 @@
+let stars = [];
+let noiseScale = 0.9;   // how tightly the noise pattern varies
+let starCount = 200;    // how many stars to generate
+
+
+
 let blastInterval = 90;   // frames between blasts (~1.5 sec @60fps)
 let lastBlast = 0;
+
+let t=0;
 
 const confetti = [];
 const NUM = 500;
@@ -17,13 +25,41 @@ const palette = [
 ];
 
 const gravity = 0.08;
+let font1;
 
-
+function preload(){
+  
+  font1 = loadFont('font.ttf');
+  
+}
 
 function setup() {
   createCanvas(400, 400);
   rectMode(CENTER);
 
+  randomSeed(42);   // optional: ensures the same starfield each run
+  noiseSeed(99);    // optional: keeps noise consistent too
+
+  while (stars.length < starCount) {
+    // Start with a random base position
+    let x = random(width);
+    let y = random(height);
+
+    // Add smooth Perlin noise variation
+    let offsetX = (noise(x * noiseScale, y * noiseScale) - 0.5) * 40;
+    let offsetY = (noise(x * noiseScale + 100, y * noiseScale + 100) - 0.5) * 40;
+
+    let newX = x + offsetX;
+    let newY = y + offsetY;
+
+    // Only keep stars that stay within bounds
+    if (newX >= 0 && newX <= width && newY >= 0 && newY <= 400) {
+      stars.push({ x: newX, y: newY });
+    }
+  }
+  
+  
+  
   
   let moonCenterX = 300;
   let moonCenterY = 100;
@@ -86,6 +122,11 @@ function blastConfetti() {
 
 function draw() {
   background(20, 30, 40);
+  
+  stroke(255);
+  for (let s of stars) {
+  point(s.x, s.y); 
+}
 
   // // Trigger repeating blasts
   // if (frameCount - lastBlast > blastInterval) {
@@ -106,7 +147,9 @@ function draw() {
   
   push();
   fill(255,204,0, fadeAlpha);
-  textSize(40);
+  noStroke();
+  textFont(font1,32);
+  
   text('Happy New Year 2026', 0, 200);
   pop();
   
@@ -130,8 +173,8 @@ function draw() {
     c.draw();
   }
   
-  
-  fadeAlpha++;
+  t+=0.05;
+  fadeAlpha = 255*sin(t);
 }
 
 

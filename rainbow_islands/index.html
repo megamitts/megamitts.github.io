@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rainbow Islands JS (Better Fruit)</title>
+    <title>Rainbow Islands JS (With Music)</title>
     <style>
         body {
             margin: 0;
@@ -23,11 +23,15 @@
 </head>
 <body>
     <canvas id="gameCanvas" width="480" height="580"></canvas>
+    
+    <!-- IMPORTANT: Create a file named 'music.mp3' and place it in the same folder as this HTML file -->
+    <audio id="bgMusic" loop src="music.mp3" style="display: none;"></audio>
 
     <script>
     // --- 1. SETUP ---
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
+    const bgMusic = document.getElementById('bgMusic');
 
     // --- GAME CONSTANTS ---
     const GRAVITY = 0.4;
@@ -45,7 +49,8 @@
     const SEMICIRCLE_FORMATION_FRAMES = 15;
 
     // --- GAME STATE ---
-    let score = 0, lives = 3, cameraY = 0, gameOver = false;
+    let gameState = 'start'; // 'start', 'playing', 'gameover'
+    let score = 0, lives = 3, cameraY = 0;
     let player, platforms = [], enemies = [], rainbows = [], gems = [], bullets = [], fruits = [], clouds = [];
     let fruitSpawnTimer = 180;
     const keys = { ArrowLeft: false, ArrowRight: false, ArrowUp: false, Space: false };
@@ -57,9 +62,9 @@
         jump() { if (this.onGround) { this.dy = -PLAYER_JUMP_FORCE; this.onGround = false; } }
         shoot() { if (this.canShoot) { const isDiagonal = keys.ArrowLeft || keys.ArrowRight; const type = isDiagonal ? 'parabolic' : 'semicircle'; let angle = -Math.PI / 2; if (keys.ArrowRight) angle = -Math.PI / 4; if (keys.ArrowLeft) angle = -3 * Math.PI / 4; rainbows.push(new Rainbow(this.x + this.width / 2, this.y, type, angle)); this.canShoot = false; } }
         update() { if (this.isImmune) { this.immunityTimer--; if (this.immunityTimer <= 0) this.isImmune = false; } if (keys.ArrowLeft) this.x -= PLAYER_SPEED; if (keys.ArrowRight) this.x += PLAYER_SPEED; this.dy += GRAVITY; this.y += this.dy; this.onGround = false; if (this.x < 0) this.x = 0; if (this.x + this.width > canvas.width) this.x = canvas.width - this.width; if (this.y > cameraY + canvas.height) this.reset(); }
-        takeDamage() { if (this.isImmune) return; lives--; this.isImmune = true; this.immunityTimer = PLAYER_IMMUNITY_DURATION; if (lives <= 0) gameOver = true; }
+        takeDamage() { if (this.isImmune) return; lives--; this.isImmune = true; this.immunityTimer = PLAYER_IMMUNITY_DURATION; if (lives <= 0) gameState = 'gameover'; }
         reset() {
-            lives--; if (lives <= 0) { gameOver = true; return; }
+            lives--; if (lives <= 0) { gameState = 'gameover'; return; }
             const groundPlatform = platforms[0]; const isGroundVisible = groundPlatform.y - cameraY <= canvas.height;
             if (isGroundVisible) { this.x = canvas.width / 2 - this.width / 2; this.y = groundPlatform.y - this.height; } else {
                 const screenCenterY = cameraY + canvas.height / 2; let bestPlatform = null; let minDistance = Infinity;
@@ -72,132 +77,42 @@
         }
         draw() { if (this.isImmune && Math.floor(this.immunityTimer / 6) % 2 === 0) return; ctx.fillStyle = this.color; ctx.fillRect(this.x, this.y - cameraY, this.width, this.height); }
     }
-
     class Rainbow { /* ... (no changes) ... */
         constructor(x, y, type, angle) { this.type = type; this.lifespan = RAINBOW_LIFESPAN; this.isSolid = false; this.path = []; this.height = 15; this.color = `hsl(${Math.random() * 360}, 100%, 70%)`; if (this.type === 'semicircle') { this.center = { x, y }; this.radius = SEMICIRCLE_RAINBOW_RADIUS; this.currentAngle = Math.PI; this.targetAngle = 0; this.angleStep = (this.targetAngle - this.currentAngle) / SEMICIRCLE_FORMATION_FRAMES; this.framesLeftToForm = SEMICIRCLE_FORMATION_FRAMES; this.path.push({ x: this.center.x - this.radius, y: this.center.y }); } else { this.x = x; this.y = y; this.dx = Math.cos(angle) * PARABOLIC_RAINBOW_SPEED; this.dy = Math.sin(angle) * PARABOLIC_RAINBOW_SPEED; } }
         update() { this.lifespan--; if (this.isSolid) return; if (this.type === 'semicircle') { if (this.framesLeftToForm > 0) { this.currentAngle += this.angleStep; const px = this.center.x + this.radius * Math.cos(this.currentAngle); const py = this.center.y - this.radius * Math.sin(this.currentAngle); this.path.push({ x: px, y: py }); this.framesLeftToForm--; } else { this.isSolid = true; } } else { this.dy += GRAVITY / 2.5; this.x += this.dx; this.y += this.dy; this.path.push({ x: this.x, y: this.y }); if (this.path.length > PARABOLIC_RAINBOW_LENGTH) this.isSolid = true; } }
         break() { const index = rainbows.indexOf(this); if (index > -1) rainbows.splice(index, 1); }
         draw() { if (this.path.length < 2) return; ctx.strokeStyle = this.color; ctx.lineWidth = this.height; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(this.path[0].x, this.path[0].y - cameraY); for (let i = 1; i < this.path.length; i++) ctx.lineTo(this.path[i].x, this.path[i].y - cameraY); ctx.stroke(); }
     }
-    
     class Platform { /* ... (no changes) ... */
         constructor(x, y, width, isMoving = false) { this.x = x; this.y = y; this.width = width; this.height = 20; this.isMoving = isMoving; this.speed = isMoving ? (Math.random() > 0.5 ? 1 : -1) : 0; this.color = '#2ECC40'; }
         update() { if (this.isMoving) { this.x += this.speed; if (this.x < 0 || this.x + this.width > canvas.width) this.speed *= -1; } }
         draw() { ctx.fillStyle = this.color; ctx.fillRect(this.x, this.y - cameraY, this.width, this.height); }
     }
-    
     class Enemy { /* ... (no changes) ... */
         constructor(x, y, platform) { this.width = 25; this.height = 25; this.x = x; this.y = y - this.height; this.platform = platform; this.speed = ENEMY_SPEED; this.color = '#FF4136'; this.shootCooldown = Math.random() * 180 + 120; }
         shoot() { const angle = Math.atan2((player.y + player.height / 2) - (this.y + this.height / 2), (player.x + player.width / 2) - (this.x + this.width / 2)); bullets.push(new Bullet(this.x + this.width / 2, this.y + this.height / 2, angle)); this.shootCooldown = Math.random() * 180 + 120; }
         update() { this.x += this.platform.speed; this.x += this.speed; if (this.speed > 0 && (this.x + this.width) > (this.platform.x + this.platform.width)) { this.speed *= -1; this.x = this.platform.x + this.platform.width - this.width; } else if (this.speed < 0 && this.x < this.platform.x) { this.speed *= -1; this.x = this.platform.x; } this.shootCooldown--; const distanceToPlayer = Math.hypot(player.x - this.x, player.y - this.y); if (this.shootCooldown <= 0 && distanceToPlayer < 400) this.shoot(); }
         draw() { ctx.fillStyle = this.color; ctx.fillRect(this.x, this.y - cameraY, this.width, this.height); }
     }
-
     class Gem { /* ... (no changes) ... */
         constructor(x, y) { this.x = x; this.y = y; this.width = 15; this.height = 20; this.color = '#B10DC9'; this.lifespan = 300; this.sparkleTimer = Math.random() * 120 + 60; }
         update() { this.lifespan--; this.sparkleTimer--; if (this.sparkleTimer <= 0) this.sparkleTimer = Math.random() * 120 + 60; }
         draw() { const gemX = this.x; const gemY = this.y - cameraY; const w = this.width; const h = this.height; ctx.fillStyle = this.color; ctx.beginPath(); ctx.moveTo(gemX + w / 2, gemY); ctx.lineTo(gemX + w, gemY + h / 3); ctx.lineTo(gemX + w, gemY + h * 2 / 3); ctx.lineTo(gemX + w / 2, gemY + h); ctx.lineTo(gemX, gemY + h * 2 / 3); ctx.lineTo(gemX, gemY + h / 3); ctx.closePath(); ctx.fill(); if (this.sparkleTimer < 10) { const centerX = gemX + w / 2; const centerY = gemY + h / 2; const sparkleSize = w * 0.4; ctx.strokeStyle = 'white'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(centerX - sparkleSize, centerY); ctx.lineTo(centerX + sparkleSize, centerY); ctx.moveTo(centerX, centerY - sparkleSize); ctx.lineTo(centerX, centerY + sparkleSize); ctx.stroke(); } }
     }
-    
     class Bullet { /* ... (no changes) ... */
         constructor(x, y, angle) { this.x = x; this.y = y; this.width = 8; this.height = 8; this.color = 'white'; this.dx = Math.cos(angle) * BULLET_SPEED; this.dy = Math.sin(angle) * BULLET_SPEED; }
         update() { this.x += this.dx; this.y += this.dy; }
         draw() { ctx.fillStyle = this.color; ctx.fillRect(this.x, this.y - cameraY, this.width, this.height); }
     }
-
-    // *** MODIFICATION START: Fruit class completely overhauled for different shapes ***
-    class Fruit {
-        constructor(x, y) {
-            this.x = x;
-            this.y = y;
-            this.width = 22; // Standardized collision box
-            this.height = 22;
-            this.dy = 0;
-            this.onPlatform = false;
-            this.platform = null;
-            
-            const fruitTypes = ['apple', 'banana', 'strawberry', 'pineapple'];
-            this.type = fruitTypes[Math.floor(Math.random() * fruitTypes.length)];
-        }
-
-        update() {
-            if (!this.onPlatform) {
-                this.dy += GRAVITY / 2;
-                this.y += this.dy;
-            } else if (this.platform && this.platform.isMoving) {
-                this.x += this.platform.speed;
-            }
-        }
-        
-        // Main draw function that routes to the correct shape
-        draw() {
-            const drawX = this.x;
-            const drawY = this.y - cameraY;
-            switch (this.type) {
-                case 'apple': this._drawApple(drawX, drawY); break;
-                case 'banana': this._drawBanana(drawX, drawY); break;
-                case 'strawberry': this._drawStrawberry(drawX, drawY); break;
-                case 'pineapple': this._drawPineapple(drawX, drawY); break;
-            }
-        }
-        
-        // Private helper methods for drawing each fruit type
-        _drawApple(x, y) {
-            // Stem
-            ctx.fillStyle = '#8B4513'; // Brown
-            ctx.fillRect(x + this.width / 2 - 2, y, 4, 6);
-            // Body
-            ctx.fillStyle = '#FF4136'; // Red
-            ctx.beginPath();
-            ctx.arc(x + this.width / 2 - 5, y + this.height / 2, 8, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.arc(x + this.width / 2 + 5, y + this.height / 2, 8, 0, Math.PI * 2);
-            ctx.fill();
-        }
-
-        _drawBanana(x, y) {
-            ctx.fillStyle = '#FFDC00'; // Yellow
-            ctx.beginPath();
-            ctx.moveTo(x, y + this.height);
-            ctx.bezierCurveTo(x + this.width, y + this.height, x + this.width / 2, y, x + this.width, y);
-            ctx.bezierCurveTo(x + this.width * 0.7, y + this.height * 0.3, x + this.width, y + this.height, x, y + this.height);
-            ctx.fill();
-        }
-
-        _drawStrawberry(x, y) {
-            // Leaves
-            ctx.fillStyle = '#2ECC40'; // Green
-            ctx.fillRect(x + this.width / 2 - 6, y, 4, 6);
-            ctx.fillRect(x + this.width / 2 + 2, y, 4, 6);
-            // Body
-            ctx.fillStyle = '#FF851B'; // Orange-Red
-            ctx.beginPath();
-            ctx.moveTo(x + this.width / 2, y + this.height);
-            ctx.bezierCurveTo(x, y + this.height * 0.6, x, y + this.height / 4, x + this.width / 2, y + 4);
-            ctx.bezierCurveTo(x + this.width, y + this.height / 4, x + this.width, y + this.height * 0.6, x + this.width / 2, y + this.height);
-            ctx.fill();
-        }
-
-        _drawPineapple(x, y) {
-            // Crown
-            ctx.fillStyle = '#2ECC40'; // Green
-            ctx.beginPath();
-            ctx.moveTo(x + this.width / 2, y);
-            ctx.lineTo(x, y + 8);
-            ctx.lineTo(x + this.width / 2, y + 4);
-            ctx.lineTo(x + this.width, y + 8);
-            ctx.closePath();
-            ctx.fill();
-            // Body
-            ctx.fillStyle = '#FFDC00'; // Yellow
-            ctx.beginPath();
-            ctx.ellipse(x + this.width / 2, y + this.height / 2 + 4, this.width / 2, this.height/2 - 4, 0, 0, Math.PI * 2);
-            ctx.fill();
-        }
+    class Fruit { /* ... (no changes) ... */
+        constructor(x, y) { this.x = x; this.y = y; this.width = 22; this.height = 22; this.dy = 0; this.onPlatform = false; this.platform = null; const fruitTypes = ['apple', 'banana', 'strawberry', 'pineapple']; this.type = fruitTypes[Math.floor(Math.random() * fruitTypes.length)]; }
+        update() { if (!this.onPlatform) { this.dy += GRAVITY / 2; this.y += this.dy; } else if (this.platform && this.platform.isMoving) { this.x += this.platform.speed; } }
+        draw() { const drawX = this.x; const drawY = this.y - cameraY; switch (this.type) { case 'apple': this._drawApple(drawX, drawY); break; case 'banana': this._drawBanana(drawX, drawY); break; case 'strawberry': this._drawStrawberry(drawX, drawY); break; case 'pineapple': this._drawPineapple(drawX, drawY); break; } }
+        _drawApple(x, y) { ctx.fillStyle = '#8B4513'; ctx.fillRect(x + this.width / 2 - 2, y, 4, 6); ctx.fillStyle = '#FF4136'; ctx.beginPath(); ctx.arc(x + this.width / 2 - 5, y + this.height / 2, 8, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(x + this.width / 2 + 5, y + this.height / 2, 8, 0, Math.PI * 2); ctx.fill(); }
+        _drawBanana(x, y) { ctx.fillStyle = '#FFDC00'; ctx.beginPath(); ctx.moveTo(x, y + this.height); ctx.bezierCurveTo(x + this.width, y + this.height, x + this.width / 2, y, x + this.width, y); ctx.bezierCurveTo(x + this.width * 0.7, y + this.height * 0.3, x + this.width, y + this.height, x, y + this.height); ctx.fill(); }
+        _drawStrawberry(x, y) { ctx.fillStyle = '#2ECC40'; ctx.fillRect(x + this.width / 2 - 6, y, 4, 6); ctx.fillRect(x + this.width / 2 + 2, y, 4, 6); ctx.fillStyle = '#FF851B'; ctx.beginPath(); ctx.moveTo(x + this.width / 2, y + this.height); ctx.bezierCurveTo(x, y + this.height * 0.6, x, y + this.height / 4, x + this.width / 2, y + 4); ctx.bezierCurveTo(x + this.width, y + this.height / 4, x + this.width, y + this.height * 0.6, x + this.width / 2, y + this.height); ctx.fill(); }
+        _drawPineapple(x, y) { ctx.fillStyle = '#2ECC40'; ctx.beginPath(); ctx.moveTo(x + this.width / 2, y); ctx.lineTo(x, y + 8); ctx.lineTo(x + this.width / 2, y + 4); ctx.lineTo(x + this.width, y + 8); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#FFDC00'; ctx.beginPath(); ctx.ellipse(x + this.width / 2, y + this.height / 2 + 4, this.width / 2, this.height/2 - 4, 0, 0, Math.PI * 2); ctx.fill(); }
     }
-    // *** MODIFICATION END ***
-
     class Cloud { /* ... (no changes) ... */
         constructor(x, y) { this.x = x; this.y = y; this.speed = (Math.random() * 0.4) - 0.2; this.color = 'rgba(255, 255, 255, 0.85)'; this.parts = []; const numParts = 3 + Math.floor(Math.random() * 4); for (let i = 0; i < numParts; i++) { this.parts.push({ offsetX: (Math.random() - 0.5) * 70, offsetY: (Math.random() - 0.5) * 25, radius: 20 + Math.random() * 25 }); } }
         update() { this.x += this.speed; if (this.speed > 0 && this.x > canvas.width + 100) { this.x = -100; } else if (this.speed < 0 && this.x < -100) { this.x = canvas.width + 100; } }
@@ -206,9 +121,14 @@
 
     // --- 3. GAME LOGIC & HELPERS ---
     
-    function resetGame() { /* ... (no changes) ... */
-        score = 0; lives = 3; cameraY = 0; gameOver = false; platforms = []; enemies = []; rainbows = []; gems = []; bullets = []; fruits = []; clouds = [];
-        player = new Player(); createLevel(); createClouds(); gameLoop();
+    function startGame() {
+        score = 0; lives = 3; cameraY = 0;
+        platforms = []; enemies = []; rainbows = []; gems = []; bullets = []; fruits = []; clouds = [];
+        player = new Player(); createLevel(); createClouds();
+    }
+    function resetGame() {
+        startGame(); // Resetting is just starting a new game
+        gameState = 'playing';
     }
     function createLevel() { /* ... (no changes) ... */
         platforms.push(new Platform(0, canvas.height - 20, canvas.width));
@@ -228,52 +148,94 @@
         for (const fruit of fruits) { if (fruit.dy >= 0 && !fruit.onPlatform) { for (const p of platforms) { if (fruit.x + fruit.width > p.x && fruit.x < p.x + p.width && fruit.y + fruit.height > p.y && fruit.y + fruit.height < p.y + p.height + fruit.dy) { fruit.dy = 0; fruit.y = p.y - fruit.height; fruit.onPlatform = true; fruit.platform = p; break; } } } }
     }
 
-    function drawUI() { /* ... (no changes) ... */
-        ctx.fillStyle = 'white'; ctx.font = '24px "Courier New"'; ctx.textAlign = 'left'; ctx.fillText(`SCORE: ${score}`, 10, 30); ctx.fillText(`LIVES: ${lives}`, canvas.width - 120, 30);
-        if (gameOver) { ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.font = '48px "Courier New"'; ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 40); ctx.font = '24px "Courier New"'; ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 10); ctx.fillText('Press Enter to Play Again', canvas.width / 2, canvas.height / 2 + 50); }
+    function drawStartScreen() {
+        ctx.fillStyle = '#4ab4ff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'center';
+        ctx.font = '48px "Courier New"';
+        ctx.fillText('Rainbow Islands', canvas.width / 2, canvas.height / 2 - 40);
+        ctx.font = '24px "Courier New"';
+        ctx.fillText('Press Enter to Start', canvas.width / 2, canvas.height / 2 + 10);
+    }
+
+    function drawUI() {
+        ctx.fillStyle = 'white'; ctx.font = '24px "Courier New"'; ctx.textAlign = 'left';
+        ctx.fillText(`SCORE: ${score}`, 10, 30);
+        ctx.fillText(`LIVES: ${lives}`, canvas.width - 120, 30);
+        if (gameState === 'gameover') {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.font = '48px "Courier New"';
+            ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 40);
+            ctx.font = '24px "Courier New"';
+            ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 10);
+            ctx.fillText('Press Enter to Play Again', canvas.width / 2, canvas.height / 2 + 50);
+        }
     }
     
     function gameLoop() {
-        if (gameOver) { drawUI(); return; }
-        
-        player.update();
-        platforms.forEach(p => p.update()); enemies.forEach(e => e.update());
-        rainbows.forEach(r => r.update()); gems.forEach(g => g.update());
-        bullets.forEach(b => b.update()); fruits.forEach(f => f.update());
-        clouds.forEach(c => c.update());
+        if (gameState === 'playing') {
+            // UPDATE
+            player.update();
+            platforms.forEach(p => p.update()); enemies.forEach(e => e.update());
+            rainbows.forEach(r => r.update()); gems.forEach(g => g.update());
+            bullets.forEach(b => b.update()); fruits.forEach(f => f.update());
+            clouds.forEach(c => c.update());
 
-        const groundPlatformGone = cameraY < canvas.height - 40;
-        if (groundPlatformGone) { fruitSpawnTimer--; if (fruitSpawnTimer <= 0) { const spawnX = Math.random() * (canvas.width - 20); fruits.push(new Fruit(spawnX, cameraY - 20)); fruitSpawnTimer = Math.random() * 240 + 180; } }
+            const groundPlatformGone = cameraY < canvas.height - 40;
+            if (groundPlatformGone) { fruitSpawnTimer--; if (fruitSpawnTimer <= 0) { const spawnX = Math.random() * (canvas.width - 20); fruits.push(new Fruit(spawnX, cameraY - 20)); fruitSpawnTimer = Math.random() * 240 + 180; } }
 
-        rainbows = rainbows.filter(r => r.lifespan > 0); gems = gems.filter(g => g.lifespan > 0);
-        bullets = bullets.filter(b => b.y < cameraY + canvas.height && b.y > cameraY);
-        fruits = fruits.filter(f => f.y < cameraY + canvas.height);
-        
-        checkCollisions();
-        if (player.y < cameraY + canvas.height / 3) cameraY = player.y - canvas.height / 3;
-        
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#4ab4ff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
-        clouds.forEach(c => c.draw());
-        platforms.forEach(p => p.draw()); gems.forEach(g => g.draw());
-        fruits.forEach(f => f.draw()); bullets.forEach(b => b.draw()); 
-        rainbows.forEach(r => r.draw()); enemies.forEach(e => e.draw()); 
-        player.draw(); drawUI();
+            rainbows = rainbows.filter(r => r.lifespan > 0); gems = gems.filter(g => g.lifespan > 0);
+            bullets = bullets.filter(b => b.y < cameraY + canvas.height && b.y > cameraY);
+            fruits = fruits.filter(f => f.y < cameraY + canvas.height);
+            
+            checkCollisions();
+            if (player.y < cameraY + canvas.height / 3) cameraY = player.y - canvas.height / 3;
+            
+            // DRAW
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#4ab4ff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            clouds.forEach(c => c.draw()); platforms.forEach(p => p.draw());
+            gems.forEach(g => g.draw()); fruits.forEach(f => f.draw());
+            bullets.forEach(b => b.draw()); rainbows.forEach(r => r.draw());
+            enemies.forEach(e => e.draw()); player.draw(); drawUI();
+        } else if (gameState === 'start') {
+            drawStartScreen();
+        } else if (gameState === 'gameover') {
+            drawUI(); // This will show the game over screen
+        }
         
         requestAnimationFrame(gameLoop);
     }
 
     // --- 4. EVENT LISTENERS ---
-    window.addEventListener('keydown', (e) => { if (gameOver) { if (e.key === 'Enter') resetGame(); return; } if (keys.hasOwnProperty(e.key)) { e.preventDefault(); keys[e.key] = true; } if (e.code === 'Space') { e.preventDefault(); player.shoot(); } if (e.key === 'ArrowUp') { e.preventDefault(); player.jump(); } });
-    window.addEventListener('keyup', (e) => { if (keys.hasOwnProperty(e.key)) { e.preventDefault(); keys[e.key] = false; } if (e.code === 'Space') { e.preventDefault(); player.canShoot = true; } });
+    window.addEventListener('keydown', (e) => {
+        if (gameState === 'start' && e.key === 'Enter') {
+            gameState = 'playing';
+            bgMusic.play().catch(error => console.log("Audio play failed: " + error));
+            startGame();
+            return;
+        }
+        if (gameState === 'gameover' && e.key === 'Enter') {
+            resetGame();
+            return;
+        }
+        if (gameState === 'playing') {
+            if (keys.hasOwnProperty(e.key)) { e.preventDefault(); keys[e.key] = true; }
+            if (e.code === 'Space') { e.preventDefault(); player.shoot(); }
+            if (e.key === 'ArrowUp') { e.preventDefault(); player.jump(); }
+        }
+    });
+    window.addEventListener('keyup', (e) => {
+        if (gameState === 'playing') {
+            if (keys.hasOwnProperty(e.key)) { e.preventDefault(); keys[e.key] = false; }
+            if (e.code === 'Space') { e.preventDefault(); player.canShoot = true; }
+        }
+    });
     window.addEventListener('blur', () => { keys.ArrowLeft = false; keys.ArrowRight = false; keys.ArrowUp = false; keys.Space = false; player.canShoot = true; });
 
     // --- 5. START GAME ---
-    player = new Player();
-    createLevel();
-    createClouds();
-    gameLoop();
+    gameLoop(); // Start the loop immediately to show the start screen
 
     </script>
 </body>

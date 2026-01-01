@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rainbow Islands JS (With Music)</title>
+    <title>Rainbow Islands JS (Scrolling Fix)</title>
     <style>
         body {
             margin: 0;
@@ -24,7 +24,6 @@
 <body>
     <canvas id="gameCanvas" width="480" height="580"></canvas>
     
-    <!-- IMPORTANT: Create a file named 'music.mp3' and place it in the same folder as this HTML file -->
     <audio id="bgMusic" loop src="music.mp3" style="display: none;"></audio>
 
     <script>
@@ -59,10 +58,10 @@
 
     class Player { /* ... (no changes) ... */
         constructor() { this.width = 30; this.height = 30; this.x = canvas.width / 2 - this.width / 2; this.y = canvas.height - 50; this.dx = 0; this.dy = 0; this.onGround = false; this.canShoot = true; this.color = '#ffdd00'; this.isImmune = false; this.immunityTimer = 0; }
-        jump() { if (this.onGround) { this.dy = -PLAYER_JUMP_FORCE; this.onGround = false; } }
-        shoot() { if (this.canShoot) { const isDiagonal = keys.ArrowLeft || keys.ArrowRight; const type = isDiagonal ? 'parabolic' : 'semicircle'; let angle = -Math.PI / 2; if (keys.ArrowRight) angle = -Math.PI / 4; if (keys.ArrowLeft) angle = -3 * Math.PI / 4; rainbows.push(new Rainbow(this.x + this.width / 2, this.y, type, angle)); this.canShoot = false; } }
+        jump() { if (this.onGround) { this.dy = -PLAYER_JUMP_FORCE; this.onGround = false; playSound('jump.mp3'); } }
+        shoot() { if (this.canShoot) { const isDiagonal = keys.ArrowLeft || keys.ArrowRight; const type = isDiagonal ? 'parabolic' : 'semicircle'; let angle = -Math.PI / 2; if (keys.ArrowRight) angle = -Math.PI / 4; if (keys.ArrowLeft) angle = -3 * Math.PI / 4; rainbows.push(new Rainbow(this.x + this.width / 2, this.y, type, angle)); this.canShoot = false; playSound('shoot.mp3'); } }
         update() { if (this.isImmune) { this.immunityTimer--; if (this.immunityTimer <= 0) this.isImmune = false; } if (keys.ArrowLeft) this.x -= PLAYER_SPEED; if (keys.ArrowRight) this.x += PLAYER_SPEED; this.dy += GRAVITY; this.y += this.dy; this.onGround = false; if (this.x < 0) this.x = 0; if (this.x + this.width > canvas.width) this.x = canvas.width - this.width; if (this.y > cameraY + canvas.height) this.reset(); }
-        takeDamage() { if (this.isImmune) return; lives--; this.isImmune = true; this.immunityTimer = PLAYER_IMMUNITY_DURATION; if (lives <= 0) gameState = 'gameover'; }
+        takeDamage() { if (this.isImmune) return; lives--; this.isImmune = true; this.immunityTimer = PLAYER_IMMUNITY_DURATION; playSound('player_hit.mp3'); if (lives <= 0) gameState = 'gameover'; }
         reset() {
             lives--; if (lives <= 0) { gameState = 'gameover'; return; }
             const groundPlatform = platforms[0]; const isGroundVisible = groundPlatform.y - cameraY <= canvas.height;
@@ -90,7 +89,7 @@
     }
     class Enemy { /* ... (no changes) ... */
         constructor(x, y, platform) { this.width = 25; this.height = 25; this.x = x; this.y = y - this.height; this.platform = platform; this.speed = ENEMY_SPEED; this.color = '#FF4136'; this.shootCooldown = Math.random() * 180 + 120; }
-        shoot() { const angle = Math.atan2((player.y + player.height / 2) - (this.y + this.height / 2), (player.x + player.width / 2) - (this.x + this.width / 2)); bullets.push(new Bullet(this.x + this.width / 2, this.y + this.height / 2, angle)); this.shootCooldown = Math.random() * 180 + 120; }
+        shoot() { const angle = Math.atan2((player.y + player.height / 2) - (this.y + this.height / 2), (player.x + player.width / 2) - (this.x + this.width / 2)); bullets.push(new Bullet(this.x + this.width / 2, this.y + this.height / 2, angle)); this.shootCooldown = Math.random() * 180 + 120; playSound('enemy_shoot.mp3'); }
         update() { this.x += this.platform.speed; this.x += this.speed; if (this.speed > 0 && (this.x + this.width) > (this.platform.x + this.platform.width)) { this.speed *= -1; this.x = this.platform.x + this.platform.width - this.width; } else if (this.speed < 0 && this.x < this.platform.x) { this.speed *= -1; this.x = this.platform.x; } this.shootCooldown--; const distanceToPlayer = Math.hypot(player.x - this.x, player.y - this.y); if (this.shootCooldown <= 0 && distanceToPlayer < 400) this.shoot(); }
         draw() { ctx.fillStyle = this.color; ctx.fillRect(this.x, this.y - cameraY, this.width, this.height); }
     }
@@ -121,78 +120,64 @@
 
     // --- 3. GAME LOGIC & HELPERS ---
     
-    function startGame() {
-        score = 0; lives = 3; cameraY = 0;
-        platforms = []; enemies = []; rainbows = []; gems = []; bullets = []; fruits = []; clouds = [];
-        player = new Player(); createLevel(); createClouds();
-    }
-    function resetGame() {
-        startGame(); // Resetting is just starting a new game
-        gameState = 'playing';
-    }
+    function playSound(src) { const sound = new Audio(src); sound.volume = 1.0; sound.play(); }
+    function startGame() { score = 0; lives = 3; cameraY = 0; platforms = []; enemies = []; rainbows = []; gems = []; bullets = []; fruits = []; clouds = []; player = new Player(); createLevel(); createClouds(); }
+    function resetGame() { startGame(); gameState = 'playing'; }
     function createLevel() { /* ... (no changes) ... */
         platforms.push(new Platform(0, canvas.height - 20, canvas.width));
         for (let i = 1; i < 100; i++) { const y = canvas.height - (i * 100); const x = Math.random() * (canvas.width - 120); const width = 80 + Math.random() * 70; const isMoving = Math.random() < 0.2; const p = new Platform(x, y, width, isMoving); platforms.push(p); if (Math.random() < 0.5) enemies.push(new Enemy(p.x + p.width / 2, p.y, p)); }
     }
     function createClouds() { for (let i = 0; i < 50; i++) { const y = canvas.height - (Math.random() * 10000); const x = Math.random() * canvas.width; clouds.push(new Cloud(x, y)); } }
     
-    function checkCollisions() { /* ... (no changes) ... */
+    function checkCollisions() {
         platforms.forEach(p => { if (player.dy >= 0 && player.x + player.width > p.x && player.x < p.x + p.width && player.y + player.height > p.y && player.y + player.height <= p.y + p.height) { player.dy = 0; player.y = p.y - player.height; player.onGround = true; if (p.isMoving) player.x += p.speed; } });
         rainbows.forEach(r => { if (r.isSolid && player.dy >= 0 && r.path.length > 0) { let collisionPoint = null, minDistanceX = Infinity; const playerCenterX = player.x + player.width / 2; for (const point of r.path) { const distanceX = Math.abs(point.x - playerCenterX); if (distanceX < minDistanceX) { minDistanceX = distanceX; collisionPoint = point; } } if (collisionPoint && minDistanceX < (player.width / 2) + 5) { const rainbowSurfaceY = collisionPoint.y - r.height / 2; const playerFeetY = player.y + player.height; if (playerFeetY >= rainbowSurfaceY && playerFeetY < rainbowSurfaceY + player.dy + 1) { player.y = rainbowSurfaceY - player.height; player.dy = 0; player.onGround = true; if (keys.ArrowUp) r.break(); } } } });
-        rainbows.forEach(rainbow => { enemies.forEach((enemy, index) => { for (const point of rainbow.path) { if (point.x > enemy.x && point.x < enemy.x + enemy.width && point.y > enemy.y && point.y < enemy.y + enemy.height) { score += 100; gems.push(new Gem(enemy.x, enemy.y)); enemies.splice(index, 1); rainbow.break(); return; } } });});
+        rainbows.forEach(rainbow => { enemies.forEach((enemy, index) => { for (const point of rainbow.path) { if (point.x > enemy.x && point.x < enemy.x + enemy.width && point.y > enemy.y && point.y < enemy.y + enemy.height) {
+            score += 100; gems.push(new Gem(enemy.x, enemy.y)); enemies.splice(index, 1); rainbow.break(); playSound('enemy_die.mp3'); return;
+        }}})});
         enemies.forEach(enemy => { if (player.x < enemy.x + enemy.width && player.x + player.width > enemy.x && player.y < enemy.y + enemy.height && player.y + player.height > enemy.y) player.takeDamage(); });
         for (let i = bullets.length - 1; i >= 0; i--) { const bullet = bullets[i]; if (bullet.x < player.x + player.width && bullet.x + bullet.width > player.x && bullet.y < player.y + player.height && bullet.y + bullet.height > player.y) { player.takeDamage(); bullets.splice(i, 1); break; } }
-        gems.forEach((gem, index) => { if (player.x < gem.x + gem.width && player.x + player.width > gem.x && player.y < gem.y + gem.height && player.y + player.height > gem.y) { score += 50; gems.splice(index, 1); } });
+        gems.forEach((gem, index) => { if (player.x < gem.x + gem.width && player.x + player.width > gem.x && player.y < gem.y + gem.height && player.y + player.height > gem.y) {
+            score += 50; gems.splice(index, 1); playSound('collect.mp3');
+        }});
         for (let i = bullets.length - 1; i >= 0; i--) { const bullet = bullets[i]; let hit = false; for (let j = rainbows.length - 1; j >= 0; j--) { const rainbow = rainbows[j]; for (const point of rainbow.path) { if (bullet.x < point.x + rainbow.height/2 && bullet.x + bullet.width > point.x - rainbow.height/2 && bullet.y < point.y + rainbow.height/2 && bullet.y + bullet.height > point.y - rainbow.height/2) { bullets.splice(i, 1); rainbows.splice(j, 1); hit = true; break; } } if (hit) break; } }
-        for (let i = fruits.length - 1; i >= 0; i--) { const fruit = fruits[i]; if (player.x < fruit.x + fruit.width && player.x + player.width > fruit.x && player.y < fruit.y + fruit.height && player.y + player.height > fruit.y) { score += 200; fruits.splice(i, 1); } }
+        for (let i = fruits.length - 1; i >= 0; i--) { const fruit = fruits[i]; if (player.x < fruit.x + fruit.width && player.x + player.width > fruit.x && player.y < fruit.y + fruit.height && player.y + player.height > fruit.y) {
+            score += 200; fruits.splice(i, 1); playSound('collect.mp3');
+        }}
         for (const fruit of fruits) { if (fruit.dy >= 0 && !fruit.onPlatform) { for (const p of platforms) { if (fruit.x + fruit.width > p.x && fruit.x < p.x + p.width && fruit.y + fruit.height > p.y && fruit.y + fruit.height < p.y + p.height + fruit.dy) { fruit.dy = 0; fruit.y = p.y - fruit.height; fruit.onPlatform = true; fruit.platform = p; break; } } } }
     }
 
-    function drawStartScreen() {
-        ctx.fillStyle = '#4ab4ff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = 'white';
-        ctx.textAlign = 'center';
-        ctx.font = '48px "Courier New"';
+    function drawStartScreen() { /* ... (no changes) ... */
+        ctx.fillStyle = '#4ab4ff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.font = '48px "Courier New"';
         ctx.fillText('Rainbow Islands', canvas.width / 2, canvas.height / 2 - 40);
-        ctx.font = '24px "Courier New"';
-        ctx.fillText('Press Enter to Start', canvas.width / 2, canvas.height / 2 + 10);
+        ctx.font = '24px "Courier New"'; ctx.fillText('Press Enter to Start', canvas.width / 2, canvas.height / 2 + 10);
     }
 
-    function drawUI() {
-        ctx.fillStyle = 'white'; ctx.font = '24px "Courier New"'; ctx.textAlign = 'left';
-        ctx.fillText(`SCORE: ${score}`, 10, 30);
-        ctx.fillText(`LIVES: ${lives}`, canvas.width - 120, 30);
-        if (gameState === 'gameover') {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.font = '48px "Courier New"';
-            ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 40);
-            ctx.font = '24px "Courier New"';
-            ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 10);
-            ctx.fillText('Press Enter to Play Again', canvas.width / 2, canvas.height / 2 + 50);
-        }
+    function drawUI() { /* ... (no changes) ... */
+        ctx.fillStyle = 'white'; ctx.font = '24px "Courier New"'; ctx.textAlign = 'left'; ctx.fillText(`SCORE: ${score}`, 10, 30); ctx.fillText(`LIVES: ${lives}`, canvas.width - 120, 30);
+        if (gameState === 'gameover') { ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.font = '48px "Courier New"'; ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 40); ctx.font = '24px "Courier New"'; ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 10); ctx.fillText('Press Enter to Play Again', canvas.width / 2, canvas.height / 2 + 50); }
     }
     
     function gameLoop() {
         if (gameState === 'playing') {
-            // UPDATE
             player.update();
             platforms.forEach(p => p.update()); enemies.forEach(e => e.update());
             rainbows.forEach(r => r.update()); gems.forEach(g => g.update());
             bullets.forEach(b => b.update()); fruits.forEach(f => f.update());
             clouds.forEach(c => c.update());
-
             const groundPlatformGone = cameraY < canvas.height - 40;
             if (groundPlatformGone) { fruitSpawnTimer--; if (fruitSpawnTimer <= 0) { const spawnX = Math.random() * (canvas.width - 20); fruits.push(new Fruit(spawnX, cameraY - 20)); fruitSpawnTimer = Math.random() * 240 + 180; } }
-
             rainbows = rainbows.filter(r => r.lifespan > 0); gems = gems.filter(g => g.lifespan > 0);
             bullets = bullets.filter(b => b.y < cameraY + canvas.height && b.y > cameraY);
             fruits = fruits.filter(f => f.y < cameraY + canvas.height);
-            
             checkCollisions();
-            if (player.y < cameraY + canvas.height / 3) cameraY = player.y - canvas.height / 3;
+
+            // *** THIS IS THE CORRECTED LINE ***
+            if (player.y < cameraY + canvas.height / 3) {
+                cameraY = player.y - canvas.height / 3;
+            }
             
-            // DRAW
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.fillStyle = '#4ab4ff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
             clouds.forEach(c => c.draw()); platforms.forEach(p => p.draw());
@@ -202,9 +187,8 @@
         } else if (gameState === 'start') {
             drawStartScreen();
         } else if (gameState === 'gameover') {
-            drawUI(); // This will show the game over screen
+            drawUI();
         }
-        
         requestAnimationFrame(gameLoop);
     }
 
@@ -212,6 +196,7 @@
     window.addEventListener('keydown', (e) => {
         if (gameState === 'start' && e.key === 'Enter') {
             gameState = 'playing';
+            bgMusic.volume = 0.75;
             bgMusic.play().catch(error => console.log("Audio play failed: " + error));
             startGame();
             return;
@@ -226,16 +211,11 @@
             if (e.key === 'ArrowUp') { e.preventDefault(); player.jump(); }
         }
     });
-    window.addEventListener('keyup', (e) => {
-        if (gameState === 'playing') {
-            if (keys.hasOwnProperty(e.key)) { e.preventDefault(); keys[e.key] = false; }
-            if (e.code === 'Space') { e.preventDefault(); player.canShoot = true; }
-        }
-    });
-    window.addEventListener('blur', () => { keys.ArrowLeft = false; keys.ArrowRight = false; keys.ArrowUp = false; keys.Space = false; player.canShoot = true; });
+    window.addEventListener('keyup', (e) => { if (gameState === 'playing') { if (keys.hasOwnProperty(e.key)) { e.preventDefault(); keys[e.key] = false; } if (e.code === 'Space') { e.preventDefault(); player.canShoot = true; } } });
+    window.addEventListener('blur', () => { keys.ArrowLeft = false; keys.ArrowRight = false; keys.ArrowUp = false; keys.Space = false; if (player) player.canShoot = true; });
 
     // --- 5. START GAME ---
-    gameLoop(); // Start the loop immediately to show the start screen
+    gameLoop();
 
     </script>
 </body>

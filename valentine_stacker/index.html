@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Valentine's Tetris</title>
+    <style>
+        /* CSS STYLING */
+        body {
+            background-color: #ffeff2;
+            color: #8b0000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+
+        h1 {
+            margin-bottom: 5px;
+            font-weight: normal;
+            font-style: italic;
+            text-shadow: 1px 1px 2px rgba(255, 100, 100, 0.2);
+        }
+
+        #game-container {
+            position: relative;
+            box-shadow: 0 10px 30px rgba(255, 0, 0, 0.15);
+            border-radius: 20px;
+            overflow: hidden;
+            background-color: #fff0f5;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        .controls {
+            margin-top: 10px;
+            text-align: center;
+            font-size: 13px;
+            color: #d6336c;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>♥ Valentine's Stacker ♥</h1>
+
+    <div id="game-container">
+        <canvas id="tetris" width="600" height="600"></canvas>
+    </div>
+
+    <div class="controls">
+        <p><strong>A/D</strong>: Move Left/Right | <strong>S</strong>: Move Down | <strong>O/P</strong>: Rotate</p>
+        <p><strong>Space</strong>: Drop | <strong>Enter</strong>: Pause | <strong>M</strong>: Toggle Music</p>
+    </div>
+
+<script>
+/* ==========================================
+   GAME SETUP & AUDIO
+   ========================================== */
+
+const canvas = document.getElementById('tetris');
+const context = canvas.getContext('2d');
+
+// Scale: 25px per block unit.
+// Canvas: 600px / 25 = 24 units wide.
+// Play Area: 12 units wide x 18 units high.
+context.scale(25, 25); 
+
+// Audio Setup
+const bgMusic = new Audio('heart.mp3');
+bgMusic.loop = true;
+bgMusic.volume = 0.85;
+
+// Game State
+let dropCounter = 0;
+let dropInterval = 1000;
+let lastTime = 0;
+let score = 0;
+let level = 0; 
+let linesClearedTotal = 0;
+let isGameStarted = false; // New Start Screen State
+let isGameOver = false;
+let isGameWon = false;
+let isPaused = false;
+let winTimestamp = 0; 
+
+// Arrays for visual effects
+let particles = []; 
+let decorativeHearts = []; 
+
+/* ==========================================
+   SHAPES & DATA
+   ========================================== */
+
+const pieces = 'ILJOTSZ';
+
+function createPiece(type) {
+    if (type === 'I') {
+        return [[0, 1, 0, 0],[0, 1, 0, 0],[0, 1, 0, 0],[0, 1, 0, 0]];
+    } else if (type === 'L') {
+        return [[0, 1, 0],[0, 1, 0],[0, 1, 1]];
+    } else if (type === 'J') {
+        return [[0, 1, 0],[0, 1, 0],[1, 1, 0]];
+    } else if (type === 'O') {
+        return [[1, 1],[1, 1]];
+    } else if (type === 'Z') {
+        return [[1, 1, 0],[0, 1, 1],[0, 0, 0]];
+    } else if (type === 'S') {
+        return [[0, 1, 1],[1, 1, 0],[0, 0, 0]];
+    } else if (type === 'T') {
+        return [[0, 1, 0],[1, 1, 1],[0, 0, 0]];
+    }
+}
+
+function createMatrix(w, h) {
+    const matrix = [];
+    while (h--) matrix.push(new Array(w).fill(0));
+    return matrix;
+}
+
+/* ==========================================
+   DRAWING FUNCTIONS
+   ========================================== */
+
+function draw() {
+    // Fill background
+    context.fillStyle = '#fff0f5'; 
+    context.fillRect(0, 0, canvas.width, canvas.height);
+
+    // 1. Check if we are on the Start Screen
+    if (!isGameStarted) {
+        drawStartScreen();
+        return;
+    }
+
+    // 2. Draw Game Elements
+    drawStarFloor();
+    drawMatrix(arena, {x: 0, y: 0});
+
+    // Draw Active Player Piece (only if running normally)
+    if (!isGameOver && !isPaused && !isGameWon) {
+        drawMatrix(player.matrix, player.pos);
+    } else if (isPaused) {
+        drawMatrix(player.matrix, player.pos);
+    }
+
+    drawParticles();
+    drawUI();
+
+    // 3. Overlays
+    if (isGameWon) {
+        drawWinScreen();
+    } else if (isPaused) {
+        drawPauseScreen();
+    }
+}
+
+function drawStartScreen() {
+    const time = Date.now();
+    const pulse = 1 + Math.sin(time * 0.005) * 0.1;
+
+    context.textAlign = 'center';
+    
+    // Title
+    context.fillStyle = '#8b0000';
+    context.font = '2px "Segoe UI"';
+    context.fillText("Valentine's", 12, 6);
+    context.fillText("Stacker", 12, 8.5);
+
+    // Pulsating Heart
+    context.save();
+    context.translate(12, 12);
+    context.scale(pulse * 4, pulse * 4);
+    context.fillStyle = '#ff4d6d';
+    context.beginPath();
+    context.moveTo(0, -0.3);
+    context.bezierCurveTo(0, -0.6, -1, -0.6, -1, 0);
+    context.bezierCurveTo(-1, 0.6, 0, 1, 0, 1.2);
+    context.bezierCurveTo(0, 1, 1, 0.6, 1, 0);
+    context.bezierCurveTo(1, -0.6, 0, -0.6, 0, -0.3);
+    context.fill();
+    context.restore();
+
+    // Press Key Text
+    // Blink effect
+    const blink = Math.abs(Math.sin(time * 0.003));
+    context.globalAlpha = 0.5 + (blink * 0.5);
+    context.fillStyle = '#d6336c';
+    context.font = '1px "Segoe UI"';
+    context.fillText("Press any key to start", 12, 17);
+    context.globalAlpha = 1.0;
+}
+
+function drawMatrix(matrix, offset) {
+    matrix.forEach((row, y) => {
+        row.forEach((value, x) => {
+            if (value !== 0) {
+                drawHeartBlock(x + offset.x, y + offset.y);
+            }
+        });
+    });
+}
+
+function drawHeartBlock(x, y) {
+    context.fillStyle = '#ff4d6d'; 
+    context.save();
+    context.translate(x, y);
+    
+    // Draw Heart
+    context.beginPath();
+    context.scale(0.04, 0.04); 
+    context.translate(12.5, 12.5);
+    context.moveTo(12.5, 7.5);
+    context.bezierCurveTo(12.5, 6.7, 10, 5, 6.25, 5);
+    context.bezierCurveTo(1.25, 5, 1.25, 10.6, 1.25, 10.6);
+    context.bezierCurveTo(1.25, 13.75, 5, 16.75, 12.5, 20);
+    context.bezierCurveTo(20, 16.75, 23.75, 13.75, 23.75, 10.6);
+    context.bezierCurveTo(23.75, 10.6, 23.75, 5, 18.75, 5);
+    context.bezierCurveTo(15, 5, 12.5, 6.7, 12.5, 7.5);
+    context.fill();
+    
+    // Shine
+    context.fillStyle = "rgba(255,255,255,0.4)";
+    context.beginPath();
+    context.arc(7, 8, 2, 0, Math.PI * 2);
+    context.fill();
+
+    context.restore();
+}
+
+function drawFivePointStar(cx, cy, spikes, outerRadius, innerRadius) {
+    let rot = Math.PI / 2 * 3;
+    let x = cx;
+    let y = cy;
+    let step = Math.PI / spikes;
+
+    context.beginPath();
+    context.moveTo(cx, cy - outerRadius);
+    for (let i = 0; i < spikes; i++) {
+        x = cx + Math.cos(rot) * outerRadius;
+        y = cy + Math.sin(rot) * outerRadius;
+        context.lineTo(x, y);
+        rot += step;
+
+        x = cx + Math.cos(rot) * innerRadius;
+        y = cy + Math.sin(rot) * innerRadius;
+        context.lineTo(x, y);
+        rot += step;
+    }
+    context.lineTo(cx, cy - outerRadius);
+    context.closePath();
+    context.fill();
+}
+
+function drawStarFloor() {
+    const time = Date.now() / 500;
+    context.fillStyle = "rgba(255, 255, 255, 0.3)";
+    context.fillRect(0, 18, 12, 6);
+
+    for(let y = 18; y < 24; y++) {
+        for(let x = 0; x < 12; x++) {
+            let noise = Math.sin(x * 123 + y * 321);
+            if(noise > 0.3) { 
+                context.save();
+                context.translate(x + 0.5, y + 0.5);
+                let size = 0.15 + Math.abs(Math.sin(time + x + y)) * 0.1;
+                context.fillStyle = "#ffb7b2";
+                drawFivePointStar(0, 0, 5, size, size/2);
+                context.restore();
+            }
+        }
+    }
+}
+
+function drawUI() {
+    context.fillStyle = '#ffe4e1'; 
+    context.fillRect(12.5, 0, 11.5, 24); 
+
+    context.fillStyle = '#8b0000';
+    context.textAlign = 'center';
+    
+    const centerX = 18.25;
+    let yPos = 2;
+
+    // NEXT BLOCK
+    context.font = '1px "Segoe UI"'; 
+    context.fillText('NEXT', centerX, yPos);
+    yPos += 1;
+    if(player.next) {
+        const pieceWidth = player.next[0].length;
+        const nextOffsetX = centerX - (pieceWidth / 2);
+        drawMatrix(player.next, {x: nextOffsetX, y: yPos});
+    }
+
+    // LEVEL
+    yPos += 5;
+    context.font = '1px "Segoe UI"';
+    context.fillText('LEVEL', centerX, yPos);
+    context.font = '1.5px "Segoe UI"';
+    context.fillText(level, centerX, yPos + 1.5);
+
+    // LINES
+    yPos += 4;
+    context.font = '1px "Segoe UI"';
+    context.fillText('LINES', centerX, yPos);
+    context.font = '1.2px "Segoe UI"';
+    context.fillText(linesClearedTotal, centerX, yPos + 1.5);
+
+    // SCORE
+    yPos += 4;
+    context.font = '1px "Segoe UI"';
+    context.fillText('SCORE', centerX, yPos);
+    context.font = '1.2px "Segoe UI"';
+    context.fillText(score, centerX, yPos + 1.5);
+    
+    updateAndDrawAmbientHearts(centerX);
+}
+
+function drawPauseScreen() {
+    context.fillStyle = 'rgba(255, 240, 245, 0.7)';
+    context.fillRect(0, 0, 12, 18); 
+    
+    context.fillStyle = '#8b0000';
+    context.font = '2px "Segoe UI"';
+    context.textAlign = 'center';
+    context.fillText("PAUSED", 6, 9);
+    context.font = '0.8px "Segoe UI"';
+    context.fillText("Press Enter to Resume", 6, 10.5);
+}
+
+function drawWinScreen() {
+    context.fillStyle = 'rgba(255, 240, 245, 0.9)';
+    context.fillRect(0, 0, 12, 18);
+
+    const time = Date.now();
+    const cx = 6;  
+    const cy = 9;  
+    
+    context.save();
+    context.translate(cx, cy);
+
+    // Pulsating Heart
+    const pulse = 1 + Math.sin(time * 0.005) * 0.2; 
+    
+    context.save();
+    context.scale(pulse * 6, pulse * 6); 
+    context.fillStyle = '#ff4d6d';
+    context.beginPath();
+    context.moveTo(0, -0.3);
+    context.bezierCurveTo(0, -0.6, -1, -0.6, -1, 0);
+    context.bezierCurveTo(-1, 0.6, 0, 1, 0, 1.2);
+    context.bezierCurveTo(0, 1, 1, 0.6, 1, 0);
+    context.bezierCurveTo(1, -0.6, 0, -0.6, 0, -0.3);
+    context.fill();
+    context.restore(); 
+
+    // Rotating Text
+    context.save();
+    context.rotate(time * 0.001); 
+    
+    context.font = '0.8px "Segoe UI"';
+    context.fillStyle = '#8b0000';
+    context.textAlign = 'center';
+
+    const radius = 4;
+    context.fillText("CONGRATULATIONS", 0, -radius);
+    context.fillText("♥", 0, radius);
+    
+    context.rotate(Math.PI / 2);
+    context.fillText("♥", 0, -radius);
+    context.rotate(Math.PI / 2);
+    context.fillText("YOU WON!", 0, -radius);
+    context.rotate(Math.PI / 2);
+    context.fillText("♥", 0, -radius);
+
+    context.restore(); 
+
+    // "Play Again" Prompt
+    if (Date.now() - winTimestamp > 2000) {
+        context.font = '0.6px "Segoe UI"';
+        context.fillStyle = '#d6336c';
+        context.fillText("Press any key to play again", 0, 6);
+    }
+
+    context.restore(); 
+}
+
+/* ==========================================
+   PARTICLE EFFECTS
+   ========================================== */
+
+function explodeHearts(yPos) {
+    for (let i = 0; i < 30; i++) {
+        createParticle((Math.random() * 12), yPos + Math.random(), true);
+    }
+}
+
+function triggerGameOver() {
+    isGameOver = true;
+    arena.forEach((row, y) => {
+        row.forEach((value, x) => {
+            if (value !== 0) {
+                for(let k=0; k<4; k++) {
+                    createParticle(x + Math.random(), y + Math.random(), false);
+                }
+            }
+        });
+    });
+    arena.forEach(row => row.fill(0));
+}
+
+function triggerWin() {
+    isGameWon = true;
+    winTimestamp = Date.now();
+    arena.forEach(row => row.fill(0));
+}
+
+function createParticle(x, y, isExplosion) {
+    particles.push({
+        x: x,
+        y: y,
+        vx: (Math.random() - 0.5) * (isExplosion ? 0.8 : 0.5), 
+        vy: isExplosion ? (Math.random() - 1) * 0.5 : (Math.random() * 0.5), 
+        life: 1.0,
+        decay: isExplosion ? 0.02 : 0.005, 
+        color: `hsl(${340 + Math.random() * 20}, 100%, 60%)`,
+        gravity: 0.02
+    });
+}
+
+function drawParticles() {
+    for (let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        
+        if ((!isPaused && isGameStarted) || isGameOver) {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += p.gravity;
+            p.life -= p.decay;
+        }
+
+        if(p.life <= 0) {
+            particles.splice(i, 1);
+        } else {
+            context.globalAlpha = p.life;
+            context.fillStyle = p.color;
+            context.beginPath();
+            context.arc(p.x, p.y, 0.2, 0, Math.PI*2);
+            context.fill();
+            context.globalAlpha = 1;
+        }
+    }
+
+    if (isGameOver && particles.length === 0 && !isGameWon) {
+        startNewGame();
+    }
+}
+
+function updateAndDrawAmbientHearts(centerX) {
+    if(isPaused || isGameWon || !isGameStarted) return; 
+
+    if (Math.random() < 0.05) {
+        decorativeHearts.push({
+            x: centerX, 
+            y: 24, 
+            vy: -0.05 - Math.random() * 0.05,
+            size: 0.5 + Math.random() * 0.5,
+            life: 1
+        });
+    }
+
+    decorativeHearts.forEach((h, index) => {
+        h.y += h.vy;
+        h.life -= 0.005;
+        if(h.life <= 0) decorativeHearts.splice(index, 1);
+        else {
+            context.globalAlpha = h.life;
+            drawHeartBlock(h.x, h.y); 
+            context.globalAlpha = 1;
+        }
+    });
+}
+
+/* ==========================================
+   GAME LOGIC
+   ========================================== */
+
+function collide(arena, player) {
+    const m = player.matrix;
+    const o = player.pos;
+    for (let y = 0; y < m.length; ++y) {
+        for (let x = 0; x < m[y].length; ++x) {
+            if (m[y][x] !== 0 &&
+               (arena[y + o.y] && arena[y + o.y][x + o.x]) !== 0) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+function merge(arena, player) {
+    player.matrix.forEach((row, y) => {
+        row.forEach((value, x) => {
+            if (value !== 0) {
+                if (arena[y + player.pos.y] && arena[y + player.pos.y][x + player.pos.x] !== undefined) {
+                    arena[y + player.pos.y][x + player.pos.x] = value;
+                }
+            }
+        });
+    });
+}
+
+function rotate(matrix, dir) {
+    for (let y = 0; y < matrix.length; ++y) {
+        for (let x = 0; x < y; ++x) {
+            [matrix[x][y], matrix[y][x]] = [matrix[y][x], matrix[x][y]];
+        }
+    }
+    if (dir > 0) matrix.forEach(row => row.reverse());
+    else matrix.reverse();
+}
+
+function arenaSweep() {
+    let rowCount = 0;
+    outer: for (let y = arena.length - 1; y > 0; --y) {
+        for (let x = 0; x < arena[y].length; ++x) {
+            if (arena[y][x] === 0) continue outer;
+        }
+        const row = arena.splice(y, 1)[0].fill(0);
+        arena.unshift(row);
+        ++y;
+        rowCount++;
+    }
+
+    if (rowCount > 0) {
+        linesClearedTotal += rowCount;
+        if (rowCount === 4) {
+            score += 1000;
+            explodeHearts(10); 
+        } else {
+            score += rowCount * 100;
+        }
+        
+        // WIN CONDITION CHECK
+        if (linesClearedTotal >= 100) {
+            triggerWin();
+            return;
+        }
+
+        // LEVEL & SPEED LOGIC
+        const newLevel = Math.floor(linesClearedTotal / 10);
+        
+        if (newLevel > level) {
+            level = newLevel;
+            dropInterval = 1000 * Math.pow(0.95, level);
+        }
+    }
+}
+
+function playerReset() {
+    if (!player.next) {
+        player.next = createPiece(pieces[pieces.length * Math.random() | 0]);
+    }
+    player.matrix = player.next;
+    player.next = createPiece(pieces[pieces.length * Math.random() | 0]);
+    player.pos.y = 0;
+    player.pos.x = (arena[0].length / 2 | 0) - (player.matrix[0].length / 2 | 0);
+
+    if (collide(arena, player)) {
+        triggerGameOver();
+    }
+}
+
+function startNewGame() {
+    arena.forEach(row => row.fill(0));
+    score = 0;
+    level = 0;
+    linesClearedTotal = 0;
+    dropInterval = 1000;
+    isGameOver = false;
+    isPaused = false;
+    isGameWon = false;
+    playerReset();
+}
+
+function playerDrop() {
+    player.pos.y++;
+    if (collide(arena, player)) {
+        player.pos.y--;
+        merge(arena, player);
+        playerReset();
+        if (!isGameWon) {
+            arenaSweep();
+        }
+    }
+    dropCounter = 0;
+}
+
+function playerHardDrop() {
+    while (!collide(arena, player)) {
+        player.pos.y++;
+    }
+    player.pos.y--;
+    merge(arena, player);
+    playerReset();
+    if (!isGameWon) {
+        arenaSweep();
+    }
+    dropCounter = 0;
+}
+
+function playerMove(dir) {
+    player.pos.x += dir;
+    if (collide(arena, player)) {
+        player.pos.x -= dir;
+    }
+}
+
+function playerRotate(dir) {
+    const pos = player.pos.x;
+    let offset = 1;
+    rotate(player.matrix, dir);
+    while (collide(arena, player)) {
+        player.pos.x += offset;
+        offset = -(offset + (offset > 0 ? 1 : -1));
+        if (offset > player.matrix[0].length) {
+            rotate(player.matrix, -dir);
+            player.pos.x = pos;
+            return;
+        }
+    }
+}
+
+function update(time = 0) {
+    const deltaTime = time - lastTime;
+    lastTime = time;
+
+    // Logic Loop
+    if (isGameStarted && !isGameOver && !isPaused && !isGameWon) {
+        dropCounter += deltaTime;
+        if (dropCounter > dropInterval) {
+            playerDrop();
+        }
+    }
+
+    draw();
+    requestAnimationFrame(update);
+}
+
+/* ==========================================
+   INPUTS
+   ========================================== */
+
+const arena = createMatrix(12, 18);
+
+const player = {
+    pos: {x: 0, y: 0},
+    matrix: null,
+    next: null,
+    score: 0,
+};
+
+document.addEventListener('keydown', event => {
+    
+    // 0. START SCREEN Logic
+    if (!isGameStarted) {
+        isGameStarted = true;
+        bgMusic.play().catch(e => console.log("Audio play failed (user interaction needed): ", e));
+        startNewGame();
+        return;
+    }
+
+    // 1. Toggle Music (M key)
+    if (event.keyCode === 77) { // M
+        if (bgMusic.paused) {
+            bgMusic.play();
+        } else {
+            bgMusic.pause();
+        }
+        return;
+    }
+
+    // 2. Win Screen Interaction
+    if (isGameWon) {
+        if (Date.now() - winTimestamp > 2000) {
+            startNewGame();
+        }
+        return;
+    }
+
+    // 3. Pause
+    if (event.keyCode === 13) { // Enter
+        if(!isGameOver) {
+            isPaused = !isPaused;
+        }
+        return;
+    }
+
+    // 4. Gameplay Inputs
+    if(isGameOver || isPaused) return; 
+
+    if (event.keyCode === 65) { // A
+        playerMove(-1);
+    } else if (event.keyCode === 68) { // D
+        playerMove(1);
+    } else if (event.keyCode === 83) { // S
+        playerDrop();
+    } else if (event.keyCode === 79) { // O
+        playerRotate(-1);
+    } else if (event.keyCode === 80) { // P
+        playerRotate(1);
+    } else if (event.keyCode === 32) { // Space
+        playerHardDrop();
+    }
+});
+
+// Initial Loop Start
+update();
+
+</script>
+</body>
+</html>

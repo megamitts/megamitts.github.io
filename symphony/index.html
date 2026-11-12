@@ -1,0 +1,1225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Symphonia Cosmica No. 1 in C — p5.js & Tone.js</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Inter:wght@300;400;600&display=swap');
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #030308;
+      font-family: 'Inter', sans-serif;
+      color: #fff;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    /* Intro Overlay */
+    #overlay {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle at center, rgba(16, 18, 40, 0.92) 0%, rgba(3, 3, 8, 0.98) 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      transition: opacity 1.2s ease, visibility 1.2s ease;
+      text-align: center;
+      padding: 20px;
+    }
+
+    #overlay.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .symphony-subtitle {
+      font-size: 0.85rem;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      color: #8fa8ff;
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      font-family: 'Cinzel', serif;
+      font-size: clamp(2rem, 5vw, 4rem);
+      font-weight: 700;
+      margin: 0 0 16px 0;
+      letter-spacing: 0.08em;
+      background: linear-gradient(135deg, #ffffff 0%, #b8caff 50%, #ffd280 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 0 40px rgba(140, 170, 255, 0.3);
+    }
+
+    .description {
+      max-width: 540px;
+      font-weight: 300;
+      line-height: 1.6;
+      color: rgba(255, 255, 255, 0.72);
+      margin-bottom: 36px;
+      font-size: 0.98rem;
+    }
+
+    #start-btn {
+      font-family: 'Cinzel', serif;
+      font-size: 1.1rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      padding: 16px 42px;
+      color: #fff;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(190, 210, 255, 0.45);
+      border-radius: 50px;
+      cursor: pointer;
+      transition: all 0.35s ease;
+      box-shadow: 0 0 25px rgba(120, 150, 255, 0.2);
+      backdrop-filter: blur(8px);
+    }
+
+    #start-btn:hover {
+      background: rgba(160, 190, 255, 0.2);
+      border-color: #ffd280;
+      box-shadow: 0 0 40px rgba(255, 210, 128, 0.45);
+      transform: translateY(-2px) scale(1.03);
+    }
+
+    /* HUD */
+    #hud {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 24px 32px;
+      z-index: 10;
+      opacity: 0;
+      transition: opacity 1.5s ease;
+    }
+
+    #hud.visible {
+      opacity: 1;
+    }
+
+    .hud-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .movement-info {
+      text-shadow: 0 2px 12px rgba(0,0,0,0.8);
+    }
+
+    .work-title {
+      font-size: 0.72rem;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.5);
+      margin-bottom: 4px;
+    }
+
+    #movement-title {
+      font-family: 'Cinzel', serif;
+      font-size: clamp(1.1rem, 2.2vw, 1.65rem);
+      letter-spacing: 0.06em;
+      color: #fff;
+      transition: color 0.5s ease;
+    }
+
+    #harmony-readout {
+      margin-top: 6px;
+      font-size: 0.85rem;
+      letter-spacing: 0.14em;
+      color: rgba(255, 220, 150, 0.85);
+      font-weight: 400;
+    }
+
+    .conductor-tips {
+      text-align: right;
+      font-size: 0.75rem;
+      letter-spacing: 0.08em;
+      color: rgba(255, 255, 255, 0.45);
+      line-height: 1.6;
+    }
+
+    .hud-bottom {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 8px;
+      pointer-events: auto;
+      flex-wrap: wrap;
+    }
+
+    .ctrl-btn {
+      background: rgba(12, 15, 30, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      color: rgba(255, 255, 255, 0.75);
+      padding: 8px 14px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      cursor: pointer;
+      backdrop-filter: blur(6px);
+      transition: all 0.25s ease;
+    }
+
+    .ctrl-btn:hover {
+      border-color: rgba(255, 255, 255, 0.6);
+      color: #fff;
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .ctrl-btn.active {
+      border-color: #ffd280;
+      color: #ffd280;
+      background: rgba(255, 210, 128, 0.14);
+      box-shadow: 0 0 15px rgba(255, 210, 128, 0.25);
+    }
+
+    .progress-wrap {
+      flex: 1;
+      max-width: 320px;
+      min-width: 160px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
+    }
+
+    #bar-counter {
+      font-size: 0.72rem;
+      letter-spacing: 0.18em;
+      color: rgba(255, 255, 255, 0.5);
+      text-transform: uppercase;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 3px;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    #progress-fill {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, #7aa2ff, #ffd280);
+      transition: width 0.15s linear;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Intro Screen -->
+  <div id="overlay">
+    <div class="symphony-subtitle">Generative Audiovisual Orchestra</div>
+    <h1>Symphonia Cosmica</h1>
+    <p class="description">
+      An interactive four-movement synthesizer symphony in C Minor &amp; C Lydian.<br/>
+      Move your cursor to conduct orchestral dynamics and filter brilliance. Click the cosmos to unleash harmonic cascades.
+    </p>
+    <button id="start-btn">Raise the Baton</button>
+  </div>
+
+  <!-- Heads Up Display -->
+  <div id="hud">
+    <div class="hud-top">
+      <div class="movement-info">
+        <div class="work-title">Opus 1 &bull; Symphony of the Spheres</div>
+        <div id="movement-title">I. Adagio Sostenuto — Genesis Mist</div>
+        <div id="harmony-readout">Chord: Cm9 &bull; Dynamics: mf</div>
+      </div>
+      <div class="conductor-tips">
+        <div>CURSOR Y &mdash; Expression &amp; Filter Brilliance</div>
+        <div>CURSOR X &mdash; Orbital Warp &amp; Stereo Space</div>
+        <div>CLICK &mdash; Sforzando Celestial Cascade</div>
+      </div>
+    </div>
+
+    <div class="hud-bottom">
+      <div class="controls" id="controls-bar">
+        <button class="ctrl-btn active" data-mov="0">Mov I</button>
+        <button class="ctrl-btn" data-mov="1">Mov II</button>
+        <button class="ctrl-btn" data-mov="2">Mov III</button>
+        <button class="ctrl-btn" data-mov="3">Mov IV</button>
+        <button class="ctrl-btn" id="play-pause-btn">Pause</button>
+      </div>
+      <div class="progress-wrap">
+        <div id="bar-counter">Measure 1 / 32</div>
+        <div class="progress-track">
+          <div id="progress-fill"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // =========================================================================
+    // MUSICAL SCORE & SYMPHONIC ARCHITECTURE (32 Measures across 4 Movements)
+    // =========================================================================
+    const PITCH_NAMES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
+    const NOTE_TO_PC = {
+      "C": 0, "B#": 0, "C#": 1, "Db": 1, "D": 2, "D#": 3, "Eb": 3,
+      "E": 4, "Fb": 4, "F": 5, "E#": 5, "F#": 6, "Gb": 6, "G": 7,
+      "G#": 8, "Ab": 8, "A": 9, "A#": 10, "Bb": 10, "B": 11, "Cb": 11
+    };
+
+    function getPitchClass(note) {
+      if (!note) return 0;
+      const match = note.match(/^([A-G][b#]?)/);
+      return match ? (NOTE_TO_PC[match[1]] ?? 0) : 0;
+    }
+
+    const MOVEMENTS = [
+      {
+        index: 0,
+        title: "I. Adagio Sostenuto — Genesis Mist",
+        bpm: 88,
+        palette: { hueBase: 222, hueAccent: 185, sat: 78 }, // Deep Cosmic Blue & Cyan
+        warpSpeed: 0.4
+      },
+      {
+        index: 1,
+        title: "II. Allegro Con Brio — Orbital Resonance",
+        bpm: 108,
+        palette: { hueBase: 162, hueAccent: 45, sat: 82 },  // Emerald Nebula & Starlight Gold
+        warpSpeed: 1.3
+      },
+      {
+        index: 2,
+        title: "III. Scherzo Furioso — Event Horizon",
+        bpm: 126,
+        palette: { hueBase: 348, hueAccent: 278, sat: 90 }, // Crimson Gravity & Violet Plasma
+        warpSpeed: 2.8
+      },
+      {
+        index: 3,
+        title: "IV. Finale Maestoso — Supernova Ascension",
+        bpm: 102,
+        palette: { hueBase: 42, hueAccent: 305, sat: 85 },  // Celestial Gold, White & Magenta
+        warpSpeed: 1.9
+      }
+    ];
+
+    // 32-Bar Full Symphonic Progression
+    // Each entry defines 1 measure (16 steps of 16th notes)
+    const SCORE = [
+      // ---------------- MOVEMENT I: ADAGIO (Bars 0-7) ----------------
+      { mov: 0, name: "Cm9",      bass: "C2",  timp: "C1", pad: ["C3","G3","Bb3","D4","Eb4"], arp: ["C4","D4","Eb4","G4","Bb4","D5"], lead: { 0: "G4" } },
+      { mov: 0, name: "Cm9",      bass: null,  timp: null, pad: null,                         arp: ["C4","Eb4","G4","Bb4","D5","G5"], lead: { 8: "F4", 12: "Eb4" } },
+      { mov: 0, name: "Abmaj9",   bass: "Ab1", timp: null, pad: ["Ab2","Eb3","G3","Bb3","C4"],arp: ["Ab3","C4","Eb4","G4","Bb4","C5"],lead: { 0: "Eb4", 10: "G4" } },
+      { mov: 0, name: "Abmaj9",   bass: null,  timp: null, pad: null,                         arp: ["C4","Eb4","G4","Bb4","C5","Eb5"],lead: { 4: "Bb4" } },
+      { mov: 0, name: "Fm11",     bass: "F1",  timp: "F1", pad: ["F2","C3","Eb3","Ab3","Bb3"],arp: ["F3","Ab3","C4","Eb4","G4","Bb4"],lead: { 0: "Ab4", 8: "G4", 12: "F4" } },
+      { mov: 0, name: "Fm9",      bass: null,  timp: null, pad: null,                         arp: ["Ab3","C4","Eb4","G4","C5","Eb5"],lead: { 4: "Eb4", 12: "D4" } },
+      { mov: 0, name: "Gsus4",    bass: "G1",  timp: "G1", pad: ["G2","D3","F3","C4","D4"],   arp: ["G3","C4","D4","F4","G4","C5"],   lead: { 0: "D4" } },
+      { mov: 0, name: "G7b9",     bass: "G1",  timp: "G1", pad: ["G2","B2","F3","Ab3","D4"],  arp: ["G3","B3","D4","F4","Ab4","B4"],  lead: { 4: "F4", 8: "Ab4", 12: "B4" }, crash: true },
+
+      // ---------------- MOVEMENT II: ALLEGRO (Bars 8-15) ----------------
+      { mov: 1, name: "Cm11",     bass: "C2",  timp: "C2", pad: ["C3","G3","Bb3","D4","F4"],  arp: ["C4","Eb4","G4","Bb4","D5","F5"], lead: { 0: "C5", 6: "Bb4", 8: "G4", 12: "Bb4" }, crash: true },
+      { mov: 1, name: "Cm9/Bb",   bass: "Bb1", timp: null, pad: null,                         arp: ["Bb3","Eb4","G4","C5","D5","G5"], lead: { 0: "C5", 4: "D5", 8: "Eb5" } },
+      { mov: 1, name: "Abmaj7#11",bass: "Ab1", timp: "Ab1",pad: ["Ab2","Eb3","G3","C4","D4"], arp: ["Ab3","C4","D4","Eb4","G4","C5"], lead: { 0: "D5", 6: "C5", 8: "Bb4", 12: "C5" } },
+      { mov: 1, name: "Bb13",     bass: "Bb1", timp: "Bb1",pad: ["Bb2","F3","Ab3","D4","G4"], arp: ["Bb3","D4","F4","Ab4","C5","G5"], lead: { 0: "D5", 8: "F5", 12: "Eb5" } },
+      { mov: 1, name: "Ebmaj9",   bass: "Eb2", timp: "Eb2",pad: ["Eb3","Bb3","D4","F4","G4"], arp: ["Eb4","G4","Bb4","D5","F5","G5"], lead: { 0: "G5", 6: "F5", 8: "Eb5", 12: "D5" } },
+      { mov: 1, name: "Cm9",      bass: "C2",  timp: null, pad: ["C3","G3","Bb3","Eb4","G4"], arp: ["C4","Eb4","G4","Bb4","D5","Eb5"],lead: { 0: "Eb5", 4: "C5", 8: "G4" } },
+      { mov: 1, name: "Fm9",      bass: "F1",  timp: "F1", pad: ["F2","C3","Eb3","G3","Ab3"], arp: ["F3","Ab3","C4","Eb4","G4","C5"], lead: { 0: "Ab4", 4: "Bb4", 8: "C5", 12: "D5" } },
+      { mov: 1, name: "G7alt",    bass: "G1",  timp: "G1", pad: ["G2","B2","F3","Ab3","Eb4"], arp: ["G3","B3","Eb4","F4","Ab4","D5"], lead: { 0: "Eb5", 6: "D5", 10: "B4", 14: "G4" } },
+
+      // ---------------- MOVEMENT III: SCHERZO FURIOSO (Bars 16-23) ----------------
+      { mov: 2, name: "Cm",       bass: "C2",  timp: "C2", pad: ["C3","G3","C4","Eb4"],       arp: ["C4","Eb4","G4","C5","Eb5","G5"], lead: { 0: "C5", 3: "Eb5", 6: "D5", 12: "G4" }, crash: true },
+      { mov: 2, name: "Bdim7",    bass: "B1",  timp: "B1", pad: ["B2","F3","Ab3","D4"],       arp: ["B3","D4","F4","Ab4","B4","F5"],  lead: { 0: "Ab4", 4: "F4", 8: "B4", 12: "D5" } },
+      { mov: 2, name: "Cm/Bb",    bass: "Bb1", timp: null, pad: ["Bb2","G3","C4","Eb4"],      arp: ["Bb3","C4","Eb4","G4","C5","G5"], lead: { 0: "Eb5", 3: "G5", 6: "F5", 12: "C5" } },
+      { mov: 2, name: "A7b5",     bass: "A1",  timp: "A1", pad: ["A2","Eb3","G3","C#4"],      arp: ["A3","C#4","Eb4","G4","A4","Eb5"],lead: { 0: "C#5", 6: "Eb5", 10: "G5" } },
+      { mov: 2, name: "Abmaj7",   bass: "Ab1", timp: "Ab1",pad: ["Ab2","Eb3","Ab3","C4","G4"],arp: ["Ab3","C4","Eb4","G4","C5","Eb5"],lead: { 0: "Ab5", 4: "G5", 8: "Eb5", 12: "C5" } },
+      { mov: 2, name: "Fm7b5",    bass: "F1",  timp: "F1", pad: ["F2","Cb3","Eb3","Ab3"],     arp: ["F3","Ab3","B3","Eb4","Ab4","B4"],lead: { 0: "B4", 4: "C5", 8: "Eb5", 12: "Ab5" } },
+      { mov: 2, name: "Gsus4",    bass: "G1",  timp: "G1", pad: ["G2","D3","G3","C4","F4"],   arp: ["G3","C4","D4","F4","G4","C5"],   lead: { 0: "G5", 4: "F5", 8: "D5", 12: "C5" } },
+      { mov: 2, name: "G7b9!",    bass: "G1",  timp: "G1", pad: ["G2","B2","F3","Ab3","D4"],  arp: ["G3","B3","D4","F4","Ab4","D5"],  lead: { 0: "B4", 4: "D5", 8: "F5", 12: "Ab5", 14: "B5" }, crash: true },
+
+      // ---------------- MOVEMENT IV: FINALE MAESTOSO IN C LYDIAN (Bars 24-31) ----------------
+      { mov: 3, name: "Cmaj9",    bass: "C2",  timp: "C2", pad: ["C3","G3","B3","D4","E4"],   arp: ["C4","E4","G4","B4","D5","G5"],   lead: { 0: "E5", 8: "G5", 12: "B5" }, crash: true },
+      { mov: 3, name: "Cmaj9/E",  bass: "E2",  timp: "C2", pad: null,                         arp: ["E4","G4","B4","D5","E5","B5"],   lead: { 0: "C6", 6: "B5", 8: "G5", 12: "E5" } },
+      { mov: 3, name: "Fmaj9#11", bass: "F1",  timp: "F1", pad: ["F2","C3","E3","A3","B3","G4"],arp:["F3","A3","C4","E4","G4","B4"],  lead: { 0: "F#5", 6: "G5", 8: "A5", 12: "B5" } },
+      { mov: 3, name: "Fmaj9#11", bass: "F2",  timp: null, pad: null,                         arp: ["A3","C4","E4","F#4","A4","E5"],  lead: { 0: "A5", 8: "G5", 12: "E5" } },
+      { mov: 3, name: "Am11",     bass: "A1",  timp: "A1", pad: ["A2","E3","G3","B3","C4","D4"],arp:["A3","C4","E4","G4","B4","E5"],  lead: { 0: "E5", 4: "G5", 8: "C6", 12: "B5" }, crash: true },
+      { mov: 3, name: "D13",      bass: "D2",  timp: "D2", pad: ["D3","F#3","C4","E4","B4"],  arp: ["D4","F#4","A4","C5","E5","B5"],  lead: { 0: "A5", 6: "F#5", 8: "D5", 12: "A5" } },
+      { mov: 3, name: "G13sus4",  bass: "G1",  timp: "G1", pad: ["G2","D3","F3","C4","E4","A4"],arp:["G3","C4","D4","E4","A4","D5"],  lead: { 0: "G5", 6: "A5", 8: "B5", 12: "C6" } },
+      { mov: 3, name: "G13 -> C", bass: "G1",  timp: "G1", pad: ["G2","B2","F3","A3","E4","G4"],arp:["G3","B3","D4","F4","A4","D5"],  lead: { 0: "D6", 8: "B5", 12: "G5" }, crash: true }
+    ];
+
+    // =========================================================================
+    // AUDIO ENGINE (Tone.js)
+    // =========================================================================
+    let isStarted = false;
+    let isPlaying = false;
+    let currentBar = 0;
+    let currentStep = 0;
+    let currentMovIndex = 0;
+
+    let masterFilter, masterReverb, stereoWidener, compressor, limiter;
+    let padSynth, arpSynth, bassSynth, leadSynth, timpaniSynth, cymbalSynth, pulseDrum;
+    let fftAnalyzer, waveAnalyzer;
+    let symphonyLoop;
+
+    // Conductor dynamic state (controlled by mouse)
+    let conductorExpr = 0.72; // 0.0 to 1.0 (Mouse Y)
+    let conductorWarp = 0.0;  // -1.0 to 1.0 (Mouse X)
+
+    async function initSymphonyAudio() {
+      await Tone.start();
+      Tone.context.lookAhead = 0.08;
+
+      // Master Acoustic Chain
+      limiter = new Tone.Limiter(-1.5).toDestination();
+      compressor = new Tone.Compressor({ threshold: -18, ratio: 3.5, attack: 0.02, release: 0.25 }).connect(limiter);
+
+      fftAnalyzer = new Tone.FFT(64);
+      waveAnalyzer = new Tone.Waveform(128);
+      compressor.connect(fftAnalyzer);
+      compressor.connect(waveAnalyzer);
+
+      masterReverb = new Tone.Reverb({ decay: 5.5, preDelay: 0.04, wet: 0.42 }).connect(compressor);
+      await masterReverb.generate();
+
+      masterFilter = new Tone.Filter({ type: "lowpass", frequency: 6500, rolloff: -12, Q: 0.8 }).connect(masterReverb);
+      const pingPong = new Tone.PingPongDelay({ delayTime: "8n.", feedback: 0.34, wet: 0.32 }).connect(masterFilter);
+      const lushChorus = new Tone.Chorus(2.2, 3.5, 0.45).connect(masterFilter).start();
+
+      // 1. Symphonic Strings / Lush CS-80 Pad
+      padSynth = new Tone.PolySynth(Tone.Synth, {
+        maxPolyphony: 12,
+        volume: -11,
+        oscillator: { type: "fatsawtooth", count: 3, spread: 24 },
+        envelope: { attack: 1.1, decay: 0.8, sustain: 0.85, release: 2.8 }
+      }).connect(lushChorus);
+
+      // 2. Celestial Harp / Celesta Arpeggiator
+      arpSynth = new Tone.PolySynth(Tone.Synth, {
+        maxPolyphony: 16,
+        volume: -12,
+        oscillator: { type: "amtriangle", harmonicity: 2, modulationType: "sine" },
+        envelope: { attack: 0.008, decay: 0.45, sustain: 0.08, release: 1.1 }
+      }).connect(pingPong);
+
+      // 3. Contrabass & Cello Section
+      bassSynth = new Tone.MonoSynth({
+        volume: -7,
+        oscillator: { type: "fatsawtooth", count: 2, spread: 12 },
+        filter: { Q: 2, type: "lowpass", rolloff: -24 },
+        envelope: { attack: 0.04, decay: 0.4, sustain: 0.65, release: 0.9 },
+        filterEnvelope: { attack: 0.05, decay: 0.35, sustain: 0.3, release: 0.8, baseFrequency: 65, octaves: 3.2 }
+      }).connect(masterFilter);
+
+      // 4. Heroic French Horn / Solo Brass Lead
+      leadSynth = new Tone.MonoSynth({
+        volume: -7.5,
+        portamento: 0.065,
+        oscillator: { type: "fatsawtooth", count: 3, spread: 16 },
+        filter: { Q: 1.8, type: "lowpass", rolloff: -24 },
+        envelope: { attack: 0.08, decay: 0.3, sustain: 0.78, release: 1.4 },
+        filterEnvelope: { attack: 0.1, decay: 0.4, sustain: 0.55, release: 1.2, baseFrequency: 240, octaves: 3.8 }
+      }).connect(pingPong);
+
+      // 5. Orchestral Pitched Timpani
+      timpaniSynth = new Tone.MembraneSynth({
+        volume: -5,
+        pitchDecay: 0.07,
+        octaves: 3.5,
+        oscillator: { type: "sine" },
+        envelope: { attack: 0.006, decay: 0.9, sustain: 0.02, release: 1.4 }
+      }).connect(masterReverb);
+
+      // 6. Orchestral Cymbal Swell / Crash
+      const cymbalFilter = new Tone.Filter(3200, "highpass").connect(masterReverb);
+      cymbalSynth = new Tone.NoiseSynth({
+        volume: -14,
+        noise: { type: "pink" },
+        envelope: { attack: 0.015, decay: 2.2, sustain: 0, release: 1.8 }
+      }).connect(cymbalFilter);
+
+      // 7. Subtle Rhythmic Pulse (Movements II, III, IV)
+      pulseDrum = new Tone.MembraneSynth({
+        volume: -14,
+        pitchDecay: 0.03,
+        octaves: 4,
+        envelope: { attack: 0.002, decay: 0.18, sustain: 0, release: 0.2 }
+      }).connect(compressor);
+
+      // Master 16th-Note Symphonic Sequencer
+      Tone.Transport.bpm.value = MOVEMENTS[0].bpm;
+
+      symphonyLoop = new Tone.Loop((time) => {
+        const barData = SCORE[currentBar];
+        const mov = MOVEMENTS[barData.mov];
+        const step = currentStep;
+
+        // Smooth Tempo Transitions between movements
+        if (step === 0 && barData.mov !== currentMovIndex) {
+          currentMovIndex = barData.mov;
+          Tone.Transport.bpm.rampTo(mov.bpm, 2.0, time);
+        } else if (step === 0 && currentBar === 0) {
+          currentMovIndex = 0;
+          Tone.Transport.bpm.rampTo(MOVEMENTS[0].bpm, 1.5, time);
+        }
+
+        // Dynamic Velocity based on Conductor Y + Movement Intensity
+        const baseVel = 0.45 + conductorExpr * 0.48;
+
+        // --- 1. PAD / STRINGS ---
+        if (step === 0 && barData.pad) {
+          const padDur = (SCORE[(currentBar + 1) % SCORE.length].pad === null) ? "2m" : "1m";
+          padSynth.triggerAttackRelease(barData.pad, padDur, time, baseVel * 0.78);
+          Tone.Draw.schedule(() => onPadChord(barData.pad, barData.mov), time);
+        }
+
+        // --- 2. CONTRABASS ---
+        if (barData.mov === 0) {
+          // Movement I: Deep sustained pedal notes
+          if (step === 0 && barData.bass) {
+            bassSynth.triggerAttackRelease(barData.bass, "2m", time, baseVel * 0.85);
+            Tone.Draw.schedule(() => onBassHit(barData.bass, 0.7), time);
+          }
+        } else if (barData.mov === 1) {
+          // Movement II: Syncopated orbital pulse
+          const root = barData.bass || "C2";
+          if (step === 0 || step === 6 || step === 10) {
+            bassSynth.triggerAttackRelease(root, "8n", time, baseVel * (step === 0 ? 0.95 : 0.7));
+            Tone.Draw.schedule(() => onBassHit(root, step === 0 ? 0.9 : 0.5), time);
+          }
+        } else if (barData.mov === 2) {
+          // Movement III: Driving Scherzo 8th/16th ostinato
+          const root = barData.bass || "C2";
+          if (step % 2 === 0 || step === 15) {
+            const vel = (step % 4 === 0) ? baseVel : baseVel * 0.68;
+            bassSynth.triggerAttackRelease(root, "16n", time, vel);
+            if (step % 4 === 0) Tone.Draw.schedule(() => onBassHit(root, 0.95), time);
+          }
+        } else if (barData.mov === 3) {
+          // Movement IV: Grand Maestoso Bass
+          const root = barData.bass || "C2";
+          if (step === 0 || step === 8 || step === 12) {
+            const dur = step === 0 ? "2n" : "4n";
+            bassSynth.triggerAttackRelease(root, dur, time, baseVel);
+            Tone.Draw.schedule(() => onBassHit(root, step === 0 ? 1.1 : 0.75), time);
+          }
+        }
+
+        // --- 3. ARPEGGIATOR / CELESTA ---
+        const arpPool = barData.arp;
+        if (arpPool && arpPool.length > 0) {
+          let shouldArp = false;
+          let arpIdx = 0;
+
+          if (barData.mov === 0) {
+            // Gentle sparse 8th notes
+            shouldArp = (step % 2 === 0) && (step !== 6 && step !== 14);
+            arpIdx = (step / 2) % arpPool.length;
+          } else if (barData.mov === 1) {
+            // Flowing 16th polyrhythm (pattern of 5 against 16)
+            shouldArp = true;
+            arpIdx = (step * 2 + (currentBar % 2)) % arpPool.length;
+          } else if (barData.mov === 2) {
+            // Frantic cascading waves
+            shouldArp = true;
+            const wave = step < 8 ? step : (15 - step);
+            arpIdx = wave % arpPool.length;
+          } else if (barData.mov === 3) {
+            // Glorious wide celestial chimes (sometimes 2-note dyads!)
+            shouldArp = true;
+            arpIdx = step % arpPool.length;
+          }
+
+          if (shouldArp) {
+            const note = arpPool[arpIdx];
+            const arpVel = (0.35 + conductorExpr * 0.45) * ((step % 4 === 0) ? 1.1 : 0.78);
+            arpSynth.triggerAttackRelease(note, "16n", time, Math.min(1, arpVel));
+
+            // Add upper shimmer harmony in Finale
+            if (barData.mov === 3 && step % 4 === 0) {
+              const upperNote = arpPool[(arpIdx + 2) % arpPool.length];
+              arpSynth.triggerAttackRelease(upperNote, "8n", time, Math.min(1, arpVel * 0.75));
+            }
+
+            Tone.Draw.schedule(() => onArpNote(note, barData.mov), time);
+          }
+        }
+
+        // --- 4. SOLO BRASS / HEROIC LEAD ---
+        if (barData.lead && barData.lead[step]) {
+          const leadNote = barData.lead[step];
+          const dur = barData.mov === 2 ? "8n." : "2n";
+          leadSynth.triggerAttackRelease(leadNote, dur, time, Math.min(1, baseVel * 0.95));
+          Tone.Draw.schedule(() => onLeadNote(leadNote, barData.mov), time);
+        }
+
+        // --- 5. TIMPANI & CYMBAL PERCUSSION ---
+        if (barData.timp) {
+          if (step === 0) {
+            timpaniSynth.triggerAttackRelease(barData.timp, "2n", time, Math.min(1, baseVel * 1.05));
+            Tone.Draw.schedule(() => onPercussion("timpani"), time);
+          } else if (barData.mov >= 2 && (step === 12 || (barData.mov === 2 && step === 6))) {
+            timpaniSynth.triggerAttackRelease(barData.timp, "8n", time, baseVel * 0.75);
+            Tone.Draw.schedule(() => onPercussion("timpani_light"), time);
+          }
+        }
+
+        if (barData.crash && step === 0) {
+          cymbalSynth.triggerAttackRelease("2n", time, baseVel * 0.85);
+          Tone.Draw.schedule(() => onPercussion("crash"), time);
+        }
+
+        // Subtle heartbeat pulse in Movements II & III
+        if ((barData.mov === 1 || barData.mov === 2) && step % 4 === 0) {
+          pulseDrum.triggerAttackRelease("C1", "16n", time, 0.45);
+        }
+
+        // --- UPDATE HUD & ADVANCE STEP ---
+        const capturedBar = currentBar;
+        const capturedStep = currentStep;
+        Tone.Draw.schedule(() => updateHUD(capturedBar, capturedStep), time);
+
+        currentStep++;
+        if (currentStep >= 16) {
+          currentStep = 0;
+          currentBar = (currentBar + 1) % SCORE.length;
+        }
+      }, "16n").start(0);
+
+      Tone.Transport.start();
+      isStarted = true;
+      isPlaying = true;
+    }
+
+    // Trigger interactive Sforzando chord flourish on mouse click
+    function triggerSforzando(mx, my) {
+      if (!isStarted || !isPlaying) return;
+      const barData = SCORE[currentBar];
+      const notes = barData.arp || ["C4", "Eb4", "G4", "C5", "D5"];
+      const now = Tone.now();
+
+      notes.forEach((n, idx) => {
+        arpSynth.triggerAttackRelease(n, "4n", now + idx * 0.045, 0.85);
+        setTimeout(() => {
+          activateConstellationNode(getPitchClass(n), 1.4);
+        }, idx * 45);
+      });
+
+      cymbalSynth.triggerAttackRelease("4n", now, 0.45);
+      spawnClickSupernova(mx, my);
+    }
+
+    // =========================================================================
+    // VISUAL ENGINE (p5.js) — SACRED HARMONIC CONSTELLATION & COSMOS
+    // =========================================================================
+    let stars = [];
+    let particles = [];
+    let shockwaves = [];
+    let leadRibbon = [];
+    let batonTrail = [];
+
+    // 12-Tone Pitch Class Glow State (0=C ... 11=B)
+    let pitchGlow = new Array(12).fill(0);
+    let activeChordPCs = [0, 3, 7, 10];
+
+    // Smooth visual state
+    let corePulse = 0;
+    let screenFlash = 0;
+    let rotationAngle = 0;
+    let currentHueBase = 222;
+    let currentHueAccent = 185;
+    let currentWarp = 0.4;
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      colorMode(HSB, 360, 100, 100, 1.0);
+
+      // Initialize Deep Space Starfield
+      for (let i = 0; i < 260; i++) {
+        stars.push({
+          x: random(-width, width),
+          y: random(-height, height),
+          z: random(50, width),
+          pz: 0,
+          hueOffset: random(-25, 25)
+        });
+      }
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+
+    // --- Audio-to-Visual Event Hooks ---
+    function onPadChord(notes, movIdx) {
+      activeChordPCs = notes.map(n => getPitchClass(n));
+      activeChordPCs.forEach(pc => activateConstellationNode(pc, 1.0));
+      shockwaves.push({
+        x: width / 2,
+        y: height / 2,
+        r: min(width, height) * 0.12,
+        maxR: min(width, height) * 0.52,
+        alpha: 0.55,
+        hue: currentHueBase,
+        weight: 2.5
+      });
+    }
+
+    function onBassHit(note, strength) {
+      corePulse = max(corePulse, strength * 38);
+      const pc = getPitchClass(note);
+      activateConstellationNode(pc, 1.2);
+      shockwaves.push({
+        x: width / 2,
+        y: height / 2,
+        r: min(width, height) * 0.06,
+        maxR: min(width, height) * (0.28 + strength * 0.14),
+        alpha: 0.7 * strength,
+        hue: currentHueAccent,
+        weight: 3.5 * strength
+      });
+    }
+
+    function onArpNote(note, movIdx) {
+      const pc = getPitchClass(note);
+      activateConstellationNode(pc, 0.95);
+
+      const radius = min(width, height) * 0.31;
+      const angle = (pc / 12) * TWO_PI - HALF_PI + rotationAngle * 0.35;
+      const sx = width / 2 + cos(angle) * radius;
+      const sy = height / 2 + sin(angle) * radius;
+
+      // Spawn glowing harmonic sparks from the pitch node
+      const count = movIdx === 3 ? 4 : 2;
+      for (let i = 0; i < count; i++) {
+        if (particles.length < 420) {
+          const pAngle = angle + random(-0.6, 0.6);
+          const speed = random(1.2, 3.8 + movIdx * 0.8);
+          particles.push({
+            x: sx,
+            y: sy,
+            vx: cos(pAngle) * speed,
+            vy: sin(pAngle) * speed,
+            size: random(3, 7.5),
+            alpha: 0.95,
+            decay: random(0.014, 0.028),
+            hue: (currentHueAccent + pc * 8) % 360
+          });
+        }
+      }
+    }
+
+    function onLeadNote(note, movIdx) {
+      const pc = getPitchClass(note);
+      activateConstellationNode(pc, 1.35);
+
+      // Add a soaring comet point to the lead melody ribbon
+      const octaveMatch = note.match(/(\d+)$/);
+      const octave = octaveMatch ? parseInt(octaveMatch[1]) : 5;
+      const r = min(width, height) * map(octave, 3, 6, 0.16, 0.41);
+      const angle = (pc / 12) * TWO_PI - HALF_PI + rotationAngle * 0.35;
+
+      const lx = width / 2 + cos(angle) * r;
+      const ly = height / 2 + sin(angle) * r;
+
+      leadRibbon.push({
+        x: lx,
+        y: ly,
+        alpha: 1.0,
+        hue: (currentHueAccent + 35) % 360,
+        note: note
+      });
+      if (leadRibbon.length > 18) leadRibbon.shift();
+
+      // Burst around lead note
+      for (let i = 0; i < 10; i++) {
+        if (particles.length < 420) {
+          const a = random(TWO_PI);
+          const sp = random(1.5, 5);
+          particles.push({
+            x: lx,
+            y: ly,
+            vx: cos(a) * sp,
+            vy: sin(a) * sp,
+            size: random(4, 9),
+            alpha: 1.0,
+            decay: 0.022,
+            hue: (currentHueAccent + 40) % 360
+          });
+        }
+      }
+    }
+
+    function onPercussion(type) {
+      if (type === "crash") {
+        screenFlash = 0.42;
+        for (let i = 0; i < 45; i++) {
+          if (particles.length < 450) {
+            const a = random(TWO_PI);
+            const sp = random(3, 11);
+            particles.push({
+              x: width / 2,
+              y: height / 2,
+              vx: cos(a) * sp,
+              vy: sin(a) * sp,
+              size: random(4, 11),
+              alpha: 1.0,
+              decay: random(0.01, 0.022),
+              hue: (currentHueBase + random(-30, 50) + 360) % 360
+            });
+          }
+        }
+      } else if (type === "timpani") {
+        corePulse = max(corePulse, 48);
+      }
+    }
+
+    function spawnClickSupernova(mx, my) {
+      screenFlash = 0.25;
+      shockwaves.push({
+        x: mx,
+        y: my,
+        r: 10,
+        maxR: min(width, height) * 0.35,
+        alpha: 0.9,
+        hue: currentHueAccent,
+        weight: 3
+      });
+      for (let i = 0; i < 36; i++) {
+        const a = random(TWO_PI);
+        const sp = random(2, 9);
+        particles.push({
+          x: mx,
+          y: my,
+          vx: cos(a) * sp,
+          vy: sin(a) * sp,
+          size: random(4, 9),
+          alpha: 1.0,
+          decay: random(0.015, 0.03),
+          hue: (currentHueAccent + random(-25, 25) + 360) % 360
+        });
+      }
+    }
+
+    function activateConstellationNode(pc, intensity) {
+      pitchGlow[pc] = max(pitchGlow[pc], intensity);
+    }
+
+    // Shortest angular hue interpolation
+    function lerpHue(h1, h2, amt) {
+      let diff = ((h2 - h1 + 540) % 360) - 180;
+      return (h1 + diff * amt + 360) % 360;
+    }
+
+    function draw() {
+      // Update Conductor Controls from Mouse
+      if (mouseX > 0 || mouseY > 0) {
+        const targetExpr = constrain(map(mouseY, height, 0, 0.18, 1.0), 0.18, 1.0);
+        const targetWarp = constrain(map(mouseX, 0, width, -1.0, 1.0), -1.0, 1.0);
+        conductorExpr = lerp(conductorExpr, targetExpr, 0.08);
+        conductorWarp = lerp(conductorWarp, targetWarp, 0.08);
+
+        if (isStarted && masterFilter) {
+          // Exponential filter mapping from 450Hz (warm pianissimo) to 13000Hz (brilliant fortissimo)
+          const cutoff = 450 * Math.pow(29, conductorExpr);
+          masterFilter.frequency.rampTo(cutoff, 0.08);
+        }
+      }
+
+      // Smoothly transition movement colors & warp speed
+      const targetMov = MOVEMENTS[currentMovIndex];
+      currentHueBase = lerpHue(currentHueBase, targetMov.palette.hueBase, 0.03);
+      currentHueAccent = lerpHue(currentHueAccent, targetMov.palette.hueAccent, 0.03);
+      currentWarp = lerp(currentWarp, targetMov.warpSpeed * (0.6 + conductorExpr * 0.8), 0.04);
+
+      // 1. Deep Cosmic Trail Background
+      blendMode(BLEND);
+      background(currentHueBase, 55, 5, 0.24);
+
+      // Subtle Ambient Nebula Glow in Center
+      blendMode(ADD);
+      noStroke();
+      const minDim = min(width, height);
+      fill(currentHueBase, 75, 22, 0.07 + conductorExpr * 0.05);
+      circle(width / 2, height / 2, minDim * 0.85 + corePulse * 2);
+      fill(currentHueAccent, 80, 28, 0.06);
+      circle(width / 2, height / 2, minDim * 0.48 + sin(frameCount * 0.02) * 30);
+
+      // Screen Flash on Orchestral Crashes
+      if (screenFlash > 0.005) {
+        fill(currentHueAccent, 35, 95, screenFlash);
+        rect(0, 0, width, height);
+        screenFlash *= 0.88;
+      }
+
+      push();
+      translate(width / 2, height / 2);
+
+      // 2. Warp Starfield
+      drawStarfield();
+
+      // Advance Astrolabe Rotation
+      rotationAngle += (0.003 + currentWarp * 0.0035) * (1 + conductorWarp * 0.85);
+      corePulse *= 0.9;
+
+      // 3. Audio FFT Corona & Circular Waveform Core
+      drawAudioCore(minDim);
+
+      // 4. Sacred 12-Tone Harmonic Constellation Ring
+      drawHarmonicConstellation(minDim);
+
+      pop();
+
+      // 5. Shockwaves, Lead Melody Ribbon & Harmonic Particles (World Space)
+      drawShockwaves();
+      drawLeadRibbon();
+      drawParticles();
+
+      // 6. Glowing Conductor's Baton Cursor Trail
+      drawConductorBaton();
+    }
+
+    function drawStarfield() {
+      const speed = 1.5 + currentWarp * 6.5;
+      for (let s of stars) {
+        s.pz = s.z;
+        s.z -= speed;
+        if (s.z < 10) {
+          s.x = random(-width, width);
+          s.y = random(-height, height);
+          s.z = width;
+          s.pz = s.z;
+        }
+
+        const sx = map(s.x / s.z, 0, 1, 0, width);
+        const sy = map(s.y / s.z, 0, 1, 0, height);
+        const px = map(s.x / s.pz, 0, 1, 0, width);
+        const py = map(s.y / s.pz, 0, 1, 0, height);
+
+        const alpha = map(s.z, 0, width, 0.85, 0.05);
+        const sw = map(s.z, 0, width, 2.6, 0.4);
+        stroke((currentHueBase + s.hueOffset + 360) % 360, 45, 95, alpha);
+        strokeWeight(sw);
+        line(px, py, sx, sy);
+      }
+    }
+
+    function drawAudioCore(minDim) {
+      const baseR = minDim * 0.105 + corePulse;
+
+      // Astrolabe Sacred Rings
+      noFill();
+      stroke(currentHueBase, 50, 80, 0.16);
+      strokeWeight(1);
+      circle(0, 0, minDim * 0.62);
+      circle(0, 0, minDim * 0.44);
+
+      // Rotating Geometric Astrolabe Ticks
+      push();
+      rotate(-rotationAngle * 0.6);
+      for (let i = 0; i < 36; i++) {
+        const a = (i / 36) * TWO_PI;
+        const r1 = minDim * 0.215;
+        const r2 = r1 + (i % 3 === 0 ? 10 : 4);
+        stroke(currentHueAccent, 50, 90, i % 3 === 0 ? 0.35 : 0.15);
+        line(cos(a) * r1, sin(a) * r1, cos(a) * r2, sin(a) * r2);
+      }
+      pop();
+
+      // FFT Solar Corona Bars
+      if (isStarted && fftAnalyzer) {
+        const fftValues = fftAnalyzer.getValue();
+        const len = fftValues.length;
+        for (let i = 0; i < len; i++) {
+          const db = fftValues[i];
+          const amp = constrain(map(db, -95, -12, 0, 1), 0, 1);
+          const barLen = amp * (minDim * 0.13);
+
+          // Mirror symmetrically around circle
+          for (let dir of [-1, 1]) {
+            const angle = (i / len) * PI * dir - HALF_PI + rotationAngle;
+            const rInner = baseR * 1.08;
+            const rOuter = rInner + barLen;
+            const h = lerpHue(currentHueBase, currentHueAccent, i / len);
+            stroke(h, 80, 95, 0.25 + amp * 0.65);
+            strokeWeight(2.5);
+            line(cos(angle) * rInner, sin(angle) * rInner, cos(angle) * rOuter, sin(angle) * rOuter);
+          }
+        }
+      }
+
+      // Circular Waveform Core
+      if (isStarted && waveAnalyzer) {
+        const wave = waveAnalyzer.getValue();
+        noFill();
+        stroke(currentHueAccent, 45, 100, 0.85);
+        strokeWeight(2.2);
+        beginShape();
+        for (let i = 0; i <= wave.length; i++) {
+          const idx = i % wave.length;
+          const angle = (i / wave.length) * TWO_PI;
+          const rOffset = wave[idx] * (minDim * 0.065);
+          const r = baseR + rOffset;
+          vertex(cos(angle) * r, sin(angle) * r);
+        }
+        endShape(CLOSE);
+      } else {
+        // Idle breathing ring before start
+        noFill();
+        stroke(currentHueBase, 50, 90, 0.45);
+        strokeWeight(1.8);
+        circle(0, 0, baseR * 2 + sin(frameCount * 0.04) * 10);
+      }
+
+      // Glowing Inner Singularity
+      noStroke();
+      fill(currentHueAccent, 30, 100, 0.18 + corePulse * 0.008);
+      circle(0, 0, baseR * 1.2);
+      fill(0, 0, 100, 0.35);
+      circle(0, 0, baseR * 0.32);
+    }
+
+    function drawHarmonicConstellation(minDim) {
+      const ringR = minDim * 0.31;
+      const nodePositions = [];
+
+      for (let pc = 0; pc < 12; pc++) {
+        const angle = (pc / 12) * TWO_PI - HALF_PI + rotationAngle * 0.35;
+        nodePositions.push({
+          x: cos(angle) * ringR,
+          y: sin(angle) * ringR,
+          angle: angle
+        });
+        pitchGlow[pc] *= 0.94; // Smooth decay
+      }
+
+      // Draw Sacred Chord Geometry Lines connecting active harmonic pitches
+      for (let i = 0; i < 12; i++) {
+        for (let j = i + 1; j < 12; j++) {
+          const bothInChord = activeChordPCs.includes(i) && activeChordPCs.includes(j);
+          const glowStrength = min(pitchGlow[i], pitchGlow[j]);
+
+          if (bothInChord || glowStrength > 0.18) {
+            const alpha = bothInChord ? (0.16 + glowStrength * 0.45) : (glowStrength * 0.4);
+            stroke(lerpHue(currentHueBase, currentHueAccent, 0.5), 65, 98, alpha);
+            strokeWeight(bothInChord ? 1.6 + glowStrength * 1.8 : 1.0);
+            line(nodePositions[i].x, nodePositions[i].y, nodePositions[j].x, nodePositions[j].y);
+          }
+        }
+      }
+
+      // Draw 12 Chromatic Star Nodes & Labels
+      textAlign(CENTER, CENTER);
+      textSize(11);
+      for (let pc = 0; pc < 12; pc++) {
+        const pos = nodePositions[pc];
+        const glow = pitchGlow[pc];
+        const inChord = activeChordPCs.includes(pc);
+
+        noStroke();
+        // Outer Halo
+        if (glow > 0.05 || inChord) {
+          fill(currentHueAccent, 70, 100, 0.12 + glow * 0.28);
+          circle(pos.x, pos.y, 20 + glow * 26);
+        }
+
+        // Core Star Node
+        fill(0, 0, 100, inChord ? 0.9 : 0.35 + glow * 0.65);
+        circle(pos.x, pos.y, 5 + glow * 8);
+
+        // Pitch Name outside ring
+        const labelR = ringR + 24;
+        const lx = cos(pos.angle) * labelR;
+        const ly = sin(pos.angle) * labelR;
+        fill(currentHueAccent, inChord ? 30 : 10, 100, inChord ? 0.85 : 0.28 + glow * 0.5);
+        text(PITCH_NAMES[pc], lx, ly);
+      }
+    }
+
+    function drawShockwaves() {
+      noFill();
+      for (let i = shockwaves.length - 1; i >= 0; i--) {
+        const sw = shockwaves[i];
+        sw.r = lerp(sw.r, sw.maxR, 0.065);
+        sw.alpha *= 0.93;
+
+        stroke(sw.hue, 70, 98, sw.alpha);
+        strokeWeight(sw.weight);
+        circle(sw.x, sw.y, sw.r * 2);
+
+        if (sw.alpha < 0.015) shockwaves.splice(i, 1);
+      }
+    }
+
+    function drawLeadRibbon() {
+      if (leadRibbon.length < 2) return;
+      noFill();
+      for (let i = 0; i < leadRibbon.length - 1; i++) {
+        const p1 = leadRibbon[i];
+        const p2 = leadRibbon[i + 1];
+        p1.alpha *= 0.985;
+        stroke(p2.hue, 65, 100, p1.alpha * 0.7);
+        strokeWeight(map(i, 0, leadRibbon.length, 1, 5));
+        line(p1.x, p1.y, p2.x, p2.y);
+      }
+      leadRibbon[leadRibbon.length - 1].alpha *= 0.985;
+      while (leadRibbon.length > 0 && leadRibbon[0].alpha < 0.04) {
+        leadRibbon.shift();
+      }
+    }
+
+    function drawParticles() {
+      noStroke();
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vx *= 0.985;
+        p.vy *= 0.985;
+        p.alpha -= p.decay;
+
+        if (p.alpha <= 0) {
+          particles.splice(i, 1);
+          continue;
+        }
+
+        fill(p.hue, 75, 100, p.alpha * 0.35);
+        circle(p.x, p.y, p.size * 2.4);
+        fill(p.hue, 25, 100, p.alpha);
+        circle(p.x, p.y, p.size * 0.9);
+      }
+    }
+
+    function drawConductorBaton() {
+      if (mouseX <= 0 && mouseY <= 0) return;
+      batonTrail.push({ x: mouseX, y: mouseY });
+      if (batonTrail.length > 16) batonTrail.shift();
+
+      noFill();
+      for (let i = 0; i < batonTrail.length - 1; i++) {
+        const t = i / batonTrail.length;
+        stroke(currentHueAccent, 45, 100, t * 0.65);
+        strokeWeight(t * 4.5);
+        line(batonTrail[i].x, batonTrail[i].y, batonTrail[i + 1].x, batonTrail[i + 1].y);
+      }
+
+      noStroke();
+      fill(0, 0, 100, 0.9);
+      circle(mouseX, mouseY, 6);
+      fill(currentHueAccent, 65, 100, 0.35);
+      circle(mouseX, mouseY, 18 + conductorExpr * 14);
+    }
+
+    function mousePressed(event) {
+      // Ignore clicks on UI buttons or overlay
+      if (event && event.target && event.target.tagName !== "CANVAS") return;
+      triggerSforzando(mouseX, mouseY);
+    }
+
+    // =========================================================================
+    // UI & HUD MANAGEMENT
+    // =========================================================================
+    const startBtn = document.getElementById("start-btn");
+    const overlay = document.getElementById("overlay");
+    const hud = document.getElementById("hud");
+    const movTitleEl = document.getElementById("movement-title");
+    const harmonyEl = document.getElementById("harmony-readout");
+    const barCounterEl = document.getElementById("bar-counter");
+    const progressFillEl = document.getElementById("progress-fill");
+    const playPauseBtn = document.getElementById("play-pause-btn");
+    const movButtons = document.querySelectorAll(".ctrl-btn[data-mov]");
+
+    startBtn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      startBtn.textContent = "Tuning Orchestra...";
+      await initSymphonyAudio();
+      overlay.classList.add("hidden");
+      hud.classList.add("visible");
+    });
+
+    playPauseBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!isStarted) return;
+      if (isPlaying) {
+        Tone.Transport.pause();
+        padSynth.releaseAll();
+        arpSynth.releaseAll();
+        playPauseBtn.textContent = "Resume";
+        isPlaying = false;
+      } else {
+        Tone.Transport.start();
+        playPauseBtn.textContent = "Pause";
+        isPlaying = true;
+      }
+    });
+
+    movButtons.forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!isStarted) return;
+        const targetMovIdx = parseInt(btn.getAttribute("data-mov"));
+        currentBar = targetMovIdx * 8;
+        currentStep = 0;
+        currentMovIndex = targetMovIdx;
+        padSynth.releaseAll();
+        Tone.Transport.bpm.rampTo(MOVEMENTS[targetMovIdx].bpm, 0.5);
+        updateHUD(currentBar, 0);
+      });
+    });
+
+    function getDynamicMarking(expr) {
+      if (expr < 0.3) return "pp (Pianissimo)";
+      if (expr < 0.48) return "mp (Mezzo-piano)";
+      if (expr < 0.68) return "mf (Mezzo-forte)";
+      if (expr < 0.86) return "f (Forte)";
+      return "ff (Fortissimo)";
+    }
+
+    function updateHUD(bar, step) {
+      const barData = SCORE[bar];
+      const mov = MOVEMENTS[barData.mov];
+
+      movTitleEl.textContent = mov.title;
+      harmonyEl.innerHTML = `Harmony: <strong>${barData.name}</strong> &bull; Tempo: ${mov.bpm} BPM &bull; Dynamics: ${getDynamicMarking(conductorExpr)}`;
+      barCounterEl.textContent = `Measure ${bar + 1} / ${SCORE.length}`;
+
+      const totalSteps = SCORE.length * 16;
+      const pct = ((bar * 16 + step) / totalSteps) * 100;
+      progressFillEl.style.width = `${pct}%`;
+
+      movButtons.forEach((b) => {
+        const idx = parseInt(b.getAttribute("data-mov"));
+        b.classList.toggle("active", idx === barData.mov);
+      });
+    }
+  </script>
+</body>
+</html>

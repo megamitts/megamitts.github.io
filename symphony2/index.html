@@ -1,0 +1,1717 @@
+<!-- noprotect -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Symphonia Cosmica No. 1 in C — p5.js & Tone.js (doodle edition)</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Covered+By+Your+Grace&family=Patrick+Hand&family=Permanent+Marker&display=swap');
+
+    :root {
+      --paper: #f7f3e6;
+      --rule: #a9c9e8;
+      --margin: rgba(224, 90, 94, 0.8);
+      --pencil: #4a4a54;
+      --blue-pen: #2a44c4;
+      --red-pen: #d6303a;
+      --highlighter: #fff27a;
+      --mov-ink: #2a44c4;
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    /* ---------- Lined notebook paper ---------- */
+    .paper {
+      background-color: var(--paper);
+      background-image:
+        /* paper grain */
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .45 0 0 0 0 .38 0 0 0 0 .25 0 0 0 .22 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+        /* coffee ring someone left behind */
+        radial-gradient(circle at 74% 16%, transparent 0, transparent 50px, rgba(150, 100, 50, 0.20) 53px, rgba(150, 100, 50, 0.08) 58px, transparent 62px),
+        /* red margin line */
+        linear-gradient(90deg, transparent 90px, var(--margin) 90px, var(--margin) 92px, transparent 92px),
+        /* blue ruled lines */
+        repeating-linear-gradient(to bottom, transparent 0, transparent 33px, var(--rule) 33px, var(--rule) 35px);
+    }
+
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Patrick Hand', cursive;
+      color: var(--pencil);
+    }
+
+    canvas {
+      display: block;
+      cursor: none; /* we draw a pencil instead */
+    }
+
+    /* Hole punches */
+    .holes {
+      position: fixed;
+      left: 24px;
+      top: 0;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-around;
+      padding: 7vh 0;
+      z-index: 101;
+      pointer-events: none;
+    }
+    .holes span {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, #c4b9a5, #7a6d5b);
+      box-shadow: inset 3px 4px 7px rgba(0, 0, 0, 0.5), 0 0 0 2px rgba(0, 0, 0, 0.06);
+    }
+
+    /* ---------- Intro Overlay ---------- */
+    #overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      transition: opacity 1.2s ease, visibility 1.2s ease;
+      text-align: center;
+      padding: 20px 20px 20px 110px;
+    }
+
+    #overlay.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .name-line {
+      position: absolute;
+      top: 22px;
+      right: 36px;
+      font-family: 'Covered By Your Grace', cursive;
+      font-size: 1.15rem;
+      color: var(--pencil);
+    }
+    .name-line span {
+      border-bottom: 2px solid var(--pencil);
+      padding: 0 6px;
+      color: var(--blue-pen);
+    }
+
+    .doodle {
+      position: absolute;
+      fill: none;
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      pointer-events: none;
+    }
+    .doodle.d-star   { top: 12%; left: 17%; width: 80px; stroke: var(--red-pen); transform: rotate(-14deg); }
+    .doodle.d-spiral { bottom: 10%; left: 14%; width: 110px; stroke: var(--blue-pen); }
+    .doodle.d-bolt   { bottom: 14%; right: 12%; width: 70px; stroke: #e0a010; transform: rotate(12deg); }
+    .doodle.d-star2  { top: 22%; right: 14%; width: 56px; stroke: #2e9a52; transform: rotate(20deg); }
+
+    .symphony-subtitle {
+      font-family: 'Covered By Your Grace', cursive;
+      font-size: 1.35rem;
+      color: var(--pencil);
+      margin-bottom: 6px;
+      transform: rotate(1deg);
+    }
+
+    h1 {
+      font-family: 'Permanent Marker', cursive;
+      font-size: clamp(2.3rem, 6.5vw, 4.8rem);
+      font-weight: 400;
+      margin: 0 0 18px 0;
+      color: var(--blue-pen);
+      transform: rotate(-2deg);
+      text-shadow: 3px 3px 0 rgba(42, 68, 196, 0.16);
+      text-decoration: underline wavy var(--red-pen);
+      text-decoration-thickness: 4px;
+      text-underline-offset: 10px;
+      animation: boil 0.6s steps(1) infinite;
+    }
+
+    @keyframes boil {
+      0%   { transform: rotate(-2deg) translate(0, 0); }
+      33%  { transform: rotate(-1.5deg) translate(1px, -1px); }
+      66%  { transform: rotate(-2.4deg) translate(-1px, 1px); }
+      100% { transform: rotate(-2deg) translate(0, 0); }
+    }
+
+    .description {
+      max-width: 540px;
+      line-height: 1.5;
+      color: #33333b;
+      margin-bottom: 30px;
+      font-size: 1.3rem;
+    }
+    mark {
+      background: linear-gradient(transparent 45%, var(--highlighter) 45%, var(--highlighter) 92%, transparent 92%);
+      color: inherit;
+      padding: 0 3px;
+    }
+
+    #start-btn {
+      font-family: 'Permanent Marker', cursive;
+      font-size: 1.4rem;
+      padding: 12px 34px;
+      color: var(--pencil);
+      background: var(--highlighter);
+      border: 3px solid var(--pencil);
+      border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      box-shadow: 4px 5px 0 rgba(60, 60, 70, 0.5);
+      transform: rotate(-1.5deg);
+    }
+
+    #start-btn:hover {
+      transform: rotate(1.5deg) scale(1.07);
+      box-shadow: 6px 7px 0 rgba(60, 60, 70, 0.45);
+    }
+    #start-btn:active {
+      transform: rotate(0deg) scale(0.97);
+      box-shadow: 1px 2px 0 rgba(60, 60, 70, 0.5);
+    }
+
+    .aside {
+      margin-top: 22px;
+      font-family: 'Covered By Your Grace', cursive;
+      font-size: 1.05rem;
+      color: #77777f;
+      transform: rotate(-1deg);
+    }
+
+    /* ---------- HUD ---------- */
+    #hud {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 24px 32px 24px 112px;
+      z-index: 10;
+      opacity: 0;
+      transition: opacity 1.5s ease;
+    }
+
+    #hud.visible { opacity: 1; }
+
+    .hud-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .movement-info {
+      text-shadow: 0 0 6px var(--paper), 0 0 3px var(--paper), 0 0 10px var(--paper);
+    }
+
+    .work-title {
+      font-family: 'Covered By Your Grace', cursive;
+      font-size: 1.1rem;
+      color: #6a6a74;
+      margin-bottom: 2px;
+      transform: rotate(-0.8deg);
+    }
+
+    #movement-title {
+      font-family: 'Permanent Marker', cursive;
+      font-size: clamp(1.1rem, 2.3vw, 1.7rem);
+      color: var(--mov-ink);
+      transition: color 0.5s ease;
+      transform: rotate(-0.6deg);
+      text-decoration: underline wavy;
+      text-decoration-thickness: 2px;
+      text-underline-offset: 6px;
+    }
+
+    #harmony-readout {
+      margin-top: 8px;
+      font-size: 1.2rem;
+      color: #3d3d46;
+    }
+    #harmony-readout strong {
+      font-weight: 400;
+      background: linear-gradient(transparent 45%, var(--highlighter) 45%, var(--highlighter) 92%, transparent 92%);
+      padding: 0 4px;
+    }
+
+    .conductor-tips {
+      font-family: 'Covered By Your Grace', cursive;
+      font-size: 1.05rem;
+      color: #3d3d46;
+      line-height: 1.4;
+      background: #fff3a0;
+      padding: 16px 16px 12px;
+      transform: rotate(1.8deg);
+      box-shadow: 2px 5px 9px rgba(0, 0, 0, 0.22);
+      position: relative;
+      max-width: 310px;
+      text-align: left;
+    }
+    .conductor-tips::before {
+      content: '';
+      position: absolute;
+      top: -11px;
+      left: 50%;
+      width: 76px;
+      height: 22px;
+      margin-left: -38px;
+      background: rgba(210, 200, 170, 0.65);
+      transform: rotate(-3deg);
+    }
+
+    .hud-bottom {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      pointer-events: auto;
+      flex-wrap: wrap;
+    }
+
+    .ctrl-btn {
+      font-family: 'Patrick Hand', cursive;
+      font-size: 1.1rem;
+      background: rgba(255, 255, 255, 0.8);
+      border: 2.5px solid var(--pencil);
+      color: var(--pencil);
+      padding: 4px 15px;
+      border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+      cursor: pointer;
+      box-shadow: 2px 3px 0 rgba(60, 60, 70, 0.35);
+      transition: transform 0.15s ease, background 0.2s ease;
+    }
+    .ctrl-btn:nth-child(odd)  { transform: rotate(-1.6deg); }
+    .ctrl-btn:nth-child(even) { transform: rotate(1.3deg); }
+
+    .ctrl-btn:hover {
+      transform: rotate(0deg) scale(1.1);
+      background: #fff;
+    }
+
+    .ctrl-btn.active {
+      border-color: var(--mov-ink);
+      color: var(--mov-ink);
+      background: var(--highlighter);
+      text-decoration: underline wavy;
+      text-decoration-thickness: 1.5px;
+      text-underline-offset: 4px;
+    }
+
+    .progress-wrap {
+      flex: 1;
+      max-width: 320px;
+      min-width: 160px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+      text-shadow: 0 0 6px var(--paper), 0 0 3px var(--paper);
+    }
+
+    #bar-counter {
+      font-family: 'Covered By Your Grace', cursive;
+      font-size: 1.1rem;
+      color: #55555f;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 16px;
+      border: 2.5px solid var(--pencil);
+      border-radius: 14px 4px 12px 5px / 5px 12px 4px 14px;
+      background: rgba(255, 255, 255, 0.55);
+      overflow: hidden;
+      transform: rotate(-0.7deg);
+    }
+
+    #progress-fill {
+      width: 0%;
+      height: 100%;
+      /* scribbled-in colouring */
+      background: repeating-linear-gradient(118deg, var(--mov-ink) 0 3px, transparent 3px 7px);
+      transition: width 0.15s linear;
+    }
+
+    @media (max-width: 700px) {
+      #hud { padding-left: 40px; }
+      #overlay { padding-left: 24px; }
+      .holes { display: none; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { animation: none !important; }
+    }
+  </style>
+</head>
+<body class="paper">
+
+  <!-- Hole punches -->
+  <div class="holes"><span></span><span></span><span></span></div>
+
+  <!-- Intro Screen -->
+  <div id="overlay" class="paper">
+    <div class="name-line">Name: <span>Definitely Paying Attention</span></div>
+
+    <svg class="doodle d-star" viewBox="0 0 100 100"><polygon points="50,6 61,41 97,39 69,62 80,96 50,76 20,97 31,62 3,40 39,41"/></svg>
+    <svg class="doodle d-spiral" viewBox="0 0 100 100"><path d="M50,50 C52,46 58,47 58,53 C58,62 46,64 42,55 C37,44 50,34 61,40 C74,48 70,66 56,70 C36,75 24,56 32,40 C40,24 66,22 78,38 C90,54 78,82 52,86"/></svg>
+    <svg class="doodle d-bolt" viewBox="0 0 60 100"><polyline points="38,4 8,56 28,56 18,96 52,38 32,38 44,4 38,4"/></svg>
+    <svg class="doodle d-star2" viewBox="0 0 100 100"><polygon points="50,8 60,40 94,40 66,60 78,92 50,72 22,92 34,60 6,40 40,40"/></svg>
+
+    <div class="symphony-subtitle">Generative Audiovisual Orchestra (drawn during math)</div>
+    <h1>Symphonia Cosmica</h1>
+    <p class="description">
+      An interactive four-movement synthesizer symphony in C Minor &amp; C Lydian.<br/>
+      Move your cursor to <mark>conduct orchestral dynamics</mark> and filter brilliance. Click the page to unleash <mark>harmonic cascades</mark>.
+    </p>
+    <button id="start-btn">Raise the Baton</button>
+    <div class="aside">(psst... turn your sound on, teacher won't notice)</div>
+  </div>
+
+  <!-- Heads Up Display -->
+  <div id="hud">
+    <div class="hud-top">
+      <div class="movement-info">
+        <div class="work-title">Opus 1 &bull; Symphony of the Spheres</div>
+        <div id="movement-title">I. Adagio Sostenuto — Genesis Mist</div>
+        <div id="harmony-readout">Chord: Cm9 &bull; Dynamics: mf</div>
+      </div>
+      <div class="conductor-tips">
+        <div>CURSOR Y &mdash; Expression &amp; Filter Brilliance</div>
+        <div>CURSOR X &mdash; Orbital Warp &amp; Stereo Space</div>
+        <div>CLICK &mdash; Sforzando Celestial Cascade</div>
+      </div>
+    </div>
+
+    <div class="hud-bottom">
+      <div class="controls" id="controls-bar">
+        <button class="ctrl-btn active" data-mov="0">Mov I</button>
+        <button class="ctrl-btn" data-mov="1">Mov II</button>
+        <button class="ctrl-btn" data-mov="2">Mov III</button>
+        <button class="ctrl-btn" data-mov="3">Mov IV</button>
+        <button class="ctrl-btn" id="play-pause-btn">Pause</button>
+      </div>
+      <div class="progress-wrap">
+        <div id="bar-counter">Measure 1 / 32</div>
+        <div class="progress-track">
+          <div id="progress-fill"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // =========================================================================
+    // MUSICAL SCORE & SYMPHONIC ARCHITECTURE (32 Measures across 4 Movements)
+    // =========================================================================
+    const PITCH_NAMES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
+    const NOTE_TO_PC = {
+      "C": 0, "B#": 0, "C#": 1, "Db": 1, "D": 2, "D#": 3, "Eb": 3,
+      "E": 4, "Fb": 4, "F": 5, "E#": 5, "F#": 6, "Gb": 6, "G": 7,
+      "G#": 8, "Ab": 8, "A": 9, "A#": 10, "Bb": 10, "B": 11, "Cb": 11
+    };
+
+    function getPitchClass(note) {
+      if (!note) return 0;
+      const match = note.match(/^([A-G][b#]?)/);
+      return match ? (NOTE_TO_PC[match[1]] ?? 0) : 0;
+    }
+
+    // Each movement now has its own set of pens & crayons (RGB)
+    const MOVEMENTS = [
+      {
+        index: 0,
+        title: "I. Adagio Sostenuto — Genesis Mist",
+        bpm: 88,
+        // Sleepy: blue ballpoint + dull pencil
+        palette: { ink: [40, 68, 196], accent: [96, 100, 116], extras: [[70, 130, 225], [130, 132, 142], [40, 150, 180]] },
+        warpSpeed: 0.4
+      },
+      {
+        index: 1,
+        title: "II. Allegro Con Brio — Orbital Resonance",
+        bpm: 108,
+        // Getting fidgety: green & orange crayon
+        palette: { ink: [30, 150, 72], accent: [240, 130, 22], extras: [[250, 200, 30], [30, 160, 205], [205, 60, 150]] },
+        warpSpeed: 1.3
+      },
+      {
+        index: 2,
+        title: "III. Scherzo Furioso — Event Horizon",
+        bpm: 126,
+        // Full scribble rage: angry red pen & purple
+        palette: { ink: [214, 40, 50], accent: [128, 52, 190], extras: [[30, 30, 36], [240, 110, 22], [232, 62, 150]] },
+        warpSpeed: 2.8
+      },
+      {
+        index: 3,
+        title: "IV. Finale Maestoso — Supernova Ascension",
+        bpm: 102,
+        // The bell is about to ring: every crayon in the box
+        palette: { ink: [226, 112, 18], accent: [234, 58, 150], extras: [[250, 195, 20], [40, 170, 222], [120, 60, 200], [60, 182, 80]] },
+        warpSpeed: 1.9
+      }
+    ];
+
+    // 32-Bar Full Symphonic Progression
+    // Each entry defines 1 measure (16 steps of 16th notes)
+    const SCORE = [
+      // ---------------- MOVEMENT I: ADAGIO (Bars 0-7) ----------------
+      { mov: 0, name: "Cm9",      bass: "C2",  timp: "C1", pad: ["C3","G3","Bb3","D4","Eb4"], arp: ["C4","D4","Eb4","G4","Bb4","D5"], lead: { 0: "G4" } },
+      { mov: 0, name: "Cm9",      bass: null,  timp: null, pad: null,                         arp: ["C4","Eb4","G4","Bb4","D5","G5"], lead: { 8: "F4", 12: "Eb4" } },
+      { mov: 0, name: "Abmaj9",   bass: "Ab1", timp: null, pad: ["Ab2","Eb3","G3","Bb3","C4"],arp: ["Ab3","C4","Eb4","G4","Bb4","C5"],lead: { 0: "Eb4", 10: "G4" } },
+      { mov: 0, name: "Abmaj9",   bass: null,  timp: null, pad: null,                         arp: ["C4","Eb4","G4","Bb4","C5","Eb5"],lead: { 4: "Bb4" } },
+      { mov: 0, name: "Fm11",     bass: "F1",  timp: "F1", pad: ["F2","C3","Eb3","Ab3","Bb3"],arp: ["F3","Ab3","C4","Eb4","G4","Bb4"],lead: { 0: "Ab4", 8: "G4", 12: "F4" } },
+      { mov: 0, name: "Fm9",      bass: null,  timp: null, pad: null,                         arp: ["Ab3","C4","Eb4","G4","C5","Eb5"],lead: { 4: "Eb4", 12: "D4" } },
+      { mov: 0, name: "Gsus4",    bass: "G1",  timp: "G1", pad: ["G2","D3","F3","C4","D4"],   arp: ["G3","C4","D4","F4","G4","C5"],   lead: { 0: "D4" } },
+      { mov: 0, name: "G7b9",     bass: "G1",  timp: "G1", pad: ["G2","B2","F3","Ab3","D4"],  arp: ["G3","B3","D4","F4","Ab4","B4"],  lead: { 4: "F4", 8: "Ab4", 12: "B4" }, crash: true },
+
+      // ---------------- MOVEMENT II: ALLEGRO (Bars 8-15) ----------------
+      { mov: 1, name: "Cm11",     bass: "C2",  timp: "C2", pad: ["C3","G3","Bb3","D4","F4"],  arp: ["C4","Eb4","G4","Bb4","D5","F5"], lead: { 0: "C5", 6: "Bb4", 8: "G4", 12: "Bb4" }, crash: true },
+      { mov: 1, name: "Cm9/Bb",   bass: "Bb1", timp: null, pad: null,                         arp: ["Bb3","Eb4","G4","C5","D5","G5"], lead: { 0: "C5", 4: "D5", 8: "Eb5" } },
+      { mov: 1, name: "Abmaj7#11",bass: "Ab1", timp: "Ab1",pad: ["Ab2","Eb3","G3","C4","D4"], arp: ["Ab3","C4","D4","Eb4","G4","C5"], lead: { 0: "D5", 6: "C5", 8: "Bb4", 12: "C5" } },
+      { mov: 1, name: "Bb13",     bass: "Bb1", timp: "Bb1",pad: ["Bb2","F3","Ab3","D4","G4"], arp: ["Bb3","D4","F4","Ab4","C5","G5"], lead: { 0: "D5", 8: "F5", 12: "Eb5" } },
+      { mov: 1, name: "Ebmaj9",   bass: "Eb2", timp: "Eb2",pad: ["Eb3","Bb3","D4","F4","G4"], arp: ["Eb4","G4","Bb4","D5","F5","G5"], lead: { 0: "G5", 6: "F5", 8: "Eb5", 12: "D5" } },
+      { mov: 1, name: "Cm9",      bass: "C2",  timp: null, pad: ["C3","G3","Bb3","Eb4","G4"], arp: ["C4","Eb4","G4","Bb4","D5","Eb5"],lead: { 0: "Eb5", 4: "C5", 8: "G4" } },
+      { mov: 1, name: "Fm9",      bass: "F1",  timp: "F1", pad: ["F2","C3","Eb3","G3","Ab3"], arp: ["F3","Ab3","C4","Eb4","G4","C5"], lead: { 0: "Ab4", 4: "Bb4", 8: "C5", 12: "D5" } },
+      { mov: 1, name: "G7alt",    bass: "G1",  timp: "G1", pad: ["G2","B2","F3","Ab3","Eb4"], arp: ["G3","B3","Eb4","F4","Ab4","D5"], lead: { 0: "Eb5", 6: "D5", 10: "B4", 14: "G4" } },
+
+      // ---------------- MOVEMENT III: SCHERZO FURIOSO (Bars 16-23) ----------------
+      { mov: 2, name: "Cm",       bass: "C2",  timp: "C2", pad: ["C3","G3","C4","Eb4"],       arp: ["C4","Eb4","G4","C5","Eb5","G5"], lead: { 0: "C5", 3: "Eb5", 6: "D5", 12: "G4" }, crash: true },
+      { mov: 2, name: "Bdim7",    bass: "B1",  timp: "B1", pad: ["B2","F3","Ab3","D4"],       arp: ["B3","D4","F4","Ab4","B4","F5"],  lead: { 0: "Ab4", 4: "F4", 8: "B4", 12: "D5" } },
+      { mov: 2, name: "Cm/Bb",    bass: "Bb1", timp: null, pad: ["Bb2","G3","C4","Eb4"],      arp: ["Bb3","C4","Eb4","G4","C5","G5"], lead: { 0: "Eb5", 3: "G5", 6: "F5", 12: "C5" } },
+      { mov: 2, name: "A7b5",     bass: "A1",  timp: "A1", pad: ["A2","Eb3","G3","C#4"],      arp: ["A3","C#4","Eb4","G4","A4","Eb5"],lead: { 0: "C#5", 6: "Eb5", 10: "G5" } },
+      { mov: 2, name: "Abmaj7",   bass: "Ab1", timp: "Ab1",pad: ["Ab2","Eb3","Ab3","C4","G4"],arp: ["Ab3","C4","Eb4","G4","C5","Eb5"],lead: { 0: "Ab5", 4: "G5", 8: "Eb5", 12: "C5" } },
+      { mov: 2, name: "Fm7b5",    bass: "F1",  timp: "F1", pad: ["F2","Cb3","Eb3","Ab3"],     arp: ["F3","Ab3","B3","Eb4","Ab4","B4"],lead: { 0: "B4", 4: "C5", 8: "Eb5", 12: "Ab5" } },
+      { mov: 2, name: "Gsus4",    bass: "G1",  timp: "G1", pad: ["G2","D3","G3","C4","F4"],   arp: ["G3","C4","D4","F4","G4","C5"],   lead: { 0: "G5", 4: "F5", 8: "D5", 12: "C5" } },
+      { mov: 2, name: "G7b9!",    bass: "G1",  timp: "G1", pad: ["G2","B2","F3","Ab3","D4"],  arp: ["G3","B3","D4","F4","Ab4","D5"],  lead: { 0: "B4", 4: "D5", 8: "F5", 12: "Ab5", 14: "B5" }, crash: true },
+
+      // ---------------- MOVEMENT IV: FINALE MAESTOSO IN C LYDIAN (Bars 24-31) ----------------
+      { mov: 3, name: "Cmaj9",    bass: "C2",  timp: "C2", pad: ["C3","G3","B3","D4","E4"],   arp: ["C4","E4","G4","B4","D5","G5"],   lead: { 0: "E5", 8: "G5", 12: "B5" }, crash: true },
+      { mov: 3, name: "Cmaj9/E",  bass: "E2",  timp: "C2", pad: null,                         arp: ["E4","G4","B4","D5","E5","B5"],   lead: { 0: "C6", 6: "B5", 8: "G5", 12: "E5" } },
+      { mov: 3, name: "Fmaj9#11", bass: "F1",  timp: "F1", pad: ["F2","C3","E3","A3","B3","G4"],arp:["F3","A3","C4","E4","G4","B4"],  lead: { 0: "F#5", 6: "G5", 8: "A5", 12: "B5" } },
+      { mov: 3, name: "Fmaj9#11", bass: "F2",  timp: null, pad: null,                         arp: ["A3","C4","E4","F#4","A4","E5"],  lead: { 0: "A5", 8: "G5", 12: "E5" } },
+      { mov: 3, name: "Am11",     bass: "A1",  timp: "A1", pad: ["A2","E3","G3","B3","C4","D4"],arp:["A3","C4","E4","G4","B4","E5"],  lead: { 0: "E5", 4: "G5", 8: "C6", 12: "B5" }, crash: true },
+      { mov: 3, name: "D13",      bass: "D2",  timp: "D2", pad: ["D3","F#3","C4","E4","B4"],  arp: ["D4","F#4","A4","C5","E5","B5"],  lead: { 0: "A5", 6: "F#5", 8: "D5", 12: "A5" } },
+      { mov: 3, name: "G13sus4",  bass: "G1",  timp: "G1", pad: ["G2","D3","F3","C4","E4","A4"],arp:["G3","C4","D4","E4","A4","D5"],  lead: { 0: "G5", 6: "A5", 8: "B5", 12: "C6" } },
+      { mov: 3, name: "G13 -> C", bass: "G1",  timp: "G1", pad: ["G2","B2","F3","A3","E4","G4"],arp:["G3","B3","D4","F4","A4","D5"],  lead: { 0: "D6", 8: "B5", 12: "G5" }, crash: true }
+    ];
+
+    // =========================================================================
+    // AUDIO ENGINE (Tone.js)  — unchanged
+    // =========================================================================
+    let isStarted = false;
+    let isPlaying = false;
+    let currentBar = 0;
+    let currentStep = 0;
+    let currentMovIndex = 0;
+
+    let masterFilter, masterReverb, stereoWidener, compressor, limiter;
+    let padSynth, arpSynth, bassSynth, leadSynth, timpaniSynth, cymbalSynth, pulseDrum;
+    let fftAnalyzer, waveAnalyzer;
+    let symphonyLoop;
+
+    // Conductor dynamic state (controlled by mouse)
+    let conductorExpr = 0.72; // 0.0 to 1.0 (Mouse Y)
+    let conductorWarp = 0.0;  // -1.0 to 1.0 (Mouse X)
+
+    async function initSymphonyAudio() {
+      await Tone.start();
+      Tone.context.lookAhead = 0.08;
+
+      // Master Acoustic Chain
+      limiter = new Tone.Limiter(-1.5).toDestination();
+      compressor = new Tone.Compressor({ threshold: -18, ratio: 3.5, attack: 0.02, release: 0.25 }).connect(limiter);
+
+      fftAnalyzer = new Tone.FFT(64);
+      waveAnalyzer = new Tone.Waveform(128);
+      compressor.connect(fftAnalyzer);
+      compressor.connect(waveAnalyzer);
+
+      masterReverb = new Tone.Reverb({ decay: 5.5, preDelay: 0.04, wet: 0.42 }).connect(compressor);
+      await masterReverb.generate();
+
+      masterFilter = new Tone.Filter({ type: "lowpass", frequency: 6500, rolloff: -12, Q: 0.8 }).connect(masterReverb);
+      const pingPong = new Tone.PingPongDelay({ delayTime: "8n.", feedback: 0.34, wet: 0.32 }).connect(masterFilter);
+      const lushChorus = new Tone.Chorus(2.2, 3.5, 0.45).connect(masterFilter).start();
+
+      // 1. Symphonic Strings / Lush CS-80 Pad
+      padSynth = new Tone.PolySynth(Tone.Synth, {
+        maxPolyphony: 12,
+        volume: -11,
+        oscillator: { type: "fatsawtooth", count: 3, spread: 24 },
+        envelope: { attack: 1.1, decay: 0.8, sustain: 0.85, release: 2.8 }
+      }).connect(lushChorus);
+
+      // 2. Celestial Harp / Celesta Arpeggiator
+      arpSynth = new Tone.PolySynth(Tone.Synth, {
+        maxPolyphony: 16,
+        volume: -12,
+        oscillator: { type: "amtriangle", harmonicity: 2, modulationType: "sine" },
+        envelope: { attack: 0.008, decay: 0.45, sustain: 0.08, release: 1.1 }
+      }).connect(pingPong);
+
+      // 3. Contrabass & Cello Section
+      bassSynth = new Tone.MonoSynth({
+        volume: -7,
+        oscillator: { type: "fatsawtooth", count: 2, spread: 12 },
+        filter: { Q: 2, type: "lowpass", rolloff: -24 },
+        envelope: { attack: 0.04, decay: 0.4, sustain: 0.65, release: 0.9 },
+        filterEnvelope: { attack: 0.05, decay: 0.35, sustain: 0.3, release: 0.8, baseFrequency: 65, octaves: 3.2 }
+      }).connect(masterFilter);
+
+      // 4. Heroic French Horn / Solo Brass Lead
+      leadSynth = new Tone.MonoSynth({
+        volume: -7.5,
+        portamento: 0.065,
+        oscillator: { type: "fatsawtooth", count: 3, spread: 16 },
+        filter: { Q: 1.8, type: "lowpass", rolloff: -24 },
+        envelope: { attack: 0.08, decay: 0.3, sustain: 0.78, release: 1.4 },
+        filterEnvelope: { attack: 0.1, decay: 0.4, sustain: 0.55, release: 1.2, baseFrequency: 240, octaves: 3.8 }
+      }).connect(pingPong);
+
+      // 5. Orchestral Pitched Timpani
+      timpaniSynth = new Tone.MembraneSynth({
+        volume: -5,
+        pitchDecay: 0.07,
+        octaves: 3.5,
+        oscillator: { type: "sine" },
+        envelope: { attack: 0.006, decay: 0.9, sustain: 0.02, release: 1.4 }
+      }).connect(masterReverb);
+
+      // 6. Orchestral Cymbal Swell / Crash
+      const cymbalFilter = new Tone.Filter(3200, "highpass").connect(masterReverb);
+      cymbalSynth = new Tone.NoiseSynth({
+        volume: -14,
+        noise: { type: "pink" },
+        envelope: { attack: 0.015, decay: 2.2, sustain: 0, release: 1.8 }
+      }).connect(cymbalFilter);
+
+      // 7. Subtle Rhythmic Pulse (Movements II, III, IV)
+      pulseDrum = new Tone.MembraneSynth({
+        volume: -14,
+        pitchDecay: 0.03,
+        octaves: 4,
+        envelope: { attack: 0.002, decay: 0.18, sustain: 0, release: 0.2 }
+      }).connect(compressor);
+
+      // Master 16th-Note Symphonic Sequencer
+      Tone.Transport.bpm.value = MOVEMENTS[0].bpm;
+
+      symphonyLoop = new Tone.Loop((time) => {
+        const barData = SCORE[currentBar];
+        const mov = MOVEMENTS[barData.mov];
+        const step = currentStep;
+
+        // Smooth Tempo Transitions between movements
+        if (step === 0 && barData.mov !== currentMovIndex) {
+          currentMovIndex = barData.mov;
+          Tone.Transport.bpm.rampTo(mov.bpm, 2.0, time);
+        } else if (step === 0 && currentBar === 0) {
+          currentMovIndex = 0;
+          Tone.Transport.bpm.rampTo(MOVEMENTS[0].bpm, 1.5, time);
+        }
+
+        // Dynamic Velocity based on Conductor Y + Movement Intensity
+        const baseVel = 0.45 + conductorExpr * 0.48;
+
+        // --- 1. PAD / STRINGS ---
+        if (step === 0 && barData.pad) {
+          const padDur = (SCORE[(currentBar + 1) % SCORE.length].pad === null) ? "2m" : "1m";
+          padSynth.triggerAttackRelease(barData.pad, padDur, time, baseVel * 0.78);
+          Tone.Draw.schedule(() => onPadChord(barData.pad, barData.mov), time);
+        }
+
+        // --- 2. CONTRABASS ---
+        if (barData.mov === 0) {
+          // Movement I: Deep sustained pedal notes
+          if (step === 0 && barData.bass) {
+            bassSynth.triggerAttackRelease(barData.bass, "2m", time, baseVel * 0.85);
+            Tone.Draw.schedule(() => onBassHit(barData.bass, 0.7), time);
+          }
+        } else if (barData.mov === 1) {
+          // Movement II: Syncopated orbital pulse
+          const root = barData.bass || "C2";
+          if (step === 0 || step === 6 || step === 10) {
+            bassSynth.triggerAttackRelease(root, "8n", time, baseVel * (step === 0 ? 0.95 : 0.7));
+            Tone.Draw.schedule(() => onBassHit(root, step === 0 ? 0.9 : 0.5), time);
+          }
+        } else if (barData.mov === 2) {
+          // Movement III: Driving Scherzo 8th/16th ostinato
+          const root = barData.bass || "C2";
+          if (step % 2 === 0 || step === 15) {
+            const vel = (step % 4 === 0) ? baseVel : baseVel * 0.68;
+            bassSynth.triggerAttackRelease(root, "16n", time, vel);
+            if (step % 4 === 0) Tone.Draw.schedule(() => onBassHit(root, 0.95), time);
+          }
+        } else if (barData.mov === 3) {
+          // Movement IV: Grand Maestoso Bass
+          const root = barData.bass || "C2";
+          if (step === 0 || step === 8 || step === 12) {
+            const dur = step === 0 ? "2n" : "4n";
+            bassSynth.triggerAttackRelease(root, dur, time, baseVel);
+            Tone.Draw.schedule(() => onBassHit(root, step === 0 ? 1.1 : 0.75), time);
+          }
+        }
+
+        // --- 3. ARPEGGIATOR / CELESTA ---
+        const arpPool = barData.arp;
+        if (arpPool && arpPool.length > 0) {
+          let shouldArp = false;
+          let arpIdx = 0;
+
+          if (barData.mov === 0) {
+            // Gentle sparse 8th notes
+            shouldArp = (step % 2 === 0) && (step !== 6 && step !== 14);
+            arpIdx = (step / 2) % arpPool.length;
+          } else if (barData.mov === 1) {
+            // Flowing 16th polyrhythm (pattern of 5 against 16)
+            shouldArp = true;
+            arpIdx = (step * 2 + (currentBar % 2)) % arpPool.length;
+          } else if (barData.mov === 2) {
+            // Frantic cascading waves
+            shouldArp = true;
+            const wave = step < 8 ? step : (15 - step);
+            arpIdx = wave % arpPool.length;
+          } else if (barData.mov === 3) {
+            // Glorious wide celestial chimes (sometimes 2-note dyads!)
+            shouldArp = true;
+            arpIdx = step % arpPool.length;
+          }
+
+          if (shouldArp) {
+            const note = arpPool[arpIdx];
+            const arpVel = (0.35 + conductorExpr * 0.45) * ((step % 4 === 0) ? 1.1 : 0.78);
+            arpSynth.triggerAttackRelease(note, "16n", time, Math.min(1, arpVel));
+
+            // Add upper shimmer harmony in Finale
+            if (barData.mov === 3 && step % 4 === 0) {
+              const upperNote = arpPool[(arpIdx + 2) % arpPool.length];
+              arpSynth.triggerAttackRelease(upperNote, "8n", time, Math.min(1, arpVel * 0.75));
+            }
+
+            Tone.Draw.schedule(() => onArpNote(note, barData.mov), time);
+          }
+        }
+
+        // --- 4. SOLO BRASS / HEROIC LEAD ---
+        if (barData.lead && barData.lead[step]) {
+          const leadNote = barData.lead[step];
+          const dur = barData.mov === 2 ? "8n." : "2n";
+          leadSynth.triggerAttackRelease(leadNote, dur, time, Math.min(1, baseVel * 0.95));
+          Tone.Draw.schedule(() => onLeadNote(leadNote, barData.mov), time);
+        }
+
+        // --- 5. TIMPANI & CYMBAL PERCUSSION ---
+        if (barData.timp) {
+          if (step === 0) {
+            timpaniSynth.triggerAttackRelease(barData.timp, "2n", time, Math.min(1, baseVel * 1.05));
+            Tone.Draw.schedule(() => onPercussion("timpani"), time);
+          } else if (barData.mov >= 2 && (step === 12 || (barData.mov === 2 && step === 6))) {
+            timpaniSynth.triggerAttackRelease(barData.timp, "8n", time, baseVel * 0.75);
+            Tone.Draw.schedule(() => onPercussion("timpani_light"), time);
+          }
+        }
+
+        if (barData.crash && step === 0) {
+          cymbalSynth.triggerAttackRelease("2n", time, baseVel * 0.85);
+          Tone.Draw.schedule(() => onPercussion("crash"), time);
+        }
+
+        // Subtle heartbeat pulse in Movements II & III
+        if ((barData.mov === 1 || barData.mov === 2) && step % 4 === 0) {
+          pulseDrum.triggerAttackRelease("C1", "16n", time, 0.45);
+        }
+
+        // --- UPDATE HUD & ADVANCE STEP ---
+        const capturedBar = currentBar;
+        const capturedStep = currentStep;
+        Tone.Draw.schedule(() => updateHUD(capturedBar, capturedStep), time);
+
+        currentStep++;
+        if (currentStep >= 16) {
+          currentStep = 0;
+          currentBar = (currentBar + 1) % SCORE.length;
+        }
+      }, "16n").start(0);
+
+      Tone.Transport.start();
+      isStarted = true;
+      isPlaying = true;
+    }
+
+    // Trigger interactive Sforzando chord flourish on mouse click
+    function triggerSforzando(mx, my) {
+      if (!isStarted || !isPlaying) return;
+      const barData = SCORE[currentBar];
+      const notes = barData.arp || ["C4", "Eb4", "G4", "C5", "D5"];
+      const now = Tone.now();
+
+      notes.forEach((n, idx) => {
+        arpSynth.triggerAttackRelease(n, "4n", now + idx * 0.045, 0.85);
+        setTimeout(() => {
+          activateConstellationNode(getPitchClass(n), 1.4);
+        }, idx * 45);
+      });
+
+      cymbalSynth.triggerAttackRelease("4n", now, 0.45);
+      spawnClickSupernova(mx, my);
+    }
+
+    // =========================================================================
+    // VISUAL ENGINE (p5.js) — A BORED KID'S NOTEBOOK DOODLES
+    // =========================================================================
+    const PENCIL = [74, 74, 84];
+    const DARK   = [38, 38, 48];
+    const PAPER  = [250, 247, 236];
+    const HAND   = "'Covered By Your Grace', 'Patrick Hand', cursive";
+    const MARKER = "'Permanent Marker', 'Covered By Your Grace', cursive";
+    const MAX_PARTICLES = 300;
+
+    const strokeC = (c, a = 1) => stroke(c[0], c[1], c[2], a);
+    const fillC   = (c, a = 1) => fill(c[0], c[1], c[2], a);
+    const rgbStr  = (c) => `rgb(${c[0] | 0}, ${c[1] | 0}, ${c[2] | 0})`;
+    const lerpRGB = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+
+    let stars = [];
+    let particles = [];
+    let shockwaves = [];
+    let leadRibbon = [];
+    let batonTrail = [];
+    let popWords = [];
+
+    // 12-Tone Pitch Class Glow State (0=C ... 11=B)
+    let pitchGlow = new Array(12).fill(0);
+    let activeChordPCs = [0, 3, 7, 10];
+
+    // Smooth visual state
+    let corePulse = 0;
+    let screenFlash = 0;
+    let rotationAngle = 0;
+    let currentInk = MOVEMENTS[0].palette.ink.slice();
+    let currentAccent = MOVEMENTS[0].palette.accent.slice();
+    let currentWarp = 0.4;
+    let boil = 0; // changes ~12x/sec => the "boiling line" wobble of hand-drawn animation
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      colorMode(RGB, 255, 255, 255, 1.0);
+
+      // A scattering of doodles that fly past (replaces the warp starfield)
+      for (let i = 0; i < 90; i++) {
+        stars.push({
+          x: random(-width, width),
+          y: random(-height, height),
+          z: random(50, width),
+          pz: 0,
+          kind: floor(random(5)),
+          rot: random(TWO_PI),
+          useInk: random() < 0.35
+        });
+      }
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+
+    // ---------- Hand-drawn helpers ----------
+    // Smooth wobble that "boils" a few times per second
+    function wob(seed, i, amt) {
+      return (noise(seed * 3.17 + i * 0.8, boil * 0.55) - 0.5) * 2 * amt;
+    }
+
+    // A wobbly pen line, optionally traced twice like a scribbly sketch
+    function penLine(x1, y1, x2, y2, amt = 2, seed = 0, passes = 2) {
+      const d = dist(x1, y1, x2, y2);
+      if (d < 0.5) return;
+      if (d < 6) { line(x1, y1, x2, y2); return; }
+      const n = max(2, floor(d / 22));
+      const nx = -(y2 - y1) / d, ny = (x2 - x1) / d;
+      noFill();
+      for (let p = 0; p < passes; p++) {
+        beginShape();
+        for (let i = 0; i <= n; i++) {
+          const t = i / n;
+          const o = wob(seed + p * 17.3, i, amt);
+          const px = lerp(x1, x2, t) + nx * o;
+          const py = lerp(y1, y2, t) + ny * o;
+          curveVertex(px, py);
+          if (i === 0 || i === n) curveVertex(px, py);
+        }
+        endShape();
+      }
+    }
+
+    // A circle that never quite closes, drawn round and round
+    function penCircle(cx, cy, r, amt = 2, seed = 0, passes = 2) {
+      const n = constrain(floor(r * 0.5), 12, 48);
+      noFill();
+      for (let p = 0; p < passes; p++) {
+        const a0 = (seed * 2.3 + p * 1.7) % TWO_PI;
+        const over = 0.12 + p * 0.05;
+        beginShape();
+        for (let i = 0; i <= n; i++) {
+          const t = i / n;
+          const a = a0 + t * TWO_PI * (1 + over);
+          const rr = r + wob(seed + p * 9.1, i, amt) + (p ? -1 : 1) * t * over * r * 0.5;
+          const x = cx + cos(a) * rr, y = cy + sin(a) * rr;
+          curveVertex(x, y);
+          if (i === 0 || i === n) curveVertex(x, y);
+        }
+        endShape();
+      }
+    }
+
+    // Colouring-in: back-and-forth zig-zag scribble inside a circle
+    function scribbleFill(cx, cy, r, gap = 6, seed = 0) {
+      noFill();
+      beginShape();
+      let side = -1, k = 0;
+      for (let y = -r; y <= r; y += gap) {
+        const half = sqrt(max(0, r * r - y * y)) * 0.96;
+        vertex(cx + side * half + wob(seed, k, gap * 0.5), cy + y + wob(seed + 5, k, gap * 0.4));
+        side *= -1;
+        k++;
+      }
+      endShape();
+    }
+
+    // Five-pointed star in one continuous stroke (the only star kids know how to draw)
+    function penStar(cx, cy, r, rot = 0) {
+      beginShape();
+      for (let i = 0; i <= 5; i++) {
+        const a = rot - HALF_PI + ((i * 2) % 5) * TWO_PI / 5;
+        vertex(cx + cos(a) * r, cy + sin(a) * r);
+      }
+      endShape();
+    }
+
+    // Margin doodles: star, heart, X, zig-zag, loopy circle
+   // Margin doodles: star, heart, X, zig-zag, loopy circle
+function drawDoodle(kind, x, y, s, rot) {
+  push();
+  translate(x, y);
+  rotate(rot);
+
+  if (kind === 0) {
+    penStar(0, 0, s, 0);
+  } else if (kind === 1) {
+    beginShape();
+    vertex(0, s * 0.9);
+    bezierVertex(-s * 1.4, s * 0.1, -s * 1.1, -s * 1.2, 0, -s * 0.35);
+    bezierVertex(s * 1.1, -s * 1.2, s * 1.4, s * 0.1, 0, s * 0.9);
+    endShape();
+  } else if (kind === 2) {
+    line(-s, -s, s, s);
+    line(s * 0.9, -s * 1.1, -s * 0.8, s);
+  } else if (kind === 3) {
+    // zig-zag, written out by hand (no loop)
+    beginShape();
+    vertex(-s * 1.2, -s * 0.6);
+    vertex(-s * 0.6,  s * 0.6);
+    vertex( 0,       -s * 0.6);
+    vertex( s * 0.6,  s * 0.6);
+    vertex( s * 1.2, -s * 0.6);
+    endShape();
+  } else {
+    arc(0, 0, s * 1.7, s * 1.7, 0, TWO_PI * 0.88);
+  }
+
+  pop();
+}
+
+    function crayon() {
+      const p = MOVEMENTS[currentMovIndex].palette;
+      const pool = [p.ink, p.accent, ...p.extras];
+      return pool[floor(random(pool.length))];
+    }
+
+    function addParticle(x, y, vx, vy, size, decay, col) {
+      if (particles.length >= MAX_PARTICLES) return;
+      particles.push({
+        x, y, vx, vy, size, decay,
+        alpha: 1.0,
+        col: col || crayon(),
+        kind: floor(random(5)),
+        rot: random(TWO_PI),
+        spin: random(-0.12, 0.12)
+      });
+    }
+
+    function addShock(x, y, r, maxR, alpha, col, weight) {
+      shockwaves.push({ x, y, r, maxR, alpha, col, weight, seed: random(100) });
+    }
+
+    function spawnWord(txt, x, y, col, size) {
+      popWords.push({ txt, x, y, col, size, life: 1, rot: random(-0.25, 0.25), seed: random(100) });
+      if (popWords.length > 6) popWords.shift();
+    }
+
+    // --- Audio-to-Visual Event Hooks ---
+    function onPadChord(notes, movIdx) {
+      activeChordPCs = notes.map(n => getPitchClass(n));
+      activeChordPCs.forEach(pc => activateConstellationNode(pc, 1.0));
+      addShock(width / 2, height / 2, min(width, height) * 0.12, min(width, height) * 0.52, 0.65, currentInk, 2.5);
+    }
+
+    function onBassHit(note, strength) {
+      corePulse = max(corePulse, strength * 38);
+      const pc = getPitchClass(note);
+      activateConstellationNode(pc, 1.2);
+      addShock(
+        width / 2, height / 2,
+        min(width, height) * 0.06,
+        min(width, height) * (0.28 + strength * 0.14),
+        min(1, 0.8 * strength),
+        currentAccent,
+        3.5 * strength
+      );
+    }
+
+    function onArpNote(note, movIdx) {
+      const pc = getPitchClass(note);
+      activateConstellationNode(pc, 0.95);
+
+      const radius = min(width, height) * 0.31;
+      const angle = (pc / 12) * TWO_PI - HALF_PI + rotationAngle * 0.35;
+      const sx = width / 2 + cos(angle) * radius;
+      const sy = height / 2 + sin(angle) * radius;
+
+      // Little doodles pop out of the pitch node
+      const count = movIdx === 3 ? 4 : 2;
+      for (let i = 0; i < count; i++) {
+        const pAngle = angle + random(-0.6, 0.6);
+        const speed = random(1.2, 3.8 + movIdx * 0.8);
+        addParticle(sx, sy, cos(pAngle) * speed, sin(pAngle) * speed, random(3, 7.5), random(0.014, 0.028));
+      }
+    }
+
+    function onLeadNote(note, movIdx) {
+      const pc = getPitchClass(note);
+      activateConstellationNode(pc, 1.35);
+
+      const octaveMatch = note.match(/(\d+)$/);
+      const octave = octaveMatch ? parseInt(octaveMatch[1]) : 5;
+      const r = min(width, height) * map(octave, 3, 6, 0.16, 0.41);
+      const angle = (pc / 12) * TWO_PI - HALF_PI + rotationAngle * 0.35;
+
+      const lx = width / 2 + cos(angle) * r;
+      const ly = height / 2 + sin(angle) * r;
+
+      leadRibbon.push({ x: lx, y: ly, alpha: 1.0, note: note });
+      if (leadRibbon.length > 18) leadRibbon.shift();
+
+      for (let i = 0; i < 10; i++) {
+        const a = random(TWO_PI);
+        const sp = random(1.5, 5);
+        addParticle(lx, ly, cos(a) * sp, sin(a) * sp, random(4, 9), 0.022, currentAccent);
+      }
+    }
+
+    function onPercussion(type) {
+      const minDim = min(width, height);
+      if (type === "crash") {
+        screenFlash = 0.42;
+        spawnWord("CRASH!", width / 2 + random(-0.3, 0.3) * minDim, height / 2 + random(-0.3, 0.3) * minDim, currentInk, 64);
+        for (let i = 0; i < 45; i++) {
+          const a = random(TWO_PI);
+          const sp = random(3, 11);
+          addParticle(width / 2, height / 2, cos(a) * sp, sin(a) * sp, random(4, 11), random(0.01, 0.022));
+        }
+      } else if (type === "timpani") {
+        corePulse = max(corePulse, 48);
+        if (popWords.length < 3 && random() < 0.45) {
+          spawnWord("BOOM", width / 2 + random(-0.35, 0.35) * minDim, height / 2 + random(-0.3, 0.3) * minDim, currentAccent, 42);
+        }
+      }
+    }
+
+    function spawnClickSupernova(mx, my) {
+      screenFlash = 0.25;
+      addShock(mx, my, 10, min(width, height) * 0.35, 0.95, currentAccent, 3);
+      spawnWord(random(["POW!", "ZAP!", "BAM!", "WHEEE!", "KAPOW!"]), mx, my - 10, currentInk, 46);
+      for (let i = 0; i < 36; i++) {
+        const a = random(TWO_PI);
+        const sp = random(2, 9);
+        addParticle(mx, my, cos(a) * sp, sin(a) * sp, random(4, 9), random(0.015, 0.03));
+      }
+    }
+
+    function activateConstellationNode(pc, intensity) {
+      pitchGlow[pc] = max(pitchGlow[pc], intensity);
+    }
+
+    function draw() {
+      clear(); // the paper is CSS; we only draw the ink
+      boil = floor(frameCount / 5);
+      strokeCap(ROUND);
+      strokeJoin(ROUND);
+
+      // Update Conductor Controls from Mouse
+      if (mouseX > 0 || mouseY > 0) {
+        const targetExpr = constrain(map(mouseY, height, 0, 0.18, 1.0), 0.18, 1.0);
+        const targetWarp = constrain(map(mouseX, 0, width, -1.0, 1.0), -1.0, 1.0);
+        conductorExpr = lerp(conductorExpr, targetExpr, 0.08);
+        conductorWarp = lerp(conductorWarp, targetWarp, 0.08);
+
+        if (isStarted && masterFilter) {
+          // Exponential filter mapping from 450Hz (warm pianissimo) to 13000Hz (brilliant fortissimo)
+          const cutoff = 450 * Math.pow(29, conductorExpr);
+          masterFilter.frequency.rampTo(cutoff, 0.08);
+        }
+      }
+
+      // Smoothly transition pen colours & doodle speed per movement
+      const targetMov = MOVEMENTS[currentMovIndex];
+      currentInk = lerpRGB(currentInk, targetMov.palette.ink, 0.03);
+      currentAccent = lerpRGB(currentAccent, targetMov.palette.accent, 0.03);
+      currentWarp = lerp(currentWarp, targetMov.warpSpeed * (0.6 + conductorExpr * 0.8), 0.04);
+
+      const minDim = min(width, height);
+
+      // 1. Messy colouring-in behind everything (big marker scribbles)
+      push();
+      translate(width / 2, height / 2);
+      strokeC(currentInk, 0.05 + conductorExpr * 0.04);
+      strokeWeight(14);
+      scribbleFill(0, 0, minDim * 0.4 + corePulse * 1.5, 16, 1);
+      strokeC(currentAccent, 0.07);
+      strokeWeight(10);
+      scribbleFill(0, 0, minDim * 0.2 + sin(frameCount * 0.02) * 10, 12, 2);
+      pop();
+
+      // Highlighter flash on crashes
+      if (screenFlash > 0.005) {
+        noStroke();
+        fill(255, 238, 110, screenFlash * 0.55);
+        rect(0, 0, width, height);
+        screenFlash *= 0.88;
+      }
+
+      push();
+      translate(width / 2, height / 2);
+
+      // 2. Flying doodles
+      drawStarfield();
+
+      rotationAngle += (0.003 + currentWarp * 0.0035) * (1 + conductorWarp * 0.85);
+      corePulse *= 0.9;
+
+      // 3. The sun-monster (FFT rays, waveform ring, bored face)
+      drawAudioCore(minDim);
+
+      // 4. Connect-the-dots 12-note ring
+      drawHarmonicConstellation(minDim);
+
+      pop();
+
+      // 5. World-space scribbles
+      drawShockwaves();
+      drawLeadRibbon();
+      drawParticles();
+      drawDecor(minDim);
+      drawWords();
+
+      // 6. Pencil cursor
+      drawConductorBaton();
+    }
+
+    function drawStarfield() {
+      const speed = 1.5 + currentWarp * 6.5;
+      noFill();
+      for (let s of stars) {
+        s.pz = s.z;
+        s.z -= speed;
+        if (s.z < 10) {
+          s.x = random(-width, width);
+          s.y = random(-height, height);
+          s.z = width;
+          s.pz = s.z;
+        }
+
+        const sx = map(s.x / s.z, 0, 1, 0, width);
+        const sy = map(s.y / s.z, 0, 1, 0, height);
+        const px = map(s.x / s.pz, 0, 1, 0, width);
+        const py = map(s.y / s.pz, 0, 1, 0, height);
+
+        const alpha = map(s.z, 0, width, 0.8, 0.1);
+        const sz = map(s.z, 0, width, 11, 1.5);
+        const c = s.useInk ? currentInk : PENCIL;
+
+        // pencil speed line
+        strokeC(c, alpha * 0.55);
+        strokeWeight(map(s.z, 0, width, 2.2, 0.6));
+        line(px, py, sx, sy);
+
+        if (sz > 3.2) {
+          strokeC(c, alpha);
+          strokeWeight(1.8);
+          drawDoodle(s.kind, sx, sy, sz, s.rot + s.z * 0.01);
+        }
+      }
+    }
+
+    function drawAudioCore(minDim) {
+      const baseR = minDim * 0.105 + corePulse;
+
+      // Compass-drawn pencil rings
+      noFill();
+      strokeC(PENCIL, 0.35);
+      strokeWeight(1.6);
+      penCircle(0, 0, minDim * 0.31, 2.5, 1, 2);
+      penCircle(0, 0, minDim * 0.22, 2, 2, 1);
+
+      // Ruler tick marks
+      push();
+      rotate(-rotationAngle * 0.6);
+      for (let i = 0; i < 36; i++) {
+        const a = (i / 36) * TWO_PI;
+        const r1 = minDim * 0.215;
+        const major = i % 3 === 0;
+        const r2 = r1 + (major ? 12 : 5);
+        strokeC(major ? currentAccent : PENCIL, major ? 0.75 : 0.4);
+        strokeWeight(major ? 2.2 : 1.4);
+        penLine(cos(a) * r1, sin(a) * r1, cos(a) * r2, sin(a) * r2, 0.8, i, 1);
+      }
+      pop();
+
+      // FFT as sun rays
+      if (isStarted && fftAnalyzer) {
+        const fftValues = fftAnalyzer.getValue();
+        const len = fftValues.length;
+        for (let i = 0; i < len; i++) {
+          const db = fftValues[i];
+          const amp = constrain(map(db, -95, -12, 0, 1), 0, 1);
+          const barLen = 3 + amp * (minDim * 0.13);
+          const col = lerpRGB(currentInk, currentAccent, i / len);
+
+          for (let dir of [-1, 1]) {
+            const angle = (i / len) * PI * dir - HALF_PI + rotationAngle;
+            const rInner = baseR * 1.12;
+            const rOuter = rInner + barLen;
+            strokeC(col, 0.35 + amp * 0.6);
+            strokeWeight(2.4);
+            penLine(cos(angle) * rInner, sin(angle) * rInner, cos(angle) * rOuter, sin(angle) * rOuter, 1.2, i * 2 + (dir > 0 ? 1 : 0), 1);
+          }
+        }
+      }
+
+      // Ballpoint waveform ring
+      if (isStarted && waveAnalyzer) {
+        const wave = waveAnalyzer.getValue();
+        for (let pass = 0; pass < 2; pass++) {
+          noFill();
+          strokeC(pass ? currentAccent : currentInk, pass ? 0.45 : 0.9);
+          strokeWeight(pass ? 1.6 : 2.6);
+          beginShape();
+          for (let i = 0; i <= wave.length; i++) {
+            const idx = i % wave.length;
+            const angle = (i / wave.length) * TWO_PI;
+            const rOffset = wave[idx] * (minDim * 0.065);
+            const r = baseR + rOffset + (pass ? 4 + wob(5, i, 1.5) : wob(0, i, 0.8));
+            vertex(cos(angle) * r, sin(angle) * r);
+          }
+          endShape(CLOSE);
+        }
+      } else {
+        strokeC(currentInk, 0.7);
+        strokeWeight(2);
+        penCircle(0, 0, baseR + sin(frameCount * 0.04) * 5, 2, 3, 2);
+      }
+
+      // Scribbled-in face colour
+      strokeC(currentAccent, constrain(0.2 + corePulse * 0.006, 0, 0.55));
+      strokeWeight(5);
+      scribbleFill(0, 0, baseR * 0.92, 7, 3);
+
+      drawBoredFace(baseR);
+
+      // Zzz when the conductor is being quiet
+      if (isStarted && conductorExpr < 0.42) {
+        noStroke();
+        textFont(HAND);
+        textAlign(CENTER, CENTER);
+        for (let k = 0; k < 3; k++) {
+          const t = (frameCount * 0.008 + k / 3) % 1;
+          fillC(PENCIL, sin(t * PI) * 0.8);
+          textSize(14 + k * 6);
+          text("z", baseR * 0.95 + t * 44, -baseR * 0.7 - t * 64);
+        }
+      }
+    }
+
+    function drawBoredFace(baseR) {
+      const eyeX = baseR * 0.38, eyeY = -baseR * 0.2, eyeR = baseR * 0.2;
+      const m = constrain(corePulse / 40, 0, 1);          // 0 = bored, 1 = yelling
+      const lid = map(conductorExpr, 0.18, 1, 0.55, 0.05); // droopy eyelids when quiet
+
+      // pupils follow the mouse (looking at the clock, obviously)
+      const mx = mouseX - width / 2, my = mouseY - height / 2;
+      const ang = atan2(my, mx);
+      const look = eyeR * 0.45 * min(1, dist(0, 0, mx, my) / 200);
+
+      for (let side of [-1, 1]) {
+        const ex = side * eyeX;
+        const sd = 20 + side;
+
+        // eye white
+        noStroke();
+        fillC(PAPER, 0.92);
+        circle(ex, eyeY, eyeR * 2);
+
+        // pupil
+        const pr = eyeR * 0.38;
+        const lidY = eyeY - eyeR + 2 * eyeR * lid;
+        const pxp = ex + cos(ang) * look;
+        const pyp = max(eyeY + sin(ang) * look + eyeR * 0.15, lidY + pr * 0.9);
+        fillC(DARK, 0.9);
+        circle(pxp, pyp, pr * 2);
+
+        // outline, eyelid and brow in dark pen
+        strokeC(DARK, 0.9);
+        strokeWeight(2);
+        penCircle(ex, eyeY, eyeR, 1, sd, 1);
+        strokeWeight(2.6);
+        penLine(ex - eyeR * 1.05, lidY, ex + eyeR * 1.05, lidY, 0.6, sd + 3, 1);
+
+        const browY = eyeY - eyeR * 1.55 - m * eyeR * 0.7;
+        const y1 = browY + (side < 0 ? 3 : 0);
+        const y2 = browY + (side > 0 ? 3 : 0);
+        strokeWeight(2.4);
+        penLine(ex - eyeR, y1, ex + eyeR, y2, 0.8, sd + 7, 1);
+      }
+
+      // mouth: flat line when bored, big O when the timpani hits
+      const mouthY = baseR * 0.45;
+      if (m > 0.12) {
+        noStroke();
+        fillC(DARK, 0.85);
+        ellipse(0, mouthY, baseR * 0.45, baseR * (0.12 + m * 0.5));
+      } else {
+        noFill();
+        strokeC(DARK, 0.9);
+        strokeWeight(2.6);
+        penLine(-baseR * 0.28, mouthY, baseR * 0.28, mouthY - 2, 1.4, 31, 1);
+      }
+    }
+
+    function drawHarmonicConstellation(minDim) {
+      const ringR = minDim * 0.31;
+      const nodePositions = [];
+
+      for (let pc = 0; pc < 12; pc++) {
+        const angle = (pc / 12) * TWO_PI - HALF_PI + rotationAngle * 0.35;
+        nodePositions.push({
+          x: cos(angle) * ringR,
+          y: sin(angle) * ringR,
+          angle: angle
+        });
+        pitchGlow[pc] *= 0.94; // Smooth decay
+      }
+
+      // Connect-the-dots chord lines in pen
+      noFill();
+      for (let i = 0; i < 12; i++) {
+        for (let j = i + 1; j < 12; j++) {
+          const bothInChord = activeChordPCs.includes(i) && activeChordPCs.includes(j);
+          const glowStrength = min(pitchGlow[i], pitchGlow[j]);
+
+          if (bothInChord || glowStrength > 0.18) {
+            const alpha = bothInChord ? (0.3 + glowStrength * 0.5) : (glowStrength * 0.5);
+            strokeC(currentInk, min(1, alpha));
+            strokeWeight(bothInChord ? 1.8 + glowStrength * 1.8 : 1.2);
+            penLine(nodePositions[i].x, nodePositions[i].y, nodePositions[j].x, nodePositions[j].y, 2.5, i * 13 + j, bothInChord ? 2 : 1);
+          }
+        }
+      }
+
+      // 12 note nodes + handwritten labels
+      textAlign(CENTER, CENTER);
+      textFont(HAND);
+      textSize(18);
+      for (let pc = 0; pc < 12; pc++) {
+        const pos = nodePositions[pc];
+        const glow = pitchGlow[pc];
+        const inChord = activeChordPCs.includes(pc);
+
+        // Scribbled halo
+        if (glow > 0.05 || inChord) {
+          strokeC(currentAccent, constrain(0.3 + glow * 0.4, 0, 0.85));
+          strokeWeight(2.5);
+          scribbleFill(pos.x, pos.y, 6 + glow * 9, 3.5, pc);
+        }
+
+        // Node: coloured-in star if in the chord, tiny pencil circle otherwise
+        if (inChord) {
+          strokeC(currentInk, 0.95);
+          strokeWeight(1.8);
+          fillC(currentInk, 0.5);
+          penStar(pos.x, pos.y, 6 + glow * 6, rotationAngle * 2 + pc);
+        } else {
+          strokeC(PENCIL, 0.35 + glow * 0.6);
+          strokeWeight(1.6);
+          noFill();
+          penCircle(pos.x, pos.y, 3 + glow * 5, 0.6, pc, 1);
+        }
+
+        // Letters (circled in pen when they're in the chord)
+        const labelR = ringR + 26;
+        const lx = cos(pos.angle) * labelR;
+        const ly = sin(pos.angle) * labelR;
+        noStroke();
+        if (inChord) {
+          fillC(currentInk, 0.95);
+          text(PITCH_NAMES[pc], lx, ly);
+          text(PITCH_NAMES[pc], lx + 0.7, ly + 0.4); // faux-bold: pressing harder
+          noFill();
+          strokeC(currentAccent, 0.7);
+          strokeWeight(1.6);
+          penCircle(lx, ly, 13, 1.2, pc + 30, 1);
+        } else {
+          fillC(PENCIL, 0.4 + glow * 0.5);
+          text(PITCH_NAMES[pc], lx, ly);
+        }
+      }
+    }
+
+    function drawShockwaves() {
+      noFill();
+      for (let i = shockwaves.length - 1; i >= 0; i--) {
+        const sw = shockwaves[i];
+        sw.r = lerp(sw.r, sw.maxR, 0.065);
+        sw.alpha *= 0.93;
+
+        strokeC(sw.col, min(1, sw.alpha * 1.4));
+        strokeWeight(sw.weight + 0.6);
+        penCircle(sw.x, sw.y, sw.r, 2.2 + sw.r * 0.01, sw.seed, 2);
+
+        if (sw.alpha < 0.015) shockwaves.splice(i, 1);
+      }
+    }
+
+    function drawLeadRibbon() {
+      if (leadRibbon.length < 2) return;
+      noFill();
+      for (let i = 0; i < leadRibbon.length - 1; i++) {
+        const p1 = leadRibbon[i];
+        const p2 = leadRibbon[i + 1];
+        p1.alpha *= 0.985;
+        strokeC(currentAccent, min(1, p1.alpha * 0.9));
+        strokeWeight(map(i, 0, leadRibbon.length, 1.2, 5));
+        penLine(p1.x, p1.y, p2.x, p2.y, 2, i, 1);
+      }
+      leadRibbon[leadRibbon.length - 1].alpha *= 0.985;
+
+      // little music notes along the path
+      noStroke();
+      textFont(HAND);
+      textAlign(CENTER, CENTER);
+      textSize(24);
+      for (let i = 0; i < leadRibbon.length; i++) {
+        fillC(currentAccent, leadRibbon[i].alpha * 0.9);
+        text("\u266A", leadRibbon[i].x, leadRibbon[i].y - 10);
+      }
+
+      while (leadRibbon.length > 0 && leadRibbon[0].alpha < 0.04) {
+        leadRibbon.shift();
+      }
+    }
+
+    function drawParticles() {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vx *= 0.985;
+        p.vy *= 0.985;
+        p.rot += p.spin;
+        p.alpha -= p.decay;
+
+        if (p.alpha <= 0) {
+          particles.splice(i, 1);
+          continue;
+        }
+
+        strokeC(p.col, min(1, p.alpha * 1.2));
+        strokeWeight(1.8);
+        if (p.kind < 2) fillC(p.col, p.alpha * 0.35); else noFill();
+        drawDoodle(p.kind, p.x, p.y, p.size * 1.3, p.rot);
+      }
+    }
+
+    // Margin doodles: the clock that won't move + the teacher who won't stop talking
+    function drawDecor(minDim) {
+      const rightFree = width / 2 - minDim * 0.44;
+      const leftFree = rightFree - 90;
+      const cy = height * 0.3;
+
+      // The clock
+      if (rightFree > 150) {
+        const cx = width - rightFree / 2, r = 34;
+        noFill();
+        strokeC(PENCIL, 0.85);
+        strokeWeight(2.6);
+        penCircle(cx, cy, r, 1.6, 77, 2);
+        strokeWeight(2);
+        for (let k = 0; k < 4; k++) {
+          const a = k * HALF_PI;
+          line(cx + cos(a) * (r - 10), cy + sin(a) * (r - 10), cx + cos(a) * (r - 4), cy + sin(a) * (r - 4));
+        }
+        const turns = frameCount * 0.00004; // painfully slow
+        const ma = turns * TWO_PI - HALF_PI;
+        const ha = (turns / 12) * TWO_PI - HALF_PI + 1.2;
+        strokeWeight(2);
+        penLine(cx, cy, cx + cos(ma) * r * 0.72, cy + sin(ma) * r * 0.72, 0.8, 3, 1);
+        strokeWeight(3.4);
+        penLine(cx, cy, cx + cos(ha) * r * 0.45, cy + sin(ha) * r * 0.45, 0.8, 4, 1);
+
+        noStroke();
+        fillC(PENCIL, 0.85);
+        textFont(HAND);
+        textAlign(CENTER, CENTER);
+        textSize(17);
+        push();
+        translate(cx, cy + r + 28);
+        rotate(0.05);
+        text("is it lunch yet??", 0, 0);
+        pop();
+      }
+
+      // The teacher
+      if (leftFree > 150) {
+        const bx = 90 + leftFree / 2, by = cy;
+        push();
+        translate(bx, by);
+        noFill();
+        strokeC(PENCIL, 0.85);
+        strokeWeight(2.4);
+
+        // speech bubble
+        push();
+        scale(1.5, 1);
+        penCircle(0, 0, 34, 1.6, 41, 2);
+        pop();
+        penLine(-16, 30, -34, 58, 1, 42, 1);
+        penLine(-34, 58, -2, 36, 1, 43, 1);
+
+        // stick figure
+        penCircle(-34, 68, 9, 0.8, 44, 1);
+        penLine(-34, 77, -34, 114, 1, 45, 1);
+        penLine(-34, 88, -12, 76, 1, 46, 1);   // pointing at the board
+        penLine(-34, 88, -52, 98, 1, 47, 1);
+        penLine(-34, 114, -46, 142, 1, 48, 1);
+        penLine(-34, 114, -22, 142, 1, 49, 1);
+
+        // flapping mouth: blah blah blah
+        noStroke();
+        fillC(DARK, 0.85);
+        ellipse(-34, 72, 4, 2 + abs(sin(frameCount * 0.3)) * 3);
+
+        fillC(PENCIL, 0.85);
+        textFont(HAND);
+        textAlign(CENTER, CENTER);
+        textSize(16);
+        text("blah blah", 0, -10);
+        text("blah blah...", 0, 10);
+        pop();
+      }
+    }
+
+    function drawWords() {
+      textFont(MARKER);
+      textAlign(CENTER, CENTER);
+      for (let i = popWords.length - 1; i >= 0; i--) {
+        const w = popWords[i];
+        w.life -= 0.016;
+        if (w.life <= 0) { popWords.splice(i, 1); continue; }
+
+        const age = 1 - w.life;
+        const sc = 0.5 + 0.5 * min(1, age * 7) + age * 0.15;
+        const a = min(1, w.life * 2.2);
+
+        push();
+        translate(w.x, w.y - age * 26);
+        rotate(w.rot);
+        scale(sc);
+        textSize(w.size);
+
+        const tw = textWidth(w.txt) * 0.62 + 18;
+        const th = w.size * 0.9 + 8;
+
+        // jagged comic-book burst
+        fillC([255, 241, 140], a * 0.92);
+        strokeC(w.col, a);
+        strokeWeight(3);
+        beginShape();
+        const spikes = 14;
+        for (let k = 0; k < spikes * 2; k++) {
+          const ang = (k / (spikes * 2)) * TWO_PI;
+          const mm = (k % 2 === 0) ? 1.25 : 0.9;
+          vertex(cos(ang) * tw * mm + wob(w.seed, k, 3), sin(ang) * th * mm + wob(w.seed + 9, k, 3));
+        }
+        endShape(CLOSE);
+
+        noStroke();
+        fillC(w.col, a);
+        text(w.txt, 0, 2);
+        pop();
+      }
+    }
+
+    function drawConductorBaton() {
+      if (mouseX <= 0 && mouseY <= 0) return;
+      batonTrail.push({ x: mouseX, y: mouseY });
+      if (batonTrail.length > 34) batonTrail.shift();
+
+      // pen scribble trail
+      noFill();
+      for (let i = 0; i < batonTrail.length - 1; i++) {
+        const t = i / batonTrail.length;
+        strokeC(currentInk, t * 0.75);
+        strokeWeight(0.8 + t * (2 + conductorExpr * 3));
+        penLine(batonTrail[i].x, batonTrail[i].y, batonTrail[i + 1].x, batonTrail[i + 1].y, 0.9, i * 3, 1);
+      }
+
+      // a chewed-up yellow pencil
+      push();
+      translate(mouseX, mouseY);
+      rotate(-0.8);
+      strokeC(DARK, 0.9);
+      strokeWeight(1.6);
+      fill(236, 200, 150);
+      triangle(0, 0, 16, -5.5, 16, 5.5);           // sharpened wood
+      noStroke();
+      fill(60, 60, 70);
+      triangle(0, 0, 5.5, -2, 5.5, 2);              // graphite
+      strokeC(DARK, 0.9);
+      strokeWeight(1.6);
+      fill(246, 196, 40);
+      rect(16, -5.5, 62, 11);                       // body
+      stroke(214, 160, 20);
+      strokeWeight(1.2);
+      line(16, -1.5, 78, -1.5);
+      line(16, 2.5, 78, 2.5);
+      strokeC(DARK, 0.9);
+      strokeWeight(1.6);
+      fill(170, 175, 185);
+      rect(78, -5.5, 10, 11);                       // ferrule
+      fill(240, 130, 150);
+      rect(88, -5.5, 11, 11, 0, 4, 4, 0);           // eraser
+      pop();
+    }
+
+    function mousePressed(event) {
+      // Ignore clicks on UI buttons or overlay
+      if (event && event.target && event.target.tagName !== "CANVAS") return;
+      triggerSforzando(mouseX, mouseY);
+    }
+
+    // =========================================================================
+    // UI & HUD MANAGEMENT
+    // =========================================================================
+    const startBtn = document.getElementById("start-btn");
+    const overlay = document.getElementById("overlay");
+    const hud = document.getElementById("hud");
+    const movTitleEl = document.getElementById("movement-title");
+    const harmonyEl = document.getElementById("harmony-readout");
+    const barCounterEl = document.getElementById("bar-counter");
+    const progressFillEl = document.getElementById("progress-fill");
+    const playPauseBtn = document.getElementById("play-pause-btn");
+    const movButtons = document.querySelectorAll(".ctrl-btn[data-mov]");
+
+    startBtn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      startBtn.textContent = "Sharpening pencils...";
+      await initSymphonyAudio();
+      overlay.classList.add("hidden");
+      hud.classList.add("visible");
+    });
+
+    playPauseBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!isStarted) return;
+      if (isPlaying) {
+        Tone.Transport.pause();
+        padSynth.releaseAll();
+        arpSynth.releaseAll();
+        playPauseBtn.textContent = "Resume";
+        isPlaying = false;
+      } else {
+        Tone.Transport.start();
+        playPauseBtn.textContent = "Pause";
+        isPlaying = true;
+      }
+    });
+
+    movButtons.forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!isStarted) return;
+        const targetMovIdx = parseInt(btn.getAttribute("data-mov"));
+        currentBar = targetMovIdx * 8;
+        currentStep = 0;
+        currentMovIndex = targetMovIdx;
+        padSynth.releaseAll();
+        Tone.Transport.bpm.rampTo(MOVEMENTS[targetMovIdx].bpm, 0.5);
+        updateHUD(currentBar, 0);
+      });
+    });
+
+    function getDynamicMarking(expr) {
+      if (expr < 0.3) return "pp (Pianissimo)";
+      if (expr < 0.48) return "mp (Mezzo-piano)";
+      if (expr < 0.68) return "mf (Mezzo-forte)";
+      if (expr < 0.86) return "f (Forte)";
+      return "ff (Fortissimo)";
+    }
+
+    function updateHUD(bar, step) {
+      const barData = SCORE[bar];
+      const mov = MOVEMENTS[barData.mov];
+
+      // The pen colour for the HUD follows the current movement
+      document.documentElement.style.setProperty("--mov-ink", rgbStr(mov.palette.ink));
+
+      movTitleEl.textContent = mov.title;
+      harmonyEl.innerHTML = `Harmony: <strong>${barData.name}</strong> &bull; Tempo: ${mov.bpm} BPM &bull; Dynamics: ${getDynamicMarking(conductorExpr)}`;
+      barCounterEl.textContent = `Measure ${bar + 1} / ${SCORE.length}`;
+
+      const totalSteps = SCORE.length * 16;
+      const pct = ((bar * 16 + step) / totalSteps) * 100;
+      progressFillEl.style.width = `${pct}%`;
+
+      movButtons.forEach((b) => {
+        const idx = parseInt(b.getAttribute("data-mov"));
+        b.classList.toggle("active", idx === barData.mov);
+      });
+    }
+  </script>
+</body>
+</html>

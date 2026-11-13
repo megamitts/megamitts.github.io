@@ -1,0 +1,1704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Whimsical Voxel Windmill World</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #95dcf9;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <script type="module">
+    import * as THREE from 'three';
+
+    // =========================================================================
+    // 1. GLOBAL CONFIGURATION & DETERMINISTIC HELPERS
+    // =========================================================================
+
+    const WORLD_RADIUS = 64;
+    const TERRAIN_STEP = 1.5;
+    const JOURNEY_DURATION = 54.0; // Seconds for one complete seamless loop
+    const WINDMILL_FACING_YAW = -0.42; // Angled nicely toward the opening/approach view
+
+    // Simple deterministic pseudo-random generator so the diorama is cohesive
+    function seededRandom(seed) {
+      let value = seed % 2147483647;
+      if (value <= 0) value += 2147483646;
+      return function () {
+        value = (value * 16807) % 2147483647;
+        return (value - 1) / 2147483646;
+      };
+    }
+
+    const random = seededRandom(4217);
+
+    // Creates a BoxGeometry with subtle baked per-face brightness shading so
+    // every voxel has crisp architectural definition and miniature AO depth.
+    function createShadedBoxGeometry(width, height, depth, shadeStrength = 1.0) {
+      const geometry = new THREE.BoxGeometry(width, height, depth);
+      const positionAttr = geometry.attributes.position;
+      const normalAttr = geometry.attributes.normal;
+      const colors = new Float32Array(positionAttr.count * 3);
+
+      for (let i = 0; i < positionAttr.count; i++) {
+        const nx = normalAttr.getX(i);
+        const ny = normalAttr.getY(i);
+        const nz = normalAttr.getZ(i);
+
+        let brightness = 1.0;
+        if (ny > 0.5) {
+          brightness = 1.0; // Top face catches full sky light
+        } else if (ny < -0.5) {
+          brightness = 0.72; // Underside shaded
+        } else if (nz > 0.5) {
+          brightness = 0.95; // Front-ish side
+        } else if (nx > 0.5) {
+          brightness = 0.91; // Right side
+        } else if (nz < -0.5) {
+          brightness = 0.86; // Back side
+        } else {
+          brightness = 0.83; // Left side
+        }
+
+        const shaded = 1.0 - (1.0 - brightness) * shadeStrength;
+        colors[i * 3] = shaded;
+        colors[i * 3 + 1] = shaded;
+        colors[i * 3 + 2] = shaded;
+      }
+
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      return geometry;
+    }
+
+    // Helper to create a single voxel mesh with optional shadow casting/receiving
+    function createVoxelMesh(width, height, depth, colorHex, options = {}) {
+      const {
+        castShadow = true,
+        receiveShadow = true,
+        roughness = 0.88,
+        emissive = 0x000000,
+        emissiveIntensity = 0,
+        shadeStrength = 0.75,
+        transparent = false,
+        opacity = 1.0
+      } = options;
+
+      const geometry = createShadedBoxGeometry(width, height, depth, shadeStrength);
+      const material = new THREE.MeshStandardMaterial({
+        color: colorHex,
+        vertexColors: true,
+        roughness,
+        metalness: 0.02,
+        emissive,
+        emissiveIntensity,
+        transparent,
+        opacity
+      });
+
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.castShadow = castShadow;
+      mesh.receiveShadow = receiveShadow;
+      return mesh;
+    }
+
+    // Smooth stepped terrain height function used for both terrain placement and
+    // snapping flowers, rocks, trees, windmill, and hopping rabbits onto voxels.
+    function getTerrainHeight(x, z) {
+      const distance = Math.hypot(x, z);
+
+      // Keep the immediate windmill courtyard flat and welcoming
+      if (distance < 9.5) {
+        return 0.5;
+      }
+
+      // Gentle meadow undulation in the central countryside
+      const waveA = Math.sin(x * 0.095 + 0.4) * Math.cos(z * 0.085 - 0.3);
+      const waveB = Math.sin((x + z) * 0.065) * 0.6;
+      const waveC = Math.cos(x * 0.17 - z * 0.14) * 0.35;
+      const meadowNoise = waveA * 0.85 + waveB + waveC;
+
+      const meadowBlend = THREE.MathUtils.smoothstep(distance, 9.5, 18.0);
+      let height = 0.5 + meadowBlend * (0.65 + meadowNoise * 0.95);
+
+      // Rolling layered hills around the perimeter
+      if (distance > 32.0) {
+        const hillFactor = THREE.MathUtils.smoothstep(distance, 32.0, 62.0);
+        const ridgeNoise =
+          Math.sin(x * 0.075 - 1.1) * Math.cos(z * 0.07 + 0.8) * 2.4 +
+          Math.sin(Math.atan2(z, x) * 5.0 + 0.6) * 1.4;
+        height += hillFactor * (5.2 + Math.max(-1.2, ridgeNoise));
+      }
+
+      // Quantize heights into crisp voxel terrace steps
+      const stepSize = distance > 34.0 ? 1.0 : 0.5;
+      return Math.max(0.0, Math.round(height / stepSize) * stepSize);
+    }
+
+    // Distance from a world point to the windmill's stepping-stone front path
+    function getDistanceToPath(x, z) {
+      const dirX = Math.sin(WINDMILL_FACING_YAW);
+      const dirZ = Math.cos(WINDMILL_FACING_YAW);
+      const along = x * dirX + z * dirZ;
+      if (along < 3.5 || along > 26.0) return 999;
+
+      // Slight whimsical S-curve along the stone path
+      const curveOffset = Math.sin((along - 4.0) * 0.25) * 1.4;
+      const perpX = dirZ;
+      const perpZ = -dirX;
+      const lateral = x * perpX + z * perpZ - curveOffset;
+      return Math.abs(lateral);
+    }
+
+    // =========================================================================
+    // 2. SCENE SETUP & RENDERER
+    // =========================================================================
+
+    const scene = new THREE.Scene();
+    const skyColor = new THREE.Color(0x95dcf9);
+    scene.background = skyColor;
+    // Very gentle far fog so distant hills soften without fading the windmill
+    scene.fog = new THREE.Fog(0xb6e8fc, 130, 260);
+
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: 'high-performance'
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
+    renderer.toneMapping = THREE.NeutralToneMapping;
+    renderer.toneMappingExposure = 1.04;
+    document.body.appendChild(renderer.domElement);
+
+    // Orthographic camera for the miniature tabletop diorama appearance
+    let currentFrustumHeight = 52;
+    const initialAspect = window.innerWidth / window.innerHeight;
+    const camera = new THREE.OrthographicCamera(
+      (-currentFrustumHeight * initialAspect) / 2,
+      (currentFrustumHeight * initialAspect) / 2,
+      currentFrustumHeight / 2,
+      -currentFrustumHeight / 2,
+      1,
+      360
+    );
+
+    function updateCameraFrustum(frustumHeight) {
+      const aspect = window.innerWidth / window.innerHeight;
+      // Widen height gently on narrower viewports so the windmill is never cropped
+      const adjustedHeight = aspect < 1.35 ? frustumHeight * (1.35 / aspect) : frustumHeight;
+      camera.left = (-adjustedHeight * aspect) / 2;
+      camera.right = (adjustedHeight * aspect) / 2;
+      camera.top = adjustedHeight / 2;
+      camera.bottom = -adjustedHeight / 2;
+      camera.updateProjectionMatrix();
+    }
+
+    // =========================================================================
+    // 3. LIGHTING
+    // =========================================================================
+
+    function initLighting() {
+      // Soft sky-to-grass bounce fill light
+      const hemisphereLight = new THREE.HemisphereLight(0xdff5ff, 0x8ec96e, 0.95);
+      scene.add(hemisphereLight);
+
+      // Gentle warm ambient fill so shadow sides remain colorful and readable
+      const ambientLight = new THREE.AmbientLight(0xfff4df, 0.32);
+      scene.add(ambientLight);
+
+      // Warm golden afternoon sunlight casting crisp miniature shadows
+      const sunLight = new THREE.DirectionalLight(0xfff2cc, 1.85);
+      sunLight.position.set(42, 58, -36);
+      sunLight.castShadow = true;
+      sunLight.shadow.mapSize.set(2048, 2048);
+      sunLight.shadow.camera.left = -46;
+      sunLight.shadow.camera.right = 46;
+      sunLight.shadow.camera.top = 46;
+      sunLight.shadow.camera.bottom = -46;
+      sunLight.shadow.camera.near = 10;
+      sunLight.shadow.camera.far = 175;
+      sunLight.shadow.bias = -0.0007;
+      sunLight.shadow.normalBias = 0.04;
+      sunLight.shadow.radius = 2.4;
+      scene.add(sunLight);
+
+      // Subtle cool rim light from the opposite sky quadrant for extra voxel depth
+      const rimLight = new THREE.DirectionalLight(0xbce8ff, 0.35);
+      rimLight.position.set(-45, 28, 45);
+      scene.add(rimLight);
+    }
+
+    initLighting();
+
+    // =========================================================================
+    // 4. ENVIRONMENT CONSTRUCTION (TERRAIN, HILLS, TREES, ROCKS, FLOWERS)
+    // =========================================================================
+
+    const animatedGrassTufts = [];
+    const animatedFlowers = [];
+    let grassInstancedMesh = null;
+    let flowerStemMesh = null;
+    let flowerPetalMesh = null;
+    let flowerCenterMesh = null;
+
+    function buildEnvironment() {
+      const environmentGroup = new THREE.Group();
+      scene.add(environmentGroup);
+
+      // --- A. Instanced Voxel Terrain & Rolling Hills ---
+      const terrainCoords = [];
+      const halfSpan = Math.floor(WORLD_RADIUS / TERRAIN_STEP) * TERRAIN_STEP;
+
+      for (let gx = -halfSpan; gx <= halfSpan; gx += TERRAIN_STEP) {
+        for (let gz = -halfSpan; gz <= halfSpan; gz += TERRAIN_STEP) {
+          const dist = Math.hypot(gx, gz);
+          // Slightly irregular organic diorama rim
+          const rimJitter = Math.sin(Math.atan2(gz, gx) * 7.0) * 1.6;
+          if (dist <= WORLD_RADIUS + rimJitter) {
+            terrainCoords.push({ x: gx, z: gz, dist });
+          }
+        }
+      }
+
+      const blockHeight = 16;
+      const terrainGeo = createShadedBoxGeometry(TERRAIN_STEP, blockHeight, TERRAIN_STEP, 0.9);
+      const terrainMat = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        vertexColors: true,
+        roughness: 0.92,
+        metalness: 0.0
+      });
+
+      const terrainMesh = new THREE.InstancedMesh(terrainGeo, terrainMat, terrainCoords.length);
+      terrainMesh.castShadow = true;
+      terrainMesh.receiveShadow = true;
+      terrainMesh.frustumCulled = false;
+
+      // Pastel-inspired grass and distant hill palettes
+      const meadowGreens = [
+        new THREE.Color(0x7ed957),
+        new THREE.Color(0x8be063),
+        new THREE.Color(0x72cc4d),
+        new THREE.Color(0x98e86f)
+      ];
+      const distantHillGreens = [
+        new THREE.Color(0x8fd683),
+        new THREE.Color(0xa6dea2),
+        new THREE.Color(0xb8e5b9),
+        new THREE.Color(0xc5ebca)
+      ];
+      const pathStoneColors = [
+        new THREE.Color(0xe6cfb0),
+        new THREE.Color(0xdcc09a),
+        new THREE.Color(0xcab69b)
+      ];
+
+      const dummy = new THREE.Object3D();
+      const tempColor = new THREE.Color();
+
+      for (let i = 0; i < terrainCoords.length; i++) {
+        const { x, z, dist } = terrainCoords[i];
+        const topY = getTerrainHeight(x, z);
+
+        dummy.position.set(x, topY - blockHeight / 2, z);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        terrainMesh.setMatrixAt(i, dummy.matrix);
+
+        // Choose block color based on path, meadow patches, or distant hills
+        const pathDist = getDistanceToPath(x, z);
+        const patchNoise = Math.sin(x * 0.22 + 0.5) * Math.cos(z * 0.22 - 0.7);
+
+        if (pathDist < 1.15 && random() > 0.12) {
+          const stone = pathStoneColors[Math.floor(random() * pathStoneColors.length)];
+          tempColor.copy(stone);
+        } else if (dist > 45.0) {
+          // Furthest hills are lighter and slightly desaturated for atmospheric depth
+          const hillBand = THREE.MathUtils.clamp((dist - 45.0) / 18.0, 0, 1);
+          const baseIdx = Math.min(3, Math.floor(hillBand * 3.5));
+          tempColor.copy(distantHillGreens[baseIdx]);
+          tempColor.offsetHSL(0, 0, (random() - 0.5) * 0.03);
+        } else {
+          // Vibrant patches of darker and lighter meadow grass
+          let greenIdx = 0;
+          if (patchNoise > 0.35) greenIdx = 3;
+          else if (patchNoise < -0.35) greenIdx = 2;
+          else if (random() > 0.55) greenIdx = 1;
+          tempColor.copy(meadowGreens[greenIdx]);
+          tempColor.offsetHSL((random() - 0.5) * 0.015, 0, (random() - 0.5) * 0.035);
+        }
+
+        // Subtle ambient-occlusion darkening when tucked below taller neighbors
+        const neighborAvg =
+          (getTerrainHeight(x + TERRAIN_STEP, z) +
+            getTerrainHeight(x - TERRAIN_STEP, z) +
+            getTerrainHeight(x, z + TERRAIN_STEP) +
+            getTerrainHeight(x, z - TERRAIN_STEP)) *
+          0.25;
+        if (neighborAvg > topY + 0.25) {
+          tempColor.multiplyScalar(0.92);
+        }
+
+        terrainMesh.setColorAt(i, tempColor);
+      }
+
+      terrainMesh.instanceMatrix.needsUpdate = true;
+      terrainMesh.instanceColor.needsUpdate = true;
+      environmentGroup.add(terrainMesh);
+
+      // --- B. Diorama Earth & Stone Under-Base Skirt ---
+      // Gives the outer tabletop rim a finished earthen/stone cutaway look
+      const baseRim = createVoxelMesh(118, 5, 118, 0xb88f68, {
+        castShadow: false,
+        receiveShadow: true
+      });
+      baseRim.position.set(0, -6.5, 0);
+      environmentGroup.add(baseRim);
+
+      // --- C. Scattered Voxel Grass Tufts (Instanced & Animated) ---
+      const grassPlacements = [];
+      for (let i = 0; i < 620; i++) {
+        const angle = random() * Math.PI * 2;
+        const radius = 5.5 + Math.sqrt(random()) * 42.0;
+        const x = Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
+        if (getDistanceToPath(x, z) < 1.5) continue;
+
+        const y = getTerrainHeight(x, z);
+        grassPlacements.push({
+          x,
+          y,
+          z,
+          yaw: random() * Math.PI,
+          scaleY: 0.75 + random() * 0.65,
+          phase: x * 0.23 + z * 0.19 + random() * 1.4,
+          speed: 1.6 + random() * 0.9
+        });
+      }
+
+      const grassGeo = createShadedBoxGeometry(0.16, 0.52, 0.16, 0.65);
+      // Shift pivot to bottom of grass blade
+      grassGeo.translate(0, 0.26, 0);
+      const grassMat = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        vertexColors: true,
+        roughness: 0.85
+      });
+
+      grassInstancedMesh = new THREE.InstancedMesh(grassGeo, grassMat, grassPlacements.length);
+      grassInstancedMesh.castShadow = false;
+      grassInstancedMesh.receiveShadow = true;
+      grassInstancedMesh.frustumCulled = false;
+      grassInstancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+
+      const tuftColors = [
+        new THREE.Color(0x69c746),
+        new THREE.Color(0x88e35d),
+        new THREE.Color(0xa2ed74)
+      ];
+
+      for (let i = 0; i < grassPlacements.length; i++) {
+        const item = grassPlacements[i];
+        animatedGrassTufts.push(item);
+        grassInstancedMesh.setColorAt(i, tuftColors[Math.floor(random() * tuftColors.length)]);
+      }
+      grassInstancedMesh.instanceColor.needsUpdate = true;
+      environmentGroup.add(grassInstancedMesh);
+
+      // --- D. Scattered Voxel Flowers & Daisies (Instanced & Animated) ---
+      const flowerPlacements = [];
+      const petalPalette = [
+        new THREE.Color(0xffffff), // Daisy white
+        new THREE.Color(0xffffff), // Daisy white (weighted higher)
+        new THREE.Color(0xff8fab), // Pastel coral pink
+        new THREE.Color(0xffd93d), // Buttercup yellow
+        new THREE.Color(0xc79eff), // Soft lavender
+        new THREE.Color(0x7cc8ff)  // Forget-me-not blue
+      ];
+
+      for (let i = 0; i < 360; i++) {
+        const angle = random() * Math.PI * 2;
+        const radius = 5.0 + Math.sqrt(random()) * 37.0;
+        const x = Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
+        if (getDistanceToPath(x, z) < 1.45) continue;
+
+        const y = getTerrainHeight(x, z);
+        const paletteColor = petalPalette[Math.floor(random() * petalPalette.length)];
+        flowerPlacements.push({
+          x,
+          y,
+          z,
+          yaw: random() * Math.PI * 2,
+          scale: 0.85 + random() * 0.45,
+          phase: x * 0.21 + z * 0.25 + random() * 2.0,
+          speed: 1.4 + random() * 0.7,
+          petalColor: paletteColor
+        });
+      }
+
+      const stemGeo = createShadedBoxGeometry(0.11, 0.42, 0.11, 0.6);
+      stemGeo.translate(0, 0.21, 0);
+      const stemMat = new THREE.MeshStandardMaterial({
+        color: 0x5ab83e,
+        vertexColors: true,
+        roughness: 0.88
+      });
+
+      const petalGeo = createShadedBoxGeometry(0.36, 0.13, 0.36, 0.7);
+      petalGeo.translate(0, 0.45, 0);
+      const petalMat = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        vertexColors: true,
+        roughness: 0.8
+      });
+
+      const centerGeo = createShadedBoxGeometry(0.16, 0.16, 0.16, 0.5);
+      centerGeo.translate(0, 0.50, 0);
+      const centerMat = new THREE.MeshStandardMaterial({
+        color: 0xffd23f,
+        vertexColors: true,
+        roughness: 0.75
+      });
+
+      flowerStemMesh = new THREE.InstancedMesh(stemGeo, stemMat, flowerPlacements.length);
+      flowerPetalMesh = new THREE.InstancedMesh(petalGeo, petalMat, flowerPlacements.length);
+      flowerCenterMesh = new THREE.InstancedMesh(centerGeo, centerMat, flowerPlacements.length);
+
+      [flowerStemMesh, flowerPetalMesh, flowerCenterMesh].forEach((mesh) => {
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.frustumCulled = false;
+        mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        environmentGroup.add(mesh);
+      });
+
+      for (let i = 0; i < flowerPlacements.length; i++) {
+        const flower = flowerPlacements[i];
+        animatedFlowers.push(flower);
+        flowerPetalMesh.setColorAt(i, flower.petalColor);
+      }
+      flowerPetalMesh.instanceColor.needsUpdate = true;
+
+      // --- E. Voxel Rocks & Boulders ---
+      function createVoxelRock(x, z, scale = 1.0) {
+        const rockGroup = new THREE.Group();
+        const y = getTerrainHeight(x, z);
+        rockGroup.position.set(x, y, z);
+        rockGroup.rotation.y = random() * Math.PI * 2;
+
+        const stoneColors = [0x9aa4b0, 0x8994a1, 0xb2bcc7];
+        const mainColor = stoneColors[Math.floor(random() * stoneColors.length)];
+
+        const baseBlock = createVoxelMesh(1.1 * scale, 0.7 * scale, 0.95 * scale, mainColor);
+        baseBlock.position.set(0, 0.35 * scale, 0);
+        rockGroup.add(baseBlock);
+
+        const topBlock = createVoxelMesh(0.72 * scale, 0.48 * scale, 0.68 * scale, 0xaab4bf);
+        topBlock.position.set(0.12 * scale, 0.85 * scale, -0.05 * scale);
+        rockGroup.add(topBlock);
+
+        if (random() > 0.45) {
+          const pebble = createVoxelMesh(0.5 * scale, 0.35 * scale, 0.48 * scale, 0x838d99);
+          pebble.position.set(-0.55 * scale, 0.17 * scale, 0.35 * scale);
+          rockGroup.add(pebble);
+        }
+
+        // Occasional tiny moss patch on rock
+        if (random() > 0.55) {
+          const moss = createVoxelMesh(0.45 * scale, 0.14 * scale, 0.42 * scale, 0x77cf52);
+          moss.position.set(0.12 * scale, 1.12 * scale, -0.05 * scale);
+          rockGroup.add(moss);
+        }
+
+        return rockGroup;
+      }
+
+      for (let i = 0; i < 34; i++) {
+        const angle = random() * Math.PI * 2;
+        const radius = 8.5 + random() * 38.0;
+        const x = Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
+        if (getDistanceToPath(x, z) < 2.2) continue;
+        environmentGroup.add(createVoxelRock(x, z, 0.75 + random() * 0.75));
+      }
+
+      // --- F. Whimsical Voxel Trees Framing the Countryside ---
+      function createVoxelTree(x, z, style = 'oak', scale = 1.0) {
+        const treeGroup = new THREE.Group();
+        const y = getTerrainHeight(x, z);
+        treeGroup.position.set(x, y, z);
+        treeGroup.rotation.y = random() * Math.PI * 2;
+
+        const trunkColor = 0x855336;
+        const trunk = createVoxelMesh(0.9 * scale, 3.0 * scale, 0.9 * scale, trunkColor);
+        trunk.position.y = 1.5 * scale;
+        treeGroup.add(trunk);
+
+        if (style === 'oak') {
+          const leafColors = [0x6fd053, 0x82dc62, 0x60bd46];
+          const c1 = leafColors[Math.floor(random() * leafColors.length)];
+          const lowerCanopy = createVoxelMesh(3.2 * scale, 1.8 * scale, 3.2 * scale, c1);
+          lowerCanopy.position.y = 3.5 * scale;
+          treeGroup.add(lowerCanopy);
+
+          const midCanopy = createVoxelMesh(2.4 * scale, 1.4 * scale, 2.4 * scale, 0x8de36e);
+          midCanopy.position.set(0.15 * scale, 4.7 * scale, -0.1 * scale);
+          treeGroup.add(midCanopy);
+
+          const topCanopy = createVoxelMesh(1.4 * scale, 0.9 * scale, 1.4 * scale, 0x9feb7f);
+          topCanopy.position.set(0, 5.6 * scale, 0);
+          treeGroup.add(topCanopy);
+        } else {
+          // Layered voxel pine tree
+          const layers = [
+            { size: 3.1, height: 1.2, y: 2.6, color: 0x55a858 },
+            { size: 2.3, height: 1.2, y: 3.7, color: 0x64ba64 },
+            { size: 1.5, height: 1.1, y: 4.8, color: 0x76cc74 },
+            { size: 0.8, height: 0.9, y: 5.7, color: 0x89db85 }
+          ];
+          layers.forEach((layer) => {
+            const coneBlock = createVoxelMesh(
+              layer.size * scale,
+              layer.height * scale,
+              layer.size * scale,
+              layer.color
+            );
+            coneBlock.position.y = layer.y * scale;
+            treeGroup.add(coneBlock);
+          });
+        }
+
+        return treeGroup;
+      }
+
+      // Place trees around the mid/outer ring so they frame the windmill without blocking views
+      const treeCount = 26;
+      for (let i = 0; i < treeCount; i++) {
+        const angle = (i / treeCount) * Math.PI * 2 + (random() - 0.5) * 0.25;
+        const radius = 25.0 + random() * 24.0;
+        const x = Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
+        if (getDistanceToPath(x, z) < 4.0) continue;
+
+        const style = random() > 0.42 ? 'oak' : 'pine';
+        environmentGroup.add(createVoxelTree(x, z, style, 0.85 + random() * 0.45));
+      }
+
+      return environmentGroup;
+    }
+
+    buildEnvironment();
+
+    // =========================================================================
+    // 5. SKY, VOXEL SUN & DRIFTING CLOUDS
+    // =========================================================================
+
+    const clouds = [];
+    let sunGroup = null;
+
+    function createVoxelCloud(scale = 1.0) {
+      const cloudGroup = new THREE.Group();
+      const white = 0xffffff;
+      const softCream = 0xf0f6ff;
+
+      // Chunky stepped cluster of cubes for a fluffy storybook cloud
+      const blocks = [
+        { x: 0, y: 0, z: 0, w: 3.6, h: 1.5, d: 2.6, c: white },
+        { x: -1.8, y: -0.25, z: 0.2, w: 2.2, h: 1.1, d: 2.0, c: softCream },
+        { x: 1.9, y: -0.2, z: -0.15, w: 2.4, h: 1.15, d: 2.1, c: softCream },
+        { x: -0.3, y: 0.95, z: 0.1, w: 2.2, h: 1.1, d: 1.9, c: white },
+        { x: 1.0, y: 0.65, z: 0.35, w: 1.5, h: 0.9, d: 1.5, c: white }
+      ];
+
+      blocks.forEach((b) => {
+        const puff = createVoxelMesh(b.w * scale, b.h * scale, b.d * scale, b.c, {
+          castShadow: false,
+          receiveShadow: false,
+          roughness: 1.0,
+          emissive: 0xffffff,
+          emissiveIntensity: 0.22,
+          shadeStrength: 0.35
+        });
+        puff.position.set(b.x * scale, b.y * scale, b.z * scale);
+        cloudGroup.add(puff);
+      });
+
+      return cloudGroup;
+    }
+
+    function buildSkyAndClouds() {
+      const skyGroup = new THREE.Group();
+      scene.add(skyGroup);
+
+      // Warm glowing voxel sun placed high in the sky
+      sunGroup = new THREE.Group();
+      sunGroup.position.set(36, 51, -36);
+
+      const sunCore = createVoxelMesh(5.6, 5.6, 5.6, 0xffe45e, {
+        castShadow: false,
+        receiveShadow: false,
+        emissive: 0xffd23f,
+        emissiveIntensity: 0.85,
+        shadeStrength: 0.2
+      });
+      sunGroup.add(sunCore);
+
+      // Stepped golden sun rays around core
+      const rayOffsets = [
+        [3.2, 0, 0, 1.4, 3.4, 3.4],
+        [-3.2, 0, 0, 1.4, 3.4, 3.4],
+        [0, 3.2, 0, 3.4, 1.4, 3.4],
+        [0, -3.2, 0, 3.4, 1.4, 3.4],
+        [0, 0, 3.2, 3.4, 3.4, 1.4],
+        [0, 0, -3.2, 3.4, 3.4, 1.4]
+      ];
+      rayOffsets.forEach(([x, y, z, w, h, d]) => {
+        const ray = createVoxelMesh(w, h, d, 0xffd166, {
+          castShadow: false,
+          receiveShadow: false,
+          emissive: 0xffc83d,
+          emissiveIntensity: 0.65,
+          shadeStrength: 0.2
+        });
+        ray.position.set(x, y, z);
+        sunGroup.add(ray);
+      });
+
+      skyGroup.add(sunGroup);
+
+      // Populate sky with drifting fluffy voxel clouds at varied altitudes & speeds
+      for (let i = 0; i < 14; i++) {
+        const cloud = createVoxelCloud(1.1 + random() * 1.15);
+        const startX = -80 + (i / 14) * 160 + (random() - 0.5) * 10;
+        const y = 30 + random() * 14;
+        const z = -62 + random() * 110;
+        cloud.position.set(startX, y, z);
+        cloud.rotation.y = (random() - 0.5) * 0.35;
+
+        skyGroup.add(cloud);
+        clouds.push({
+          mesh: cloud,
+          speed: 0.75 + random() * 1.1,
+          bobPhase: random() * Math.PI * 2,
+          baseY: y
+        });
+      }
+    }
+
+    buildSkyAndClouds();
+
+    // =========================================================================
+    // 6. WINDMILL CONSTRUCTION (CENTRAL ATTRACTION)
+    // =========================================================================
+
+    let bladeAssembly = null;
+    let lanternGlowMesh = null;
+    const smokePuffs = [];
+
+    function buildWindmill() {
+      const windmillGroup = new THREE.Group();
+      const originY = getTerrainHeight(0, 0);
+      windmillGroup.position.set(0, originY, 0);
+      windmillGroup.rotation.y = WINDMILL_FACING_YAW;
+      scene.add(windmillGroup);
+
+      const creamColors = [0xf7efe0, 0xf2e7d3, 0xfaf4e8];
+      const stoneColors = [0x99a3ad, 0x89939e, 0xadb6bf];
+      const woodDark = 0x73452b;
+      const woodWarm = 0x945e3d;
+      const roofSlate = 0x3b4b59;
+      const roofTrim = 0x2e3b47;
+      const shutterGreen = 0x5c8a72;
+
+      // --- A. Stone Foundation Plinth & Front Steps ---
+      const plinth = createVoxelMesh(7.6, 1.3, 7.6, stoneColors[0]);
+      plinth.position.y = 0.65;
+      windmillGroup.add(plinth);
+
+      // Corner stone accents on plinth
+      [
+        [-3.6, -3.6],
+        [3.6, -3.6],
+        [-3.6, 3.6],
+        [3.6, 3.6]
+      ].forEach(([cx, cz], idx) => {
+        const cornerStone = createVoxelMesh(1.3, 1.5, 1.3, stoneColors[(idx + 1) % 3]);
+        cornerStone.position.set(cx, 0.75, cz);
+        windmillGroup.add(cornerStone);
+      });
+
+      // Front door stone steps (+Z side)
+      const stepLower = createVoxelMesh(2.8, 0.45, 1.4, stoneColors[2]);
+      stepLower.position.set(0, 0.225, 4.35);
+      windmillGroup.add(stepLower);
+
+      const stepUpper = createVoxelMesh(2.4, 0.9, 0.9, stoneColors[1]);
+      stepUpper.position.set(0, 0.45, 3.9);
+      windmillGroup.add(stepUpper);
+
+      // --- B. Tapered Cream Voxel Tower (3 Stepped Tiers + Chamfered Corners) ---
+      const tiers = [
+        { yBottom: 1.3, height: 4.0, width: 6.4 },
+        { yBottom: 5.3, height: 3.6, width: 5.4 },
+        { yBottom: 8.9, height: 3.5, width: 4.5 }
+      ];
+
+      tiers.forEach((tier, tIdx) => {
+        const mainWall = createVoxelMesh(
+          tier.width,
+          tier.height,
+          tier.width,
+          creamColors[tIdx % creamColors.length]
+        );
+        mainWall.position.y = tier.yBottom + tier.height / 2;
+        windmillGroup.add(mainWall);
+
+        // Recessed/stepped mid-face panels to give an octagonal/tapered voxel silhouette
+        const panelWidth = tier.width * 0.68;
+        const panelOut = tier.width + 0.55;
+        const panelA = createVoxelMesh(
+          panelWidth,
+          tier.height,
+          panelOut,
+          creamColors[(tIdx + 1) % creamColors.length]
+        );
+        panelA.position.y = tier.yBottom + tier.height / 2;
+        windmillGroup.add(panelA);
+
+        const panelB = createVoxelMesh(
+          panelOut,
+          tier.height,
+          panelWidth,
+          creamColors[(tIdx + 2) % creamColors.length]
+        );
+        panelB.position.y = tier.yBottom + tier.height / 2;
+        windmillGroup.add(panelB);
+
+        // Horizontal wooden ring beam separating each tier
+        const ringBeam = createVoxelMesh(tier.width + 0.85, 0.38, tier.width + 0.85, woodWarm);
+        ringBeam.position.y = tier.yBottom + tier.height + 0.15;
+        windmillGroup.add(ringBeam);
+      });
+
+      // Vertical timber posts on all 4 corners of the lower & mid tower
+      const beamOffsets = [
+        [-3.0, -3.0],
+        [3.0, -3.0],
+        [-3.0, 3.0],
+        [3.0, 3.0]
+      ];
+      beamOffsets.forEach(([bx, bz]) => {
+        const post = createVoxelMesh(0.45, 4.1, 0.45, woodDark);
+        post.position.set(bx, 3.35, bz);
+        windmillGroup.add(post);
+      });
+
+      [
+        [-2.5, -2.5],
+        [2.5, -2.5],
+        [-2.5, 2.5],
+        [2.5, 2.5]
+      ].forEach(([bx, bz]) => {
+        const midPost = createVoxelMesh(0.42, 3.7, 0.42, woodDark);
+        midPost.position.set(bx, 7.1, bz);
+        windmillGroup.add(midPost);
+      });
+
+      // --- C. Wooden Entrance Door & Porch Lantern (+Z Front) ---
+      const doorFrame = createVoxelMesh(2.0, 2.9, 0.55, woodDark);
+      doorFrame.position.set(0, 2.7, 3.45);
+      windmillGroup.add(doorFrame);
+
+      const doorPlanks = createVoxelMesh(1.45, 2.45, 0.62, woodWarm);
+      doorPlanks.position.set(0, 2.5, 3.5);
+      windmillGroup.add(doorPlanks);
+
+      const doorArch = createVoxelMesh(1.6, 0.4, 0.72, woodDark);
+      doorArch.position.set(0, 4.05, 3.52);
+      windmillGroup.add(doorArch);
+
+      const brassKnob = createVoxelMesh(0.18, 0.18, 0.2, 0xffd166);
+      brassKnob.position.set(0.45, 2.45, 3.84);
+      windmillGroup.add(brassKnob);
+
+      // Hanging porch lantern beside the door
+      const lanternArm = createVoxelMesh(0.5, 0.18, 0.18, woodDark);
+      lanternArm.position.set(1.25, 3.8, 3.65);
+      windmillGroup.add(lanternArm);
+
+      lanternGlowMesh = createVoxelMesh(0.38, 0.46, 0.38, 0xffe066, {
+        emissive: 0xffb703,
+        emissiveIntensity: 0.9,
+        castShadow: false
+      });
+      lanternGlowMesh.position.set(1.42, 3.45, 3.72);
+      windmillGroup.add(lanternGlowMesh);
+
+      const lanternCap = createVoxelMesh(0.48, 0.14, 0.48, roofTrim);
+      lanternCap.position.set(1.42, 3.72, 3.72);
+      windmillGroup.add(lanternCap);
+
+      // --- D. Windows, Shutters & Flower Boxes on All Sides ---
+      function createWindowWithFlowerBox(width, height, withFlowerBox = true) {
+        const winGroup = new THREE.Group();
+
+        // Dark outer frame
+        const frame = createVoxelMesh(width + 0.32, height + 0.32, 0.28, woodDark);
+        winGroup.add(frame);
+
+        // Warm sunlit glass pane
+        const glass = createVoxelMesh(width, height, 0.34, 0xffe89e, {
+          emissive: 0xffd97d,
+          emissiveIntensity: 0.35
+        });
+        winGroup.add(glass);
+
+        // Cross mullion bars
+        const vBar = createVoxelMesh(0.12, height, 0.4, woodDark);
+        winGroup.add(vBar);
+        const hBar = createVoxelMesh(width, 0.12, 0.4, woodDark);
+        winGroup.add(hBar);
+
+        // Sage-green voxel shutters
+        const shutterLeft = createVoxelMesh(0.36, height + 0.15, 0.24, shutterGreen);
+        shutterLeft.position.set(-(width / 2 + 0.34), 0, 0.04);
+        winGroup.add(shutterLeft);
+
+        const shutterRight = createVoxelMesh(0.36, height + 0.15, 0.24, shutterGreen);
+        shutterRight.position.set(width / 2 + 0.34, 0, 0.04);
+        winGroup.add(shutterRight);
+
+        if (withFlowerBox) {
+          const box = createVoxelMesh(width + 0.6, 0.36, 0.55, woodWarm);
+          box.position.set(0, -(height / 2 + 0.32), 0.22);
+          winGroup.add(box);
+
+          const foliage = createVoxelMesh(width + 0.44, 0.24, 0.42, 0x69c746);
+          foliage.position.set(0, -(height / 2 + 0.05), 0.24);
+          winGroup.add(foliage);
+
+          const bloomColors = [0xff758f, 0xffd166, 0xffffff, 0xff8fab];
+          for (let b = 0; b < 3; b++) {
+            const bloom = createVoxelMesh(
+              0.22,
+              0.22,
+              0.22,
+              bloomColors[(b + Math.floor(random() * 4)) % bloomColors.length]
+            );
+            bloom.position.set(-0.4 + b * 0.4, -(height / 2 - 0.12), 0.28);
+            winGroup.add(bloom);
+          }
+        }
+
+        return winGroup;
+      }
+
+      // Lower & mid windows facing +X, -X, -Z, and upper +Z loft
+      const lowerRightWin = createWindowWithFlowerBox(1.15, 1.25, true);
+      lowerRightWin.position.set(3.48, 3.2, 0);
+      lowerRightWin.rotation.y = Math.PI / 2;
+      windmillGroup.add(lowerRightWin);
+
+      const lowerLeftWin = createWindowWithFlowerBox(1.15, 1.25, true);
+      lowerLeftWin.position.set(-3.48, 3.2, 0);
+      lowerLeftWin.rotation.y = -Math.PI / 2;
+      windmillGroup.add(lowerLeftWin);
+
+      const lowerBackWin = createWindowWithFlowerBox(1.25, 1.25, true);
+      lowerBackWin.position.set(0, 3.2, -3.48);
+      lowerBackWin.rotation.y = Math.PI;
+      windmillGroup.add(lowerBackWin);
+
+      const midFrontWin = createWindowWithFlowerBox(0.95, 1.05, true);
+      midFrontWin.position.set(0, 7.1, 2.98);
+      windmillGroup.add(midFrontWin);
+
+      const midBackWin = createWindowWithFlowerBox(0.95, 1.05, false);
+      midBackWin.position.set(0, 7.1, -2.98);
+      midBackWin.rotation.y = Math.PI;
+      windmillGroup.add(midBackWin);
+
+      const midRightWin = createWindowWithFlowerBox(0.9, 0.95, false);
+      midRightWin.position.set(2.98, 7.1, 0);
+      midRightWin.rotation.y = Math.PI / 2;
+      windmillGroup.add(midRightWin);
+
+      const midLeftWin = createWindowWithFlowerBox(0.9, 0.95, false);
+      midLeftWin.position.set(-2.98, 7.1, 0);
+      midLeftWin.rotation.y = -Math.PI / 2;
+      windmillGroup.add(midLeftWin);
+
+      // --- E. Stepped Darker Voxel Roof, Finial & Chimney with Smoke ---
+      const roofEaves = createVoxelMesh(5.8, 0.45, 5.8, woodDark);
+      roofEaves.position.y = 12.65;
+      windmillGroup.add(roofEaves);
+
+      const roofLayers = [
+        { size: 5.5, height: 0.95, y: 13.3, color: roofSlate },
+        { size: 4.3, height: 0.95, y: 14.2, color: roofTrim },
+        { size: 3.0, height: 0.9, y: 15.05, color: roofSlate },
+        { size: 1.7, height: 0.75, y: 15.8, color: roofTrim }
+      ];
+      roofLayers.forEach((layer) => {
+        const cap = createVoxelMesh(layer.size, layer.height, layer.size, layer.color);
+        cap.position.y = layer.y;
+        windmillGroup.add(cap);
+      });
+
+      // Tiny golden weathervane finial on peak
+      const finial = createVoxelMesh(0.36, 0.75, 0.36, 0xffd166);
+      finial.position.y = 16.5;
+      windmillGroup.add(finial);
+
+      // Tiny brick chimney on roof
+      const chimney = createVoxelMesh(0.85, 1.9, 0.85, 0xb85c4f);
+      chimney.position.set(-1.6, 14.3, -1.2);
+      windmillGroup.add(chimney);
+
+      const chimneyRim = createVoxelMesh(1.05, 0.25, 1.05, 0x99483d);
+      chimneyRim.position.set(-1.6, 15.3, -1.2);
+      windmillGroup.add(chimneyRim);
+
+      // Rising voxel smoke puffs from the chimney
+      for (let s = 0; s < 5; s++) {
+        const puff = createVoxelMesh(0.55, 0.55, 0.55, 0xfafcff, {
+          castShadow: false,
+          receiveShadow: false,
+          transparent: true,
+          opacity: 0.75,
+          roughness: 1.0,
+          shadeStrength: 0.3
+        });
+        puff.position.set(-1.6, 15.7 + s * 0.8, -1.2);
+        windmillGroup.add(puff);
+        smokePuffs.push({
+          mesh: puff,
+          phase: s / 5,
+          baseX: -1.6,
+          baseY: 15.7,
+          baseZ: -1.2
+        });
+      }
+
+      // --- F. Central Wooden Axle, Hub & 4 Traditional Cross Blades ---
+      // Axle housing protrudes far enough (+Z = 3.85) so blades clear the roof eaves
+      const axleHousing = createVoxelMesh(1.15, 1.15, 2.3, woodDark);
+      axleHousing.position.set(0, 10.65, 2.65);
+      windmillGroup.add(axleHousing);
+
+      bladeAssembly = new THREE.Group();
+      bladeAssembly.position.set(0, 10.65, 3.85);
+      windmillGroup.add(bladeAssembly);
+
+      const centralHub = createVoxelMesh(1.35, 1.35, 0.85, woodWarm);
+      bladeAssembly.add(centralHub);
+
+      const hubCap = createVoxelMesh(0.7, 0.7, 1.05, 0xffd166);
+      bladeAssembly.add(hubCap);
+
+      // Build 4 symmetrical blades in cross formation
+      for (let b = 0; b < 4; b++) {
+        const armGroup = new THREE.Group();
+        armGroup.rotation.z = (b * Math.PI) / 2;
+
+        // Long main wooden spar
+        const spar = createVoxelMesh(0.36, 6.7, 0.32, woodDark);
+        spar.position.set(0, 3.45, 0);
+        armGroup.add(spar);
+
+        // Wooden sail lattice frame offset to one side of the spar
+        const outerRail = createVoxelMesh(0.18, 5.2, 0.2, woodWarm);
+        outerRail.position.set(1.25, 4.15, -0.04);
+        armGroup.add(outerRail);
+
+        // Cross rungs along the blade
+        for (let r = 0; r < 6; r++) {
+          const rung = createVoxelMesh(1.35, 0.16, 0.18, woodWarm);
+          rung.position.set(0.65, 1.85 + r * 0.92, -0.04);
+          armGroup.add(rung);
+        }
+
+        // Cream linen voxel sail cloth panels
+        const sailMain = createVoxelMesh(1.08, 4.95, 0.1, 0xfffaf0, {
+          roughness: 0.95,
+          shadeStrength: 0.35
+        });
+        sailMain.position.set(0.65, 4.15, 0.08);
+        armGroup.add(sailMain);
+
+        // Subtle stitched stripe accent near blade tip
+        const sailTipAccent = createVoxelMesh(1.08, 0.42, 0.12, 0xe8d9be, {
+          roughness: 0.95,
+          shadeStrength: 0.35
+        });
+        sailTipAccent.position.set(0.65, 6.35, 0.09);
+        armGroup.add(sailTipAccent);
+
+        bladeAssembly.add(armGroup);
+      }
+
+      // --- G. Cozy Props Around the Windmill Courtyard ---
+      // Wooden bench beside the front-left wall
+      const benchSeat = createVoxelMesh(1.8, 0.22, 0.65, woodWarm);
+      benchSeat.position.set(-2.3, 0.65, 4.15);
+      windmillGroup.add(benchSeat);
+
+      [-2.95, -1.65].forEach((lx) => {
+        const leg = createVoxelMesh(0.24, 0.55, 0.52, woodDark);
+        leg.position.set(lx, 0.275, 4.15);
+        windmillGroup.add(leg);
+      });
+
+      // Stacked flour sacks & wooden barrel on the right side
+      const barrel = createVoxelMesh(0.85, 1.15, 0.85, woodWarm);
+      barrel.position.set(3.9, 0.575, 2.2);
+      windmillGroup.add(barrel);
+
+      const barrelBand = createVoxelMesh(0.92, 0.16, 0.92, 0x5c6670);
+      barrelBand.position.set(3.9, 0.85, 2.2);
+      windmillGroup.add(barrelBand);
+
+      const flourSack = createVoxelMesh(0.75, 0.65, 0.55, 0xefe3c8);
+      flourSack.position.set(3.95, 0.325, 1.15);
+      flourSack.rotation.y = 0.25;
+      windmillGroup.add(flourSack);
+
+      // Tiny courtyard flower bed on the back-left corner
+      const gardenBox = createVoxelMesh(2.2, 0.35, 1.0, woodDark);
+      gardenBox.position.set(-4.1, 0.175, -1.8);
+      gardenBox.rotation.y = Math.PI / 2;
+      windmillGroup.add(gardenBox);
+
+      const gardenSoil = createVoxelMesh(2.0, 0.4, 0.8, 0x7c5338);
+      gardenSoil.position.set(-4.1, 0.22, -1.8);
+      gardenSoil.rotation.y = Math.PI / 2;
+      windmillGroup.add(gardenSoil);
+
+      const gardenColors = [0xff758f, 0xffd93d, 0xc79eff];
+      for (let f = 0; f < 4; f++) {
+        const tinyBloom = createVoxelMesh(0.28, 0.28, 0.28, gardenColors[f % 3]);
+        tinyBloom.position.set(-4.1, 0.62, -2.5 + f * 0.46);
+        windmillGroup.add(tinyBloom);
+      }
+    }
+
+    buildWindmill();
+
+    // =========================================================================
+    // 7. VOXEL RABBIT CONSTRUCTION & LIVING BEHAVIOR AI
+    // =========================================================================
+
+    const rabbits = [];
+
+    function createRabbit(furColorHex, innerEarHex = 0xffb3c1) {
+      const root = new THREE.Group();
+
+      // Ground contact shadow pad so hopping height reads cleanly
+      const shadowGeo = createShadedBoxGeometry(0.85, 0.04, 1.0, 0.2);
+      const shadowMat = new THREE.MeshBasicMaterial({
+        color: 0x3b6e28,
+        transparent: true,
+        opacity: 0.28
+      });
+      const contactShadow = new THREE.Mesh(shadowGeo, shadowMat);
+      contactShadow.position.y = 0.03;
+      root.add(contactShadow);
+
+      const bodyPivot = new THREE.Group();
+      root.add(bodyPivot);
+
+      // Chunky rectangular voxel body
+      const body = createVoxelMesh(0.76, 0.58, 0.96, furColorHex, { shadeStrength: 0.55 });
+      body.position.set(0, 0.36, 0);
+      bodyPivot.add(body);
+
+      // Cute plump hind haunches
+      const haunchLeft = createVoxelMesh(0.22, 0.36, 0.42, furColorHex, { shadeStrength: 0.55 });
+      haunchLeft.position.set(-0.36, 0.24, -0.22);
+      bodyPivot.add(haunchLeft);
+
+      const haunchRight = createVoxelMesh(0.22, 0.36, 0.42, furColorHex, { shadeStrength: 0.55 });
+      haunchRight.position.set(0.36, 0.24, -0.22);
+      bodyPivot.add(haunchRight);
+
+      // Stubby front paws
+      const pawLeft = createVoxelMesh(0.18, 0.18, 0.24, furColorHex, { shadeStrength: 0.55 });
+      pawLeft.position.set(-0.22, 0.09, 0.42);
+      bodyPivot.add(pawLeft);
+
+      const pawRight = createVoxelMesh(0.18, 0.18, 0.24, furColorHex, { shadeStrength: 0.55 });
+      pawRight.position.set(0.22, 0.09, 0.42);
+      bodyPivot.add(pawRight);
+
+      // Fluffy white/cream voxel tail
+      const tail = createVoxelMesh(0.28, 0.28, 0.28, 0xffffff, { shadeStrength: 0.4 });
+      tail.position.set(0, 0.42, -0.58);
+      bodyPivot.add(tail);
+
+      // Articulated head pivot for nibbling grass & looking around
+      const headPivot = new THREE.Group();
+      headPivot.position.set(0, 0.62, 0.44);
+      bodyPivot.add(headPivot);
+
+      const head = createVoxelMesh(0.68, 0.58, 0.64, furColorHex, { shadeStrength: 0.5 });
+      head.position.set(0, 0.16, 0.12);
+      headPivot.add(head);
+
+      // Small dark voxel eyes
+      const eyeLeft = createVoxelMesh(0.1, 0.13, 0.08, 0x22262b, { shadeStrength: 0.2 });
+      eyeLeft.position.set(-0.32, 0.22, 0.30);
+      headPivot.add(eyeLeft);
+
+      const eyeRight = createVoxelMesh(0.1, 0.13, 0.08, 0x22262b, { shadeStrength: 0.2 });
+      eyeRight.position.set(0.32, 0.22, 0.30);
+      headPivot.add(eyeRight);
+
+      // Tiny pink voxel nose
+      const nose = createVoxelMesh(0.16, 0.11, 0.09, 0xff8fa3, { shadeStrength: 0.25 });
+      nose.position.set(0, 0.10, 0.46);
+      headPivot.add(nose);
+
+      // Two upright ears with independent pivots for ear twitching
+      function createEar(offsetX) {
+        const earPivot = new THREE.Group();
+        earPivot.position.set(offsetX, 0.44, 0.06);
+
+        const outerEar = createVoxelMesh(0.18, 0.56, 0.16, furColorHex, { shadeStrength: 0.45 });
+        outerEar.position.set(0, 0.28, 0);
+        earPivot.add(outerEar);
+
+        const innerEar = createVoxelMesh(0.1, 0.38, 0.06, innerEarHex, { shadeStrength: 0.2 });
+        innerEar.position.set(0, 0.26, 0.06);
+        earPivot.add(innerEar);
+
+        return earPivot;
+      }
+
+      const leftEarPivot = createEar(-0.18);
+      const rightEarPivot = createEar(0.18);
+      headPivot.add(leftEarPivot);
+      headPivot.add(rightEarPivot);
+
+      return {
+        root,
+        bodyPivot,
+        headPivot,
+        leftEarPivot,
+        rightEarPivot,
+        contactShadow
+      };
+    }
+
+    function populateRabbits() {
+      const coatPalette = [
+        0xffffff, // Snowy white
+        0xf7ebd4, // Warm cream
+        0xc4c9d1, // Soft grey
+        0xd4a373  // Light cinnamon brown
+      ];
+
+      // Mix of bunnies along the approach meadow corridor and around the windmill
+      const spawnLocations = [
+        // Approach corridor bunnies (react as the camera glides over the meadow)
+        [-19.5, 22.0],
+        [-14.5, 19.5],
+        [-17.0, 13.5],
+        [-10.5, 16.0],
+        [-8.0, 9.5],
+        // Front-right & right meadow bunnies
+        [10.5, 13.5],
+        [16.5, 7.0],
+        [13.5, -5.5],
+        // Back & left meadow bunnies
+        [7.0, -15.5],
+        [-6.5, -16.5],
+        [-15.5, -10.5],
+        [-18.0, 3.0]
+      ];
+
+      spawnLocations.forEach(([x, z], idx) => {
+        const coat = coatPalette[idx % coatPalette.length];
+        const rig = createRabbit(coat);
+        const y = getTerrainHeight(x, z);
+
+        rig.root.position.set(x, y, z);
+        const initialYaw = random() * Math.PI * 2;
+        rig.root.rotation.y = initialYaw;
+        scene.add(rig.root);
+
+        rabbits.push({
+          ...rig,
+          x,
+          z,
+          y,
+          yaw: initialYaw,
+          targetYaw: initialYaw,
+          state: 'grazing', // 'grazing' | 'crouch' | 'hopping'
+          stateTimer: random() * 2.5,
+          hopsRemaining: 0,
+          hopProgress: 0,
+          hopDuration: 0.34 + random() * 0.08,
+          hopDistance: 1.85 + random() * 0.75,
+          hopHeight: 0.85 + random() * 0.3,
+          hopStartX: x,
+          hopStartZ: z,
+          hopEndX: x,
+          hopEndZ: z,
+          nibblePhase: random() * Math.PI * 2,
+          nibbleSpeed: 3.4 + random() * 1.4,
+          earPhase: random() * Math.PI * 2,
+          earTwitchTimer: 1.0 + random() * 3.0,
+          lookTimer: 1.5 + random() * 3.5,
+          lookAngle: 0,
+          cooldown: 0
+        });
+      });
+    }
+
+    populateRabbits();
+
+    // =========================================================================
+    // 8. CHOREOGRAPHED CAMERA JOURNEY (CLOSED ORTHOGRAPHIC SPLINES)
+    // =========================================================================
+
+    function setupCameraPath() {
+      // Closed centripetal Catmull-Rom curves guarantee smooth transitions across all
+      // 7 journey phases and a completely seamless loop at 54 seconds.
+      const positionWaypoints = [
+        new THREE.Vector3(-52, 25, 54),  // 1. Opening shot (wide establishing view)
+        new THREE.Vector3(-47, 24, 49),  // 1b. Slow forward glide
+        new THREE.Vector3(-40, 23, 42),  // 2. Approach across the grassy field
+        new THREE.Vector3(-30, 23, 36),  // 2b. Passing flowers, rocks & hopping bunnies
+        new THREE.Vector3(-16, 25, 44),  // 3. Windmill reveal
+        new THREE.Vector3(22, 26, 42),   // 4. First orbit (front-right angle on blades)
+        new THREE.Vector3(45, 26, 15),   // 4b. First orbit (right side)
+        new THREE.Vector3(36, 24, -28),  // 5. Close-up exploration (doors, windows, flower boxes)
+        new THREE.Vector3(0, 24, -46),   // 5b. Close-up back & wooden details
+        new THREE.Vector3(-40, 26, -30), // 6. Second orbit (more rabbits & distant hills)
+        new THREE.Vector3(-52, 27, 12),  // 7. Departure pull-back & rise
+        new THREE.Vector3(-56, 26, 38)   // 7b. Wide miniature countryside finale
+      ];
+
+      const targetWaypoints = [
+        new THREE.Vector3(-5, 7.5, 5),
+        new THREE.Vector3(-7, 6.2, 7),
+        new THREE.Vector3(-6, 5.5, 6),
+        new THREE.Vector3(-2, 6.5, 2),
+        new THREE.Vector3(0, 8.0, 0),
+        new THREE.Vector3(0, 8.0, 0),
+        new THREE.Vector3(0, 7.5, 0),
+        new THREE.Vector3(0, 6.8, 0),
+        new THREE.Vector3(0, 7.2, 0),
+        new THREE.Vector3(0, 7.5, 0),
+        new THREE.Vector3(-2, 7.8, 2),
+        new THREE.Vector3(-4, 8.0, 4)
+      ];
+
+      // Orthographic frustum heights matched to each waypoint (stored in .y)
+      const frustumHeights = [
+        52.0, // Opening wide establishing view
+        44.0,
+        34.0, // Approach across meadow
+        26.5,
+        24.0, // Windmill reveal
+        25.0, // First orbit
+        24.5,
+        21.5, // Close-up exploration (frames entire windmill + blades cleanly)
+        22.5,
+        28.0, // Second orbit
+        42.0, // Departure pull-back
+        54.0  // Entire miniature diorama
+      ].map((h, idx) => new THREE.Vector3(idx, h, 0));
+
+      const positionCurve = new THREE.CatmullRomCurve3(positionWaypoints, true, 'centripetal');
+      const targetCurve = new THREE.CatmullRomCurve3(targetWaypoints, true, 'centripetal');
+      const frustumCurve = new THREE.CatmullRomCurve3(frustumHeights, true, 'centripetal');
+
+      return { positionCurve, targetCurve, frustumCurve };
+    }
+
+    const { positionCurve, targetCurve, frustumCurve } = setupCameraPath();
+
+    // =========================================================================
+    // 9. ANIMATION & LIVING WORLD UPDATES
+    // =========================================================================
+
+    const dummyObj = new THREE.Object3D();
+    const cameraPos = new THREE.Vector3();
+    const cameraTarget = new THREE.Vector3();
+    const frustumVec = new THREE.Vector3();
+    const prevPresencePos = new THREE.Vector2();
+    const currentPresencePos = new THREE.Vector2();
+    const presenceVelocity = new THREE.Vector2(1, -1);
+    let hasPresenceInitialized = false;
+
+    function updateWindmill(elapsedTime, delta) {
+      // Continuous, gentle windmill blade rotation
+      if (bladeAssembly) {
+        bladeAssembly.rotation.z -= delta * 0.52;
+      }
+
+      // Subtle warm flicker on the porch lantern
+      if (lanternGlowMesh) {
+        lanternGlowMesh.material.emissiveIntensity =
+          0.82 + Math.sin(elapsedTime * 5.2) * 0.08 + Math.sin(elapsedTime * 11.3) * 0.04;
+      }
+
+      // Lazy chimney smoke puffs drifting upward and fading out
+      for (let i = 0; i < smokePuffs.length; i++) {
+        const puff = smokePuffs[i];
+        const cycle = (puff.phase + elapsedTime * 0.24) % 1.0;
+        puff.mesh.position.set(
+          puff.baseX + Math.sin(cycle * Math.PI * 2 + elapsedTime) * 0.28 + cycle * 0.65,
+          puff.baseY + cycle * 3.6,
+          puff.baseZ + Math.cos(cycle * Math.PI * 1.5) * 0.22 - cycle * 0.35
+        );
+        const puffScale = 0.65 + cycle * 0.9;
+        puff.mesh.scale.setScalar(puffScale);
+        // Smooth fade in at chimney rim and fade out high in the air
+        const alpha = Math.sin(cycle * Math.PI) * 0.72;
+        puff.mesh.material.opacity = alpha;
+      }
+    }
+
+    function updateSkyAndClouds(elapsedTime, delta) {
+      // Gentle sun rotation & golden warmth
+      if (sunGroup) {
+        sunGroup.rotation.y = elapsedTime * 0.08;
+        sunGroup.rotation.x = Math.sin(elapsedTime * 0.15) * 0.08;
+      }
+
+      // Drifting clouds across the sky at individual speeds
+      for (let i = 0; i < clouds.length; i++) {
+        const cloud = clouds[i];
+        cloud.mesh.position.x += cloud.speed * delta;
+        cloud.mesh.position.y =
+          cloud.baseY + Math.sin(elapsedTime * 0.55 + cloud.bobPhase) * 0.35;
+
+        if (cloud.mesh.position.x > 88) {
+          cloud.mesh.position.x = -88;
+        }
+      }
+    }
+
+    function updateFoliage(elapsedTime) {
+      // Gentle rolling breeze across grass tufts
+      if (grassInstancedMesh) {
+        for (let i = 0; i < animatedGrassTufts.length; i++) {
+          const tuft = animatedGrassTufts[i];
+          const sway = Math.sin(elapsedTime * tuft.speed + tuft.phase) * 0.16;
+          dummyObj.position.set(tuft.x, tuft.y, tuft.z);
+          dummyObj.rotation.set(sway, tuft.yaw, sway * 0.6);
+          dummyObj.scale.set(1, tuft.scaleY, 1);
+          dummyObj.updateMatrix();
+          grassInstancedMesh.setMatrixAt(i, dummyObj.matrix);
+        }
+        grassInstancedMesh.instanceMatrix.needsUpdate = true;
+      }
+
+      // Subtle sway in flowers and daisies
+      if (flowerStemMesh && flowerPetalMesh && flowerCenterMesh) {
+        for (let i = 0; i < animatedFlowers.length; i++) {
+          const flower = animatedFlowers[i];
+          const swayX = Math.sin(elapsedTime * flower.speed + flower.phase) * 0.13;
+          const swayZ = Math.cos(elapsedTime * (flower.speed * 0.85) + flower.phase) * 0.09;
+          dummyObj.position.set(flower.x, flower.y, flower.z);
+          dummyObj.rotation.set(swayX, flower.yaw, swayZ);
+          dummyObj.scale.setScalar(flower.scale);
+          dummyObj.updateMatrix();
+
+          flowerStemMesh.setMatrixAt(i, dummyObj.matrix);
+          flowerPetalMesh.setMatrixAt(i, dummyObj.matrix);
+          flowerCenterMesh.setMatrixAt(i, dummyObj.matrix);
+        }
+        flowerStemMesh.instanceMatrix.needsUpdate = true;
+        flowerPetalMesh.instanceMatrix.needsUpdate = true;
+        flowerCenterMesh.instanceMatrix.needsUpdate = true;
+      }
+    }
+
+    function chooseEscapeHopTarget(rabbit) {
+      // Hop sideways and away from the camera's moving corridor, while also
+      // avoiding the windmill base and staying inside the grassy meadow.
+      const toRabbitX = rabbit.x - currentPresencePos.x;
+      const toRabbitZ = rabbit.z - currentPresencePos.y;
+      const dist = Math.hypot(toRabbitX, toRabbitZ) || 1.0;
+      const awayX = toRabbitX / dist;
+      const awayZ = toRabbitZ / dist;
+
+      // Blend outward away-vector with perpendicular dodge from camera travel
+      const sideSign =
+        awayX * -presenceVelocity.y + awayZ * presenceVelocity.x >= 0 ? 1 : -1;
+      const dodgeX = -presenceVelocity.y * sideSign;
+      const dodgeZ = presenceVelocity.x * sideSign;
+
+      let dirX = awayX * 0.68 + dodgeX * 0.55;
+      let dirZ = awayZ * 0.68 + dodgeZ * 0.55;
+
+      // Gently push bunnies outward if they get too close to the windmill
+      const windmillDist = Math.hypot(rabbit.x, rabbit.z) || 1.0;
+      if (windmillDist < 8.5) {
+        dirX += (rabbit.x / windmillDist) * 1.1;
+        dirZ += (rabbit.z / windmillDist) * 1.1;
+      }
+      // Gently steer back inward if approaching the outer hills
+      if (windmillDist > 29.0) {
+        dirX -= (rabbit.x / windmillDist) * 1.1;
+        dirZ -= (rabbit.z / windmillDist) * 1.1;
+      }
+
+      const len = Math.hypot(dirX, dirZ) || 1.0;
+      dirX /= len;
+      dirZ /= len;
+
+      const nextX = rabbit.x + dirX * rabbit.hopDistance;
+      const nextZ = rabbit.z + dirZ * rabbit.hopDistance;
+
+      rabbit.hopStartX = rabbit.x;
+      rabbit.hopStartZ = rabbit.z;
+      rabbit.hopEndX = nextX;
+      rabbit.hopEndZ = nextZ;
+      rabbit.targetYaw = Math.atan2(dirX, dirZ);
+      rabbit.hopProgress = 0;
+    }
+
+    function updateRabbits(elapsedTime, delta) {
+      const alertRadius = 11.2;
+
+      for (let i = 0; i < rabbits.length; i++) {
+        const rabbit = rabbits[i];
+        if (rabbit.cooldown > 0) {
+          rabbit.cooldown -= delta;
+        }
+
+        const distToCameraPath = Math.hypot(
+          rabbit.x - currentPresencePos.x,
+          rabbit.z - currentPresencePos.y
+        );
+        const distToTarget = Math.hypot(
+          rabbit.x - cameraTarget.x,
+          rabbit.z - cameraTarget.z
+        );
+
+        // Trigger reaction when the camera approaches or passes near a bunny
+        if (
+          rabbit.state === 'grazing' &&
+          rabbit.cooldown <= 0 &&
+          (distToCameraPath < alertRadius || distToTarget < 8.5)
+        ) {
+          rabbit.state = 'crouch';
+          rabbit.stateTimer = 0.18;
+          rabbit.hopsRemaining = 2 + Math.floor(Math.random() * 3);
+          chooseEscapeHopTarget(rabbit);
+        }
+
+        // Smoothly rotate rabbit toward its movement/facing yaw
+        let yawDiff = rabbit.targetYaw - rabbit.yaw;
+        while (yawDiff > Math.PI) yawDiff -= Math.PI * 2;
+        while (yawDiff < -Math.PI) yawDiff += Math.PI * 2;
+        rabbit.yaw += yawDiff * Math.min(1, delta * 10.0);
+        rabbit.root.rotation.y = rabbit.yaw;
+
+        // Independent ear twitches for lively character
+        rabbit.earTwitchTimer -= delta;
+        if (rabbit.earTwitchTimer <= 0) {
+          rabbit.earTwitchTimer = 1.4 + Math.random() * 2.8;
+        }
+        const twitchBurst =
+          rabbit.earTwitchTimer < 0.25 ? Math.sin(elapsedTime * 34.0 + rabbit.earPhase) * 0.22 : 0;
+
+        if (rabbit.state === 'grazing') {
+          rabbit.nibblePhase += delta * rabbit.nibbleSpeed;
+          rabbit.lookTimer -= delta;
+
+          // Periodic curious look-around pause between nibbles
+          let headDip = 0.42 + Math.abs(Math.sin(rabbit.nibblePhase)) * 0.22;
+          let headYaw = 0;
+
+          if (rabbit.lookTimer < 1.1 && rabbit.lookTimer > 0) {
+            // Lift head and glance around
+            headDip = 0.04;
+            headYaw = Math.sin(rabbit.lookTimer * 5.0 + rabbit.earPhase) * 0.42;
+          } else if (rabbit.lookTimer <= 0) {
+            rabbit.lookTimer = 2.6 + Math.random() * 4.0;
+            // Occasionally shift posture slightly while grazing
+            if (Math.random() > 0.6) {
+              rabbit.targetYaw += (Math.random() - 0.5) * 1.1;
+            }
+          }
+
+          rabbit.headPivot.rotation.x += (headDip - rabbit.headPivot.rotation.x) * Math.min(1, delta * 8);
+          rabbit.headPivot.rotation.y += (headYaw - rabbit.headPivot.rotation.y) * Math.min(1, delta * 6);
+          rabbit.bodyPivot.position.y = 0;
+          rabbit.bodyPivot.rotation.x *= 0.85;
+          rabbit.bodyPivot.scale.set(1, 1, 1);
+          rabbit.contactShadow.scale.setScalar(1.0);
+
+          rabbit.leftEarPivot.rotation.x = -0.1 + twitchBurst;
+          rabbit.rightEarPivot.rotation.x = -0.1 - twitchBurst * 0.8;
+          rabbit.leftEarPivot.rotation.z = 0.08 + twitchBurst * 0.4;
+          rabbit.rightEarPivot.rotation.z = -0.08 - twitchBurst * 0.4;
+        } else if (rabbit.state === 'crouch') {
+          // Alert crouch before springing forward
+          rabbit.stateTimer -= delta;
+          rabbit.headPivot.rotation.x += (-0.12 - rabbit.headPivot.rotation.x) * Math.min(1, delta * 18);
+          rabbit.headPivot.rotation.y *= 0.8;
+          rabbit.bodyPivot.scale.set(1.1, 0.78, 1.08);
+          rabbit.bodyPivot.rotation.x = 0.14;
+          rabbit.leftEarPivot.rotation.x = 0.05;
+          rabbit.rightEarPivot.rotation.x = 0.05;
+
+          if (rabbit.stateTimer <= 0) {
+            rabbit.state = 'hopping';
+            rabbit.hopProgress = 0;
+          }
+        } else if (rabbit.state === 'hopping') {
+          rabbit.hopProgress += delta / rabbit.hopDuration;
+          const p = Math.min(1.0, rabbit.hopProgress);
+
+          // Horizontal motion across terrain
+          rabbit.x = THREE.MathUtils.lerp(rabbit.hopStartX, rabbit.hopEndX, p);
+          rabbit.z = THREE.MathUtils.lerp(rabbit.hopStartZ, rabbit.hopEndZ, p);
+
+          const startGround = getTerrainHeight(rabbit.hopStartX, rabbit.hopStartZ);
+          const endGround = getTerrainHeight(rabbit.hopEndX, rabbit.hopEndZ);
+          const baseGround = THREE.MathUtils.lerp(startGround, endGround, p);
+          const arcLift = Math.sin(p * Math.PI) * rabbit.hopHeight;
+
+          rabbit.y = baseGround;
+          rabbit.root.position.set(rabbit.x, baseGround, rabbit.z);
+          rabbit.bodyPivot.position.y = arcLift;
+
+          // Pitch upward on takeoff, downward on landing
+          rabbit.bodyPivot.rotation.x = (0.5 - p) * -0.58;
+          // Stretch vertically mid-air, squash gently at landing
+          const stretch = 1.0 + Math.sin(p * Math.PI) * 0.16;
+          rabbit.bodyPivot.scale.set(1 / Math.sqrt(stretch), stretch, 1 / Math.sqrt(stretch));
+
+          // Shrink contact shadow slightly as the bunny leaps higher
+          const shadowScale = Math.max(0.55, 1.0 - arcLift * 0.35);
+          rabbit.contactShadow.scale.setScalar(shadowScale);
+
+          // Ears sweep back dynamically during the leap
+          rabbit.headPivot.rotation.x = -0.05;
+          rabbit.leftEarPivot.rotation.x = -0.35 * Math.sin(p * Math.PI);
+          rabbit.rightEarPivot.rotation.x = -0.35 * Math.sin(p * Math.PI);
+
+          if (p >= 1.0) {
+            rabbit.y = getTerrainHeight(rabbit.x, rabbit.z);
+            rabbit.root.position.set(rabbit.x, rabbit.y, rabbit.z);
+            rabbit.hopsRemaining -= 1;
+
+            if (rabbit.hopsRemaining > 0) {
+              chooseEscapeHopTarget(rabbit);
+            } else {
+              // Settle back down after escaping and wait briefly before re-triggering
+              rabbit.state = 'grazing';
+              rabbit.cooldown = 3.2;
+              rabbit.lookTimer = 0.9;
+            }
+          }
+        }
+      }
+    }
+
+    function updateCamera(elapsedTime) {
+      const progress = (elapsedTime % JOURNEY_DURATION) / JOURNEY_DURATION;
+
+      positionCurve.getPointAt(progress, cameraPos);
+      targetCurve.getPointAt(progress, cameraTarget);
+      frustumCurve.getPointAt(progress, frustumVec);
+
+      camera.position.copy(cameraPos);
+      camera.lookAt(cameraTarget);
+
+      currentFrustumHeight = frustumVec.y;
+      updateCameraFrustum(currentFrustumHeight);
+
+      // Compute foreground ground presence point so rabbits along the viewer's
+      // immediate approach corridor react naturally right on screen.
+      currentPresencePos.set(
+        THREE.MathUtils.lerp(cameraPos.x, cameraTarget.x, 0.72),
+        THREE.MathUtils.lerp(cameraPos.z, cameraTarget.z, 0.72)
+      );
+
+      if (hasPresenceInitialized) {
+        const vx = currentPresencePos.x - prevPresencePos.x;
+        const vy = currentPresencePos.y - prevPresencePos.y;
+        const speed = Math.hypot(vx, vy);
+        if (speed > 0.0001) {
+          presenceVelocity.set(vx / speed, vy / speed);
+        }
+      } else {
+        hasPresenceInitialized = true;
+      }
+      prevPresencePos.copy(currentPresencePos);
+    }
+
+    // =========================================================================
+    // 10. RENDERING, RESIZING & MAIN LOOP
+    // =========================================================================
+
+    function onWindowResize() {
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      updateCameraFrustum(currentFrustumHeight);
+    }
+
+    window.addEventListener('resize', onWindowResize);
+
+    // Initialize camera immediately on frame 0
+    updateCamera(0);
+
+    let lastTimestamp = performance.now();
+    let elapsedTime = 0;
+
+    function animate(now) {
+      requestAnimationFrame(animate);
+
+      // Clamp delta to keep animations smooth even after tab switching
+      const delta = Math.min((now - lastTimestamp) * 0.001, 0.05);
+      lastTimestamp = now;
+      elapsedTime += delta;
+
+      updateCamera(elapsedTime);
+      updateWindmill(elapsedTime, delta);
+      updateSkyAndClouds(elapsedTime, delta);
+      updateFoliage(elapsedTime);
+      updateRabbits(elapsedTime, delta);
+
+      renderer.render(scene, camera);
+    }
+
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>

@@ -1,0 +1,1230 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Train That Never Reached Christmas</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #1c1c1c; overflow: hidden; font-family: Georgia, 'Times New Roman', serif; }
+  #stage { position: fixed; inset: 0; }
+  #stage canvas { display: block; }
+  /* soft vignette and fine grain: purely monochrome */
+  #vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,0.55) 100%); }
+  #grain { position: fixed; inset: 0; pointer-events: none; opacity: 0.09; mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
+  #title { position: fixed; left: 0; right: 0; bottom: 9%; text-align: center; color: #d8d8d8; letter-spacing: 0.32em; text-transform: uppercase;
+    font-size: clamp(12px, 1.7vw, 22px); text-shadow: 0 0 18px #000; pointer-events: none; opacity: 0.9; transition: opacity 5s ease; }
+  #sound { position: fixed; top: 14px; right: 14px; background: rgba(0,0,0,0.35); color: #cfcfcf; border: 1px solid #777; padding: 6px 12px;
+    font: 12px Georgia, serif; letter-spacing: 0.12em; cursor: pointer; border-radius: 2px; opacity: 0.7; }
+  #sound:hover { opacity: 1; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+<div id="stage"></div>
+<div id="vignette"></div>
+<div id="grain"></div>
+<div id="title">The Train That Never Reached Christmas</div>
+<button id="sound" title="Toggle sound (M)">sound: off</button>
+<script type="module">
+import * as THREE from 'three';
+
+/* =====================================================================
+   THE TRAIN THAT NEVER REACHED CHRISTMAS
+   A voxel, strictly-greyscale, procedural Three.js sketch.
+   ===================================================================== */
+
+// ---------------------------------------------------------------------
+// 1. CONSTANTS
+// ---------------------------------------------------------------------
+const CYCLE = 3000;          // length of one whole "dream" in world units; then it gently re-forms
+const ROW = 6;               // length of one scenery row along the track
+const ROWS_BEHIND = 5;
+const ROWS_AHEAD = 50;
+const NR = ROWS_BEHIND + ROWS_AHEAD + 1;   // number of recycled rows
+const TRAIN_SPEED = 18;      // units per second
+const COL_W = 6;             // ground column width
+const COLS = 19;             // ground columns per row (lateral -54..+54)
+const GROUND_BOTTOM = -45;   // bottom of ground columns
+const START_S = Number(new URLSearchParams(location.search).get('s')) || 66;
+
+// ---------------------------------------------------------------------
+// 2. SMALL UTILITIES
+// ---------------------------------------------------------------------
+const lerp = THREE.MathUtils.lerp;
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+// smoothstep between a and b
+const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+// greys are specified as perceptual (sRGB) values and converted to linear for the renderer
+const greyLin = g => Math.pow(clamp(g, 0, 1), 2.2);
+
+function hash1(n) { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
+function hash2(a, b) { return hash1(a + b * 157.0 + a * b * 0.013); }
+function mulberry32(seed) {
+  let a = seed | 0;
+  return function () {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+// 2D value noise (0..1)
+function vnoise(x, y) {
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const xf = x - xi, yf = y - yi;
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+  return lerp(lerp(hash2(xi, yi), hash2(xi + 1, yi), u), lerp(hash2(xi, yi + 1), hash2(xi + 1, yi + 1), u), v);
+}
+
+// ---------------------------------------------------------------------
+// 3. THE JOURNEY: progress variable "worldDissolution" and zone masks
+// ---------------------------------------------------------------------
+const mOf = s => ((s % CYCLE) + CYCLE) % CYCLE;          // position inside the current cycle
+const bump = (m, a0, a1, b0, b1) => sstep(a0, a1, m) * (1 - sstep(b0, b1, m));
+
+// 0 -> 1 as the journey progresses; holds at 1; then the dream slowly re-forms for the next loop
+function dissolutionAt(s) {
+  const m = mOf(s);
+  return sstep(100, 2100, m) * (1 - sstep(2550, 2950, m));
+}
+const valleyAt   = s => bump(mOf(s), 440, 520, 640, 720);    // Sequence B: frozen valley + bridge
+const mountainAt = s => bump(mOf(s), 690, 750, 984, 1040);   // Sequence C: tunnel mountain mass
+// rows that are inside the tunnel proper (row index modulo cycle rows)
+const TUNNEL_ROW_A = 124, TUNNEL_ROW_B = 163;
+const CYCLE_ROWS = CYCLE / ROW;
+const isTunnelRow = r => { const k = ((r % CYCLE_ROWS) + CYCLE_ROWS) % CYCLE_ROWS; return k >= TUNNEL_ROW_A && k <= TUNNEL_ROW_B; };
+const tunnelLightAt = s => { const m = mOf(s); return sstep(742, 756, m) * (1 - sstep(978, 992, m)); };
+
+// ---------------------------------------------------------------------
+// 4. THE PROCEDURAL RAILWAY PATH (winding, undulating, endless)
+// ---------------------------------------------------------------------
+const pathX = [0], pathZ = [0];
+function headingFn(s) {
+  return 0.50 * Math.sin(s * 0.0075) + 0.26 * Math.sin(s * 0.0191 + 1.7) + 0.08 * Math.sin(s * 0.047 + 0.4);
+}
+function ensurePath(sMax) {
+  while (pathX.length <= sMax + 3) {
+    const i = pathX.length - 1;
+    const h = headingFn(i + 0.5);
+    pathX.push(pathX[i] + Math.sin(h));
+    pathZ.push(pathZ[i] - Math.cos(h));
+  }
+}
+const TWO_PI = Math.PI * 2;
+// vertical profile of the track top: gentle undulation + the raised bridge
+function trackY(s) {
+  const m = mOf(s);
+  const base = 1.4 * Math.sin(TWO_PI * 7 * m / CYCLE) + 0.9 * Math.sin(TWO_PI * 17 * m / CYCLE + 1.0);
+  return base + 7.0 * valleyAt(s);
+}
+// sample the railway at distance s -> {x,y,z,h (heading), pitch}
+function pathAt(s, out) {
+  ensurePath(s + 4);
+  const i = Math.floor(s), f = s - i;
+  out.x = lerp(pathX[i], pathX[i + 1], f);
+  out.z = lerp(pathZ[i], pathZ[i + 1], f);
+  out.h = headingFn(s);
+  out.y = trackY(s);
+  out.pitch = Math.atan((trackY(s + 1.5) - trackY(s - 1.5)) / 3);
+  return out;
+}
+const curvatureAt = s => (headingFn(s + 6) - headingFn(s - 6)) / 12;
+
+// ---------------------------------------------------------------------
+// 5. RENDERER, SCENE, LIGHTS
+// ---------------------------------------------------------------------
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.getElementById('stage').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color().setScalar(greyLin(0.24));
+scene.fog = new THREE.FogExp2(0x000000, 0.0062);
+scene.fog.color.setScalar(greyLin(0.24));
+
+const camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.1, 900);
+
+// dim overcast ambient, soft moonlight, and a white headlamp (all pure grey)
+const hemiLight = new THREE.HemisphereLight(0xb4b4b4, 0x1c1c1c, 1.1);
+scene.add(hemiLight);
+const moonLight = new THREE.DirectionalLight(0xdcdcdc, 1.5);
+moonLight.position.set(-0.5, 0.8, 0.35);
+scene.add(moonLight);
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// shared voxel geometry + material
+const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+const voxelMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+const tmpPath = { x: 0, y: 0, z: 0, h: 0, pitch: 0 };
+
+// ---------------------------------------------------------------------
+// 6. VOXEL BATCHES  (one InstancedMesh per scenery category)
+//    Every scenery object is a "slot" of voxels. Slots are recycled as
+//    rows fall behind the camera. Dissolution is applied per voxel, per
+//    frame, from each row's own dissolution value, so objects visibly
+//    morph, fragment, float and vanish as the train approaches.
+// ---------------------------------------------------------------------
+const rowU = new Float32Array(NR);   // per-row effective dissolution, refreshed every frame
+const KIND = { PLAIN: 0, TIP: 1, TRUNK: 2, GROUND: 3, ICE: 5, CORE: 6, CAP: 7 };
+
+// ground height morph: hills flatten and become coarse stepped platforms as u rises
+function morphTop(top, base, u, ice) {
+  let rel = top - base;
+  if (ice) rel = rel * (1 - sstep(0.3, 0.7, u));        // lakes become perfectly flat planes
+  const step = lerp(1, 4, sstep(0.3, 0.7, u));
+  const stepped = Math.round(rel / step) * step;
+  const rm = lerp(rel, stepped, sstep(0.25, 0.6, u)) * lerp(1, 0.4, sstep(0.35, 0.8, u));
+  return base + rm;
+}
+
+class VoxelBatch {
+  constructor(name, slotCount, voxelsPerSlot, opts = {}) {
+    this.name = name;
+    this.slotCount = slotCount;
+    this.vps = voxelsPerSlot;
+    const N = slotCount * voxelsPerSlot;
+    this.N = N;
+    // behaviour parameters
+    this.fragStart = opts.fragStart ?? 0.5;     // dissolution at which voxels start drifting
+    this.fragAmp = opts.fragAmp ?? 1.0;         // how far they drift
+    this.vanishStart = opts.vanishStart ?? 0.8; // dissolution at which voxels start disappearing
+    this.keep = opts.keep ?? 0.15;              // fraction of voxels that never vanish (isolated fragments)
+    // per-voxel data
+    this.px = new Float32Array(N); this.py = new Float32Array(N); this.pz = new Float32Array(N);
+    this.sx = new Float32Array(N); this.sy = new Float32Array(N); this.sz = new Float32Array(N);
+    this.lx = new Float32Array(N); this.lz = new Float32Array(N);
+    this.thr = new Float32Array(N);
+    this.dx = new Float32Array(N); this.dy = new Float32Array(N); this.dz = new Float32Array(N);
+    this.kind = new Uint8Array(N);
+    // per-slot data
+    this.cnt = new Uint16Array(slotCount);
+    this.sRow = new Int32Array(slotCount);
+    this.rcy = new Float32Array(slotCount).fill(1); this.rsy = new Float32Array(slotCount);
+    this.rcx = new Float32Array(slotCount).fill(1); this.rsx = new Float32Array(slotCount);
+    this.bob = new Float32Array(slotCount);
+    this.colW = new Float32Array(slotCount);
+    this.colWidth = new Float32Array(slotCount).fill(1.5);
+    this.gTop = new Float32Array(slotCount); this.gBase = new Float32Array(slotCount);
+    this.follow = new Uint8Array(slotCount);
+    this.mesh = new THREE.InstancedMesh(boxGeo, voxelMat, N);
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(N * 3), 3);
+    this.mesh.frustumCulled = false;
+    // start with every matrix collapsed to nothing
+    this.mesh.instanceMatrix.array.fill(0);
+    scene.add(this.mesh);
+  }
+
+  // Begin (re)filling a slot
+  begin(slot, row, rot) {
+    this.sRow[slot] = row;
+    this.cnt[slot] = 0;
+    this.bob[slot] = 0; this.colW[slot] = 0; this.follow[slot] = 0;
+    this.rcy[slot] = rot ? rot.cy : 1; this.rsy[slot] = rot ? rot.sy : 0;
+    this.rcx[slot] = rot ? rot.cx : 1; this.rsx[slot] = rot ? rot.sx : 0;
+  }
+  // Add one voxel to a slot
+  put(slot, x, y, z, sx, sy, sz, grey, kind = 0, lx = 0, lz = 0) {
+    const k = this.cnt[slot]; if (k >= this.vps) return;
+    const i = slot * this.vps + k;
+    this.px[i] = x; this.py[i] = y; this.pz[i] = z;
+    this.sx[i] = sx; this.sy[i] = sy; this.sz[i] = sz;
+    this.lx[i] = lx; this.lz[i] = lz; this.kind[i] = kind;
+    this.thr[i] = Math.random();
+    this.dx[i] = Math.random() * 2 - 1; this.dy[i] = Math.random() * 2 - 1; this.dz[i] = Math.random() * 2 - 1;
+    const c = greyLin(grey), a = this.mesh.instanceColor.array;
+    a[i * 3] = c; a[i * 3 + 1] = c; a[i * 3 + 2] = c;
+    this.cnt[slot] = k + 1;
+    this.colorDirty = true;
+  }
+  // Finish a slot: blank any leftover matrices from the previous occupant
+  end(slot) {
+    const A = this.mesh.instanceMatrix.array;
+    for (let k = this.cnt[slot]; k < this.vps; k++) A.fill(0, (slot * this.vps + k) * 16, (slot * this.vps + k) * 16 + 16);
+  }
+  clear(slot, row) { this.begin(slot, row); this.end(slot); }
+
+  // Per-frame: apply dissolution + rotation and write instance matrices
+  update(time) {
+    const A = this.mesh.instanceMatrix.array, vps = this.vps;
+    for (let s = 0; s < this.slotCount; s++) {
+      const n = this.cnt[s]; if (!n) continue;
+      const row = this.sRow[s];
+      const u = rowU[((row % NR) + NR) % NR];
+      const rcy = this.rcy[s], rsy = this.rsy[s], rcx = this.rcx[s], rsx = this.rsx[s];
+      const bob = this.bob[s];
+      const collapse = sstep(0.22, 0.6, u) * this.colW[s];
+      const colWidth = this.colWidth[s];
+      const gBase = this.gBase[s];
+      const delta = this.follow[s] ? morphTop(this.gTop[s], gBase, u, false) - this.gTop[s] : 0;
+      for (let k = 0; k < n; k++) {
+        const i = s * vps + k;
+        const kind = this.kind[i], thr = this.thr[i];
+        let x = this.px[i], y = this.py[i], z = this.pz[i];
+        let wx = this.sx[i], wy = this.sy[i], wz = this.sz[i];
+        let shrink = 1;
+        if (kind === KIND.GROUND || kind === KIND.ICE) {
+          // ---- terrain columns: flatten, step, then break into floating platforms ----
+          const top = morphTop(y, gBase, u, kind === KIND.ICE);
+          const f = sstep(this.fragStart - 0.08 + 0.4 * thr, this.fragStart + 0.2 + 0.4 * thr, u);
+          const full = top - GROUND_BOTTOM;
+          const cube = 2.0 + 3.0 * Math.abs(this.dy[i]);
+          wy = lerp(full, cube, f);
+          wx = lerp(wx, cube + 1.5, f); wz = lerp(wz, cube + 1.5, f);
+          y = top - wy * 0.5 + f * (2 + 9 * thr) + Math.sin(time * 0.45 + thr * 40) * 0.7 * f;
+          x += this.dx[i] * f * 6 * this.fragAmp; z += this.dz[i] * f * 6 * this.fragAmp;
+        } else {
+          y += delta;
+          if (kind === KIND.TIP) {                        // branches retract into the trunk
+            x -= this.lx[i] * collapse; z -= this.lz[i] * collapse;
+            shrink = 1 - collapse;
+          } else if (kind === KIND.CORE || kind === KIND.CAP) {   // cores unify into a plain column
+            const w = colWidth + (kind === KIND.CAP ? 0.5 : 0);
+            wx = lerp(wx, w, collapse); wz = lerp(wz, w, collapse);
+          }
+          const f = sstep(this.fragStart + 0.32 * thr, this.fragStart + 0.32 * thr + 0.25, u);
+          if (f > 0) {
+            const amp = f * this.fragAmp;
+            x += this.dx[i] * amp * 10; z += this.dz[i] * amp * 10;
+            y += amp * (this.dy[i] * 6 + 3) + Math.sin(time * 0.5 + thr * 40) * 0.5 * f;
+            shrink *= 1 - 0.25 * f;
+          }
+          if (bob) y += bob * Math.sin(time * 0.6 + thr * 30);
+        }
+        // vanishing: most voxels disappear at the very end, a few remain as isolated fragments
+        if (thr > this.keep) shrink *= 1 - sstep(this.vanishStart + 0.17 * thr, this.vanishStart + 0.17 * thr + 0.08, u);
+        wx *= shrink; wy *= shrink; wz *= shrink;
+        // rotation (heading + pitch) with scale baked in
+        const e = i * 16;
+        A[e] = rcy * wx;           A[e + 1] = 0;        A[e + 2] = -rsy * wx;       A[e + 3] = 0;
+        A[e + 4] = rsy * rsx * wy; A[e + 5] = rcx * wy; A[e + 6] = rcy * rsx * wy;  A[e + 7] = 0;
+        A[e + 8] = rsy * rcx * wz; A[e + 9] = -rsx * wz; A[e + 10] = rcy * rcx * wz; A[e + 11] = 0;
+        A[e + 12] = x; A[e + 13] = y; A[e + 14] = z; A[e + 15] = 1;
+      }
+    }
+    this.mesh.instanceMatrix.needsUpdate = true;
+    if (this.colorDirty) { this.mesh.instanceColor.needsUpdate = true; this.colorDirty = false; }
+  }
+}
+
+// ---------------------------------------------------------------------
+// 7. ROW GEOMETRY HELPERS
+// ---------------------------------------------------------------------
+// Row-local (lateral l, up, along a) -> world, given the path centre and slot rotation.
+// 'flat' rows ignore pitch so that terrain columns stay level.
+function rowRot(P, flat) {
+  const pitch = flat ? 0 : P.pitch;
+  return { cy: Math.cos(P.h), sy: -Math.sin(P.h), cx: Math.cos(pitch), sx: Math.sin(pitch) };
+}
+function rowToWorld(P, rot, l, up, a, out) {
+  const yy = rot.cx * up + rot.sx * a;
+  const zz = rot.sx * up - rot.cx * a;
+  out.x = P.x + rot.cy * l + rot.sy * zz;
+  out.y = P.y + yy;
+  out.z = P.z - rot.sy * l + rot.cy * zz;
+  return out;
+}
+const tmpW = { x: 0, y: 0, z: 0 };
+
+// terrain height + ice flag for the ground column at lateral offset 'lat' on a row
+function terrainSample(sC, P, lat, out) {
+  const wx = P.x + Math.cos(P.h) * lat, wz = P.z + Math.sin(P.h) * lat;
+  const bed = P.y - 0.7;
+  const aLat = Math.abs(lat);
+  const valley = valleyAt(sC), mount = mountainAt(sC);
+  let hill = Math.max(0, vnoise(wx * 0.035, wz * 0.035) * 11 + vnoise(wx * 0.09 + 9, wz * 0.09) * 4 - 3.2);
+  let top = bed + sstep(3.5, 20, aLat) * hill;
+  let ice = false;
+  // frozen lakes
+  if (aLat > 7 && valley < 0.3 && mount < 0.2 && vnoise(wx * 0.011 + 50, wz * 0.011 + 50) > 0.64) { top = bed - 2; ice = true; }
+  // Sequence B: deep valley with a frozen, meandering river
+  if (valley > 0.001) {
+    const river = 10 * Math.sin(sC * 0.018);
+    const d = Math.abs(lat - river);
+    const valleyTop = -13 + sstep(14, 30, d) * (hill * 1.4 + 8);
+    top = lerp(top, valleyTop, valley);
+    ice = valley > 0.5 && d < 14;
+    if (ice) top = lerp(top, -13, valley);
+  }
+  // Sequence C: the great snowy mountain swallowing the railway
+  if (mount > 0.001) {
+    const mass = (22 + 4 * vnoise(wx * 0.05, wz * 0.05)) * (1 - sstep(30, 54, aLat) * 0.7);
+    top += mount * sstep(3.0, 5.5, aLat) * mass;
+    if (mount > 0.3 && aLat > 5) ice = false;
+  }
+  out.top = Math.round(top);
+  out.ice = ice;
+  return out;
+}
+const tmpT = { top: 0, ice: false };
+
+// ---------------------------------------------------------------------
+// 8. THE BATCHES
+// ---------------------------------------------------------------------
+const groundB   = new VoxelBatch('ground',   NR,     COLS, { fragStart: 0.5,  vanishStart: 0.68, keep: 0.05 });
+const trackB    = new VoxelBatch('track',    NR,     9,    { fragStart: 0.6,  fragAmp: 0.15, vanishStart: 0.55, keep: 0.32 });
+const bridgeB   = new VoxelBatch('bridge',   NR,     14,   { fragStart: 0.45, fragAmp: 0.5,  vanishStart: 0.55, keep: 0.15 });
+const pillarB   = new VoxelBatch('pillars',  NR,     2,    { fragStart: 0.55, fragAmp: 0.4,  vanishStart: 0.7, keep: 0.2 });
+const tunnelB   = new VoxelBatch('tunnel',   NR,     20,   { fragStart: 0.5,  fragAmp: 0.8,  vanishStart: 0.85, keep: 0.2 });
+const treeB     = new VoxelBatch('trees',    NR * 5, 24,   { fragStart: 0.5,  vanishStart: 0.78, keep: 0.15 });
+const propB     = new VoxelBatch('props',    NR * 2, 24,   { fragStart: 0.45, vanishStart: 0.85, keep: 0.3 });
+const mountainB = new VoxelBatch('mountains', NR,    28,   { fragStart: 0.35, fragAmp: 2.0, vanishStart: 0.9, keep: 0.45 });
+const batches = [groundB, trackB, bridgeB, pillarB, tunnelB, treeB, propB, mountainB];
+
+// box helper: y0 is the BOTTOM of the box
+function blk(b, slot, x, y0, z, w, h, l, g, kind = 0, lx = 0, lz = 0) { b.put(slot, x, y0 + h / 2, z, w, h, l, g, kind, lx, lz); }
+
+// ---- ground columns ----
+function spawnGround(r, sC, P) {
+  const slot = r % NR, rot = rowRot(P, true);
+  groundB.begin(slot, r, rot);
+  groundB.gBase[slot] = P.y - 0.7;
+  for (let ci = 0; ci < COLS; ci++) {
+    const lat = (ci - 9) * COL_W;
+    terrainSample(sC, P, lat, tmpT);
+    rowToWorld(P, rot, lat, 0, 0, tmpW);
+    const g = tmpT.ice ? 0.74 : 0.66 + 0.05 * (((tmpT.top % 4) + 4) % 4);
+    groundB.put(slot, tmpW.x, tmpT.top, tmpW.z, COL_W + 0.6, 0, COL_W + 0.6, g, tmpT.ice ? KIND.ICE : KIND.GROUND);
+  }
+  groundB.end(slot);
+}
+
+// ---- sleepers + rails ----
+function spawnTrack(r, sC, P) {
+  const slot = r % NR, rot = rowRot(P, false);
+  trackB.begin(slot, r, rot);
+  for (let i = 0; i < 5; i++) {
+    rowToWorld(P, rot, 0, -0.19, -2.4 + i * 1.2, tmpW);
+    trackB.put(slot, tmpW.x, tmpW.y, tmpW.z, 3.0, 0.22, 0.5, 0.20 + 0.04 * hash1(r * 5 + i));
+  }
+  for (const side of [-1, 1]) for (const a of [-1.5, 1.5]) {
+    rowToWorld(P, rot, side * 1.1, -0.11, a, tmpW);
+    trackB.put(slot, tmpW.x, tmpW.y, tmpW.z, 0.2, 0.22, 3.0, 0.62);
+  }
+  trackB.end(slot);
+}
+
+// ---- Sequence B: wooden bridge ----
+function spawnBridge(r, sC, P) {
+  const slot = r % NR;
+  if (valleyAt(sC) < 0.35) { bridgeB.clear(slot, r); pillarB.clear(slot, r); return; }
+  const rot = rowRot(P, false);
+  bridgeB.begin(slot, r, rot);
+  for (let i = 0; i < 6; i++) {                                   // individual planks
+    rowToWorld(P, rot, 0, -0.5, -2.5 + i, tmpW);
+    bridgeB.put(slot, tmpW.x, tmpW.y, tmpW.z, 4.6, 0.4, 0.92, 0.26 + 0.05 * (i % 2));
+  }
+  for (const side of [-1, 1]) {
+    for (const a of [-2, 1]) { rowToWorld(P, rot, side * 2.25, 0.55, a, tmpW); bridgeB.put(slot, tmpW.x, tmpW.y, tmpW.z, 0.3, 1.7, 0.3, 0.3); }
+    rowToWorld(P, rot, side * 2.25, 1.25, 0, tmpW); bridgeB.put(slot, tmpW.x, tmpW.y, tmpW.z, 0.25, 0.25, ROW, 0.32);
+    rowToWorld(P, rot, side * 2.25, 1.47, 0, tmpW); bridgeB.put(slot, tmpW.x, tmpW.y, tmpW.z, 0.4, 0.18, ROW, 0.92);   // snow on railings
+  }
+  bridgeB.end(slot);
+  // tall A-frame supports every other row, reaching down to the frozen river
+  pillarB.begin(slot, r, rowRot(P, true));
+  if (r % 2 === 0) {
+    const deckY = P.y - 0.8, floorY = -14.5, rotF = rowRot(P, true);
+    for (const side of [-1, 1]) {
+      rowToWorld(P, rotF, side * 1.9, 0, 0, tmpW);
+      pillarB.put(slot, tmpW.x, (deckY + floorY) / 2, tmpW.z, 0.9, deckY - floorY, 0.9, 0.2);
+    }
+  }
+  pillarB.end(slot);
+}
+
+// ---- Sequence C: tunnel liner, supports and stone portals ----
+function spawnTunnel(r, sC, P) {
+  const slot = r % NR;
+  if (!isTunnelRow(r)) { tunnelB.clear(slot, r); return; }
+  const rot = rowRot(P, false);
+  tunnelB.begin(slot, r, rot);
+  const k = ((r % CYCLE_ROWS) + CYCLE_ROWS) % CYCLE_ROWS;
+  const put = (l, up, a, w, h, d, g, kind = 0) => { rowToWorld(P, rot, l, up + h / 2, a, tmpW); tunnelB.put(slot, tmpW.x, tmpW.y, tmpW.z, w, h, d, g, kind); };
+  put(0, 5.4, 0, 6.0, 0.8, ROW + 0.4, 0.10);              // dark roof slab
+  put(0, 6.2, 0, 6.6, 21, ROW + 0.4, 0.78);               // snowy mountain mass above
+  put(-2.5, -0.3, 0, 0.5, 5.7, ROW + 0.3, 0.10 + 0.06 * hash1(r));     // charcoal wall liners
+  put(2.5, -0.3, 0, 0.5, 5.7, ROW + 0.3, 0.10 + 0.06 * hash1(r + 9));
+  if (r % 2 === 0) {                                      // structural supports passing overhead
+    put(0, 4.7, 0, 4.8, 0.5, 0.7, 0.22);
+    put(-2.0, -0.3, 0, 0.5, 5.0, 0.5, 0.22);
+    put(2.0, -0.3, 0, 0.5, 5.0, 0.5, 0.22);
+  }
+  if (k === TUNNEL_ROW_A || k === TUNNEL_ROW_B) {          // chunky stone portal
+    const a = k === TUNNEL_ROW_A ? -2.0 : 2.0;
+    for (const side of [-1, 1]) for (let j = 0; j < 3; j++) put(side * 3.5, j * 2.2 - 0.3, a, 1.9 + 0.2 * hash1(r + j), 2.2, 1.9, 0.26 + 0.12 * hash1(side * 7 + j + r));
+    put(0, 6.3, a, 8.6, 1.3, 1.9, 0.34);
+    put(0, 7.6, a, 6.4, 1.2, 1.9, 0.30);
+    put(0, 8.8, a, 3.6, 1.2, 1.9, 0.38);
+    put(0, 10.0, a, 4.2, 0.3, 2.2, 0.92);
+  }
+  tunnelB.end(slot);
+}
+
+// ---- Pine trees (the heart of the dissolution) ----
+const TIERS = [
+  { y: 2.4, h: 1.8, core: 3.2, reach: 7.0 },
+  { y: 4.1, h: 1.6, core: 2.4, reach: 5.4 },
+  { y: 5.6, h: 1.4, core: 1.8, reach: 3.8 },
+  { y: 6.9, h: 1.3, core: 1.2, reach: 0 }
+];
+function buildTree(slot, x, baseY, z, sc, inverted, rng, uObj) {
+  const TOTAL = 8.6;
+  const Y = yc => (inverted ? TOTAL - yc : yc);
+  const jitter = 0.45 * (1 - sstep(0.1, 0.45, uObj));       // early trees are irregular, later ones unnaturally symmetrical
+  const missing = sstep(0.12, 0.5, uObj) * 0.35;             // later some branches are simply missing
+  const dark = 0.30 + 0.10 * rng();
+  treeB.put(slot, x, baseY + Y(1.0) * sc, z, 1.0 * sc, 2.4 * sc, 1.0 * sc, 0.2, KIND.TRUNK);
+  TIERS.forEach((t, ti) => {
+    const yy = baseY + Y(t.y) * sc;
+    treeB.put(slot, x, yy, z, t.core * sc, t.h * sc, t.core * sc, dark, KIND.CORE);
+    treeB.put(slot, x, baseY + Y(t.y + (inverted ? -1 : 1) * (t.h / 2 + 0.1)) * sc, z, (t.core + 0.5) * sc, 0.32 * sc, (t.core + 0.5) * sc, 0.92, KIND.CAP);
+    if (t.reach > 0) {
+      const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+      for (const [dx, dz] of dirs) {
+        if (rng() < missing) continue;
+        const reach = t.reach * (1 + (rng() - 0.5) * jitter);
+        const len = reach / 2 - t.core / 2 + 0.3;
+        const off = t.core / 2 - 0.3 + len / 2;
+        const th = t.core * 0.6 * sc;
+        treeB.put(slot, x + dx * off * sc, yy - 0.15 * sc, z + dz * off * sc,
+          dx ? len * sc : th, t.h * 0.8 * sc, dz ? len * sc : th, dark - 0.04, KIND.TIP, dx * off * sc, dz * off * sc);
+      }
+    }
+  });
+  treeB.put(slot, x, baseY + Y(7.95) * sc, z, 0.6 * sc, 0.6 * sc, 0.6 * sc, 0.95);    // little star cube
+}
+function spawnTrees(r, sC, P, uObj) {
+  const rotF = rowRot(P, true);
+  let density = (1 - 0.9 * valleyAt(sC)) * (1 - 0.8 * mountainAt(sC));
+  density *= 1 - 0.8 * sstep(0.5, 0.95, uObj);
+  // Stage 2: identical groups of trees repeat at suspiciously regular intervals
+  const repeating = uObj > 0.18 && hash1(r * 3.7) < sstep(0.15, 0.6, uObj) * 0.9;
+  const seedRow = repeating ? 1000 + (r % 5) : r;
+  for (let k = 0; k < 5; k++) {
+    const slot = (r % NR) * 5 + k;
+    const rng = mulberry32(seedRow * 7919 + k * 131);
+    treeB.begin(slot, r, null);
+    const keepTree = rng() < density * 0.95;
+    const lat = (rng() < 0.5 ? -1 : 1) * (11 + rng() * 47), a = (rng() - 0.5) * ROW, sc = 0.7 + rng() * 0.9;
+    const roll = rng(), c1 = rng(), c2 = rng();
+    if (keepTree) {
+      const ci = Math.round(lat / COL_W);
+      terrainSample(sC, P, ci * COL_W, tmpT);
+      if (!tmpT.ice) {
+        rowToWorld(P, rotF, lat, 0, a, tmpW);
+        const pInv = 0.45 * sstep(0.35, 0.65, uObj), pGeo = 0.5 * sstep(0.45, 0.8, uObj);
+        const inverted = roll < pInv;
+        const lift = inverted ? 5 + c1 * 9 : (uObj > 0.25 && c2 < 0.25 * sstep(0.25, 0.6, uObj) ? 2 + c1 * 5 : 0);
+        treeB.follow[slot] = 1; treeB.gTop[slot] = tmpT.top; treeB.gBase[slot] = P.y - 0.7;
+        treeB.colW[slot] = (roll >= pInv && roll < pInv + pGeo) ? 1 : (c1 < 0.5 ? 0.35 + c2 * 0.3 : 0.9);
+        treeB.colWidth[slot] = 1.7 * sc;
+        treeB.bob[slot] = lift > 0 ? 0.6 : 0;
+        buildTree(slot, tmpW.x, tmpT.top + lift, tmpW.z, sc, inverted, rng, uObj);
+      }
+    }
+    treeB.end(slot);
+  }
+}
+
+// ---- Props: rocks, signposts, fences, signals, crystals, arches, stations, floating blocks ----
+const PROP_NAMES = ['rock', 'sign', 'fence', 'signal', 'float', 'crystal', 'arch', 'station', 'mound'];
+const PROP_W_EARLY = [0.20, 0.12, 0.14, 0.05, 0.00, 0.00, 0.00, 0.05, 0.30];
+const PROP_W_LATE  = [0.05, 0.00, 0.00, 0.22, 0.25, 0.20, 0.15, 0.05, 0.05];
+function pickProp(rng, t) {
+  let sum = 0; const w = PROP_W_EARLY.map((e, i) => lerp(e, PROP_W_LATE[i], t));
+  w.forEach(v => sum += v);
+  let x = rng() * sum;
+  for (let i = 0; i < w.length; i++) { x -= w[i]; if (x <= 0) return i; }
+  return 0;
+}
+function buildProp(type, slot, x, y, z, rng, uObj) {
+  const b = propB, s = 0.8 + rng() * 0.9;
+  switch (type) {
+    case 0:   // stepped rocks with snow caps
+      for (let i = 0; i < 3; i++) {
+        const ox = (rng() - 0.5) * 3 * s, oz = (rng() - 0.5) * 3 * s, w = (1.4 + rng() * 2) * s, h = (1 + rng() * 1.8) * s;
+        blk(b, slot, x + ox, y, z + oz, w, h, w, 0.38 + 0.1 * rng());
+        blk(b, slot, x + ox, y + h, z + oz, w * 0.9, 0.3, w * 0.9, 0.92);
+      }
+      break;
+    case 1:   // wooden signpost
+      blk(b, slot, x, y, z, 0.3, 2.6, 0.3, 0.22);
+      blk(b, slot, x, y + 1.7, z, 1.7, 0.8, 0.2, 0.3 + 0.1 * rng());
+      blk(b, slot, x, y + 2.5, z, 1.8, 0.25, 0.3, 0.92);
+      break;
+    case 2: { // fence
+      const alongX = rng() < 0.5;
+      for (let i = 0; i < 5; i++) {
+        const o = (i - 2) * 1.5;
+        blk(b, slot, x + (alongX ? o : 0), y, z + (alongX ? 0 : o), 0.35, 1.5, 0.35, 0.24);
+        blk(b, slot, x + (alongX ? o : 0), y + 1.5, z + (alongX ? 0 : o), 0.45, 0.2, 0.45, 0.92);
+      }
+      blk(b, slot, x, y + 0.5, z, alongX ? 6.4 : 0.2, 0.2, alongX ? 0.2 : 6.4, 0.28);
+      blk(b, slot, x, y + 1.0, z, alongX ? 6.4 : 0.2, 0.2, alongX ? 0.2 : 6.4, 0.28);
+      break; }
+    case 3:   // railway signal, standing wherever it pleases
+      blk(b, slot, x, y, z, 0.35, 6.5, 0.35, 0.18);
+      blk(b, slot, x + 0.7, y + 5.4, z, 1.7, 0.4, 0.2, 0.3);
+      blk(b, slot, x + 1.2, y + 5.0, z, 0.7, 0.7, 0.3, 0.97, KIND.PLAIN);     // pale lamp
+      blk(b, slot, x, y + 6.5, z, 0.6, 0.25, 0.6, 0.92);
+      break;
+    case 4:   // drifting cluster of floating cubes
+      b.bob[slot] = 1.0;
+      for (let i = 0; i < 9; i++) {
+        const w = 0.8 + rng() * 3.2;
+        blk(b, slot, x + (rng() - 0.5) * 12, y + 6 + rng() * 26, z + (rng() - 0.5) * 12, w, w, w, 0.35 + 0.55 * rng());
+      }
+      break;
+    case 5: { // enormous crystalline formation: leaning stack of tapering prisms
+      const sc = 1.6 + rng() * 1.6; let lean = 0;
+      const widths = [5, 4.2, 3.4, 2.6, 1.8, 1.0];
+      widths.forEach((w, i) => {
+        blk(b, slot, x + lean * sc, y + i * 3.2 * sc, z, w * sc, 3.2 * sc, w * sc * 0.8, i % 2 ? 0.88 : 0.30 + 0.1 * rng());
+        lean += 0.45 + 0.4 * rng();
+      });
+      break; }
+    case 6: { // snow-covered arch leading nowhere
+      const H = 8 + rng() * 7, W = 5 + rng() * 4;
+      blk(b, slot, x - W / 2, y, z, 1.8, H, 1.8, 0.30);
+      blk(b, slot, x + W / 2, y, z, 1.8, H, 1.8, 0.30);
+      blk(b, slot, x, y + H, z, W + 1.8, 1.6, 1.8, 0.34);
+      blk(b, slot, x, y + H + 1.6, z, W * 0.6, 1.2, 1.8, 0.38);
+      blk(b, slot, x, y + H + 2.8, z, W + 2.2, 0.4, 2.2, 0.93);
+      break; }
+    case 7: { // a little station house
+      blk(b, slot, x, y, z, 7, 3.6, 4.5, 0.42);
+      blk(b, slot, x, y + 3.6, z, 8, 0.8, 5.5, 0.22);
+      blk(b, slot, x, y + 4.4, z, 6, 0.8, 4.2, 0.28);
+      blk(b, slot, x, y + 5.2, z, 3.6, 0.8, 3, 0.34);
+      blk(b, slot, x, y + 6.0, z, 4.2, 0.35, 3.6, 0.93);
+      blk(b, slot, x, y + 4.1, z, 8.4, 0.3, 5.9, 0.93);
+      for (let i = -1; i <= 1; i += 2) blk(b, slot, x + i * 2.1, y + 1.2, z + 2.3, 1.0, 1.1, 0.15, 0.97);
+      blk(b, slot, x, y, z + 2.3, 1.1, 2.0, 0.15, 0.08);
+      break; }
+    default: { // low stepped snow mound
+      const w = [7, 5, 3.2, 1.6];
+      w.forEach((ww, i) => blk(b, slot, x, y + i * 0.9, z, ww * s, 0.9, ww * s, 0.86 + 0.05 * i));
+    }
+  }
+}
+function spawnProps(r, sC, P, uObj) {
+  const rotF = rowRot(P, true);
+  const t = sstep(0.2, 0.7, uObj);
+  for (let k = 0; k < 2; k++) {
+    const slot = (r % NR) * 2 + k;
+    const rng = mulberry32(r * 4801 + k * 977);
+    propB.begin(slot, r, null);
+    if (rng() < 0.6) {
+      const type = pickProp(rng, t);
+      // signals drift ever closer to the unusual: near the track early on, anywhere later
+      const lat = (rng() < 0.5 ? -1 : 1) * (type === 3 ? lerp(5, 40, t * rng()) : type === 1 ? 5.2 : 7 + rng() * 45);
+      const ci = Math.round(lat / COL_W);
+      terrainSample(sC, P, ci * COL_W, tmpT);
+      if (!tmpT.ice || type === 4 || type === 5 || type === 6) {
+        rowToWorld(P, rotF, lat, 0, (rng() - 0.5) * ROW, tmpW);
+        propB.follow[slot] = 1; propB.gTop[slot] = tmpT.top; propB.gBase[slot] = P.y - 0.7;
+        buildProp(type, slot, tmpW.x, tmpT.top, tmpW.z, rng, uObj);
+      }
+    }
+    propB.end(slot);
+  }
+}
+
+// ---- Distant mountains: stepped pyramids that later come apart into fields of cubes ----
+function spawnMountain(r, sC, P, uObj) {
+  const slot = r % NR;
+  mountainB.begin(slot, r, null);
+  const rng = mulberry32(r * 31337 + 7);
+  if (r % 3 === 0) {
+    const side = rng() < 0.5 ? -1 : 1, lat = side * (95 + rng() * 85);
+    const W = 60 + rng() * 55, H = 30 + rng() * 45, L = 14;
+    const irregular = 0.3 * (1 - sstep(0.1, 0.5, uObj));      // mountains grow geometrically repetitive
+    rowToWorld(P, rowRot(P, true), lat, 0, 0, tmpW);
+    const baseY = P.y - 18;
+    for (let i = 0; i < L; i++) {
+      const w = W * Math.pow(1 - i / L, 0.9) * (1 + (rng() - 0.5) * irregular);
+      const g = i > L - 5 ? 0.85 : 0.14 + 0.03 * i;
+      for (const hx of [-1, 1]) {
+        mountainB.put(slot, tmpW.x + hx * w / 4, baseY + (i + 0.5) * H / L, tmpW.z, w / 2 + 0.6, H / L + 0.05, w * 0.8, g, KIND.PLAIN);
+      }
+    }
+  }
+  mountainB.end(slot);
+}
+
+// ---------------------------------------------------------------------
+// 9. ROW MANAGEMENT: spawn rows ahead, recycle rows behind
+// ---------------------------------------------------------------------
+const spawnedRow = new Int32Array(NR).fill(-99999);
+function spawnRow(r) {
+  const sC = r * ROW + ROW / 2;
+  pathAt(sC, tmpPath);
+  const P = { x: tmpPath.x, y: tmpPath.y, z: tmpPath.z, h: tmpPath.h, pitch: tmpPath.pitch };
+  const uObj = dissolutionAt(sC);
+  spawnGround(r, sC, P);
+  spawnTrack(r, sC, P);
+  spawnBridge(r, sC, P);
+  spawnTunnel(r, sC, P);
+  spawnTrees(r, sC, P, uObj);
+  spawnProps(r, sC, P, uObj);
+  spawnMountain(r, sC, P, uObj);
+  spawnedRow[r % NR] = r;
+}
+// returns the number of rows spawned this call (limited per frame to avoid hitches)
+function maintainRows(sTrain, maxSpawn) {
+  const rMin = Math.floor(sTrain / ROW) - ROWS_BEHIND;
+  let spawned = 0;
+  for (let r = rMin; r < rMin + NR; r++) {
+    if (spawnedRow[r % NR] !== r) {
+      if (spawned >= maxSpawn) break;
+      spawnRow(r); spawned++;
+    }
+  }
+  // the dissolution each row experiences blends the train's own progress with the row's position,
+  // so objects visibly change as the train approaches them
+  for (let r = rMin; r < rMin + NR; r++) {
+    const sC = r * ROW + ROW / 2;
+    rowU[r % NR] = dissolutionAt(0.55 * sTrain + 0.45 * sC + 40);
+  }
+  return spawned;
+}
+
+// ---------------------------------------------------------------------
+// 10. THE TOY STEAM TRAIN  (built entirely from boxes; never reacts to the dissolving world)
+// ---------------------------------------------------------------------
+const glowMat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false });   // pale lit windows + headlamp
+const tmpM = new THREE.Matrix4(), tmpM2 = new THREE.Matrix4(), tmpQ = new THREE.Quaternion();
+const tmpV = new THREE.Vector3(), tmpS = new THREE.Vector3(), tmpV2 = new THREE.Vector3();
+const AXIS_X = new THREE.Vector3(1, 0, 0), AXIS_Z = new THREE.Vector3(0, 0, 1);
+
+class Vehicle {
+  constructor() {
+    this.group = new THREE.Group();
+    this.group.rotation.order = 'YXZ';
+    this.solid = []; this.glow = []; this.wheelDefs = []; this.wheelParts = [];
+    scene.add(this.group);
+  }
+  box(x, y, z, w, h, l, g) { this.solid.push({ x, y, z, w, h, l, g }); }        // y = bottom
+  lamp(x, y, z, w, h, l) { this.glow.push({ x, y, z, w, h, l }); }
+  wheel(x, y, z, R) { this.wheelDefs.push({ x, y, z, R }); }
+  // build the instanced meshes once all parts are declared
+  finish(extraDynamic = 0) {
+    const n = this.solid.length;
+    this.solidMesh = new THREE.InstancedMesh(boxGeo, voxelMat, n);
+    this.solidMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3);
+    this.solid.forEach((p, i) => {
+      tmpM.compose(tmpV.set(p.x, p.y + p.h / 2, p.z), tmpQ.identity(), tmpS.set(p.w, p.h, p.l));
+      this.solidMesh.setMatrixAt(i, tmpM);
+      const c = greyLin(p.g); this.solidMesh.instanceColor.setXYZ(i, c, c, c);
+    });
+    this.solidMesh.frustumCulled = false;
+    this.group.add(this.solidMesh);
+    if (this.glow.length) {
+      this.glowMesh = new THREE.InstancedMesh(boxGeo, glowMat, this.glow.length);
+      this.glow.forEach((p, i) => {
+        tmpM.compose(tmpV.set(p.x, p.y + p.h / 2, p.z), tmpQ.identity(), tmpS.set(p.w, p.h, p.l));
+        this.glowMesh.setMatrixAt(i, tmpM);
+      });
+      this.glowMesh.frustumCulled = false;
+      this.group.add(this.glowMesh);
+    }
+    // wheels: hub + two spokes + eight rim blocks, each wheel spun every frame
+    this.localParts = [];                                // matrices of one wheel's parts (wheel space)
+    const parts = [];
+    return this._wheelMesh(extraDynamic);
+  }
+  _wheelMesh(extra) {
+    const per = 11;
+    const total = this.wheelDefs.length * per + extra;
+    this.wheelMesh = new THREE.InstancedMesh(boxGeo, voxelMat, total);
+    this.wheelMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(total * 3), 3);
+    this.wheelMesh.frustumCulled = false;
+    this.group.add(this.wheelMesh);
+    this.wheelPartCache = this.wheelDefs.map(d => {
+      const t = 0.22, R = d.R, list = [];
+      list.push([0, 0, 0, t + 0.06, 0.36, 0.36, 0.7]);                              // hub
+      list.push([0, 0, 0, t, 0.18, 2 * R - 0.25, 0.42]);                            // spoke along z
+      list.push([0, 0, 0, t, 2 * R - 0.25, 0.18, 0.42]);                            // spoke along y
+      for (let k = 0; k < 8; k++) {                                                  // rim
+        const a = k * Math.PI / 4, rr = R - 0.17;
+        list.push([0, Math.sin(a) * rr, Math.cos(a) * rr, t, 0.36, 0.36, k % 2 ? 0.30 : 0.5]);
+      }
+      return list.map(p => ({ m: new THREE.Matrix4().compose(new THREE.Vector3(p[0], p[1], p[2]), new THREE.Quaternion(), new THREE.Vector3(p[3], p[4], p[5])), g: p[6] }));
+    });
+    this.wheelPartCache.forEach((list, wi) => list.forEach((p, k) => {
+      const c = greyLin(p.g), i = wi * per + k; this.wheelMesh.instanceColor.setXYZ(i, c, c, c);
+    }));
+    this.wheelBase = this.wheelDefs.length * per;
+    return this;
+  }
+  // spin all wheels; angle = rolling rotation about the axle (x)
+  spin(angle) {
+    const per = 11;
+    this.wheelDefs.forEach((d, wi) => {
+      tmpQ.setFromAxisAngle(AXIS_X, angle * (0.62 / d.R));
+      tmpM2.compose(tmpV.set(d.x, d.y, d.z), tmpQ, tmpS.set(1, 1, 1));
+      this.wheelPartCache[wi].forEach((p, k) => { tmpM.multiplyMatrices(tmpM2, p.m); this.wheelMesh.setMatrixAt(wi * per + k, tmpM); });
+    });
+    this.wheelMesh.instanceMatrix.needsUpdate = true;
+  }
+  // place on the railway at distance s
+  place(s) {
+    pathAt(s, tmpPath);
+    this.group.position.set(tmpPath.x, tmpPath.y, tmpPath.z);
+    this.group.rotation.set(tmpPath.pitch, -tmpPath.h, 0);
+  }
+}
+
+// ---- the locomotive + tender ----
+const loco = new Vehicle();
+{
+  const L = loco, body = 0.50, dark = 0.2, trim = 0.7;
+  L.box(0, 0.95, 0.1, 1.7, 0.4, 6.4, dark);                                    // chassis frame
+  L.box(0, 1.35, -1.2, 1.0, 2.0, 3.4, body); L.box(0, 1.85, -1.2, 2.0, 1.0, 3.4, body);   // boiler: stepped octagon
+  L.box(0, 3.35, -1.2, 1.0, 0.14, 3.2, 0.93);                                  // snow on boiler
+  L.box(0, 1.35, -3.15, 1.0, 2.0, 0.5, 0.26); L.box(0, 1.85, -3.15, 2.0, 1.0, 0.5, 0.26); // smokebox
+  L.box(0, 1.5, -2.0, 2.06, 0.14, 0.14, trim); L.box(0, 1.5, -0.4, 2.06, 0.14, 0.14, trim); // brass bands -> pale bands
+  L.box(0, 3.35, -2.4, 0.6, 0.5, 0.6, 0.26);                                   // chimney
+  L.box(0, 3.85, -2.4, 0.5, 0.6, 0.5, 0.24); L.box(0, 4.45, -2.4, 0.85, 0.22, 0.85, 0.3);
+  L.box(0, 4.67, -2.4, 0.9, 0.1, 0.9, 0.93);
+  L.box(0, 3.35, -0.9, 0.9, 0.55, 0.9, 0.42); L.box(0, 3.9, -0.9, 0.5, 0.15, 0.5, 0.93); // steam dome
+  L.box(0, 0.35, -3.3, 1.7, 0.3, 0.3, 0.55); L.box(0, 0.35, -3.6, 1.3, 0.3, 0.3, 0.4); L.box(0, 0.35, -3.9, 0.8, 0.3, 0.3, 0.55);  // cowcatcher
+  L.box(0, 0.65, -3.6, 0.8, 0.12, 0.7, 0.35);
+  for (const s of [-1, 1]) {
+    L.box(s * 1.0, 0.7, -2.9, 0.5, 0.5, 1.0, 0.3);                             // steam cylinders
+    L.box(s * 1.0, 1.4, -0.7, 0.28, 0.1, 5.2, 0.35);                            // running boards
+  }
+  // cab: pillars, sill, lintel, back wall, roof, snow
+  L.box(0, 1.4, 0.7, 1.9, 1.8, 0.15, 0.4); L.box(0, 1.4, 2.95, 1.9, 1.8, 0.15, 0.4);
+  for (const s of [-1, 1]) {
+    L.box(s * 0.92, 1.4, 0.8, 0.15, 1.8, 0.45, 0.45); L.box(s * 0.92, 1.4, 2.5, 0.15, 1.8, 0.45, 0.45);
+    L.box(s * 0.92, 1.4, 1.25, 0.15, 0.7, 1.25, 0.45); L.box(s * 0.92, 2.9, 1.25, 0.15, 0.3, 1.25, 0.45);
+    L.lamp(s * 0.9, 2.15, 1.35, 0.05, 0.7, 1.0);                                // lit cab windows
+  }
+  L.box(0, 3.2, 1.85, 2.4, 0.2, 2.8, 0.26); L.box(0, 3.4, 1.85, 2.2, 0.16, 2.6, 0.93);
+  // tender with a heap of coal
+  L.box(0, 1.35, 4.25, 1.9, 1.2, 2.2, 0.38); L.box(0, 2.55, 4.25, 1.5, 0.35, 1.8, 0.12); L.box(0, 2.9, 4.25, 1.0, 0.3, 1.2, 0.1);
+  L.box(0, 2.9, 4.25, 1.0, 0.1, 1.2, 0.1); L.box(0, 1.35, 3.1, 0.3, 0.3, 0.3, 0.3);
+  L.box(0, 1.25, 5.45, 0.3, 0.3, 0.7, 0.3);                                     // coupler
+  for (const s of [-1, 1]) for (const z of [-1.9, -0.55, 0.8]) L.wheel(s * 1.12, 0.62, z, 0.62);
+  for (const s of [-1, 1]) for (const z of [3.6, 4.9]) L.wheel(s * 1.0, 0.45, z, 0.45);
+  L.lamp(0, 2.2, -3.52, 0.55, 0.55, 0.15);                                      // headlamp (pale, never coloured)
+  L.finish(4);                                                              // + connecting rods
+}
+const headLight = new THREE.PointLight(0xffffff, 320, 90, 2);
+headLight.position.set(0, 2.5, -4.6);
+loco.group.add(headLight);
+
+// ---- passenger carriages ----
+const carriages = [];
+const CARRIAGE_GREYS = [0.50, 0.42, 0.54, 0.46];
+for (let c = 0; c < 4; c++) {
+  const V = new Vehicle(), g = CARRIAGE_GREYS[c];
+  V.box(0, 0.8, 0, 1.9, 0.3, 4.4, 0.18);
+  V.box(0, 1.1, 0, 2.0, 1.55, 4.2, g);                                          // body
+  V.box(0, 1.1, 0, 2.06, 0.3, 4.26, 0.2);                                       // dark skirt
+  V.box(0, 2.65, 0, 2.15, 0.2, 4.5, 0.26); V.box(0, 2.85, 0, 1.6, 0.2, 4.0, 0.28);   // stepped roof
+  V.box(0, 3.05, 0, 1.9, 0.16, 4.3, 0.93); V.box(0, 3.21, 0, 1.3, 0.12, 3.8, 0.96);   // snow on the roof
+  V.box(0, 0.95, 2.35, 0.3, 0.3, 0.6, 0.3); V.box(0, 0.95, -2.35, 0.3, 0.3, 0.6, 0.3);   // couplers
+  V.box(0, 1.1, 2.1, 1.7, 1.55, 0.1, 0.25); V.box(0, 1.1, -2.1, 1.7, 1.55, 0.1, 0.25);
+  for (const s of [-1, 1]) for (const z of [-1.3, 0, 1.3]) V.lamp(s * 1.02, 1.65, z, 0.06, 0.62, 0.7);
+  for (const s of [-1, 1]) for (const z of [-1.4, 1.4]) V.wheel(s * 0.95, 0.42, z, 0.42);
+  V.finish(0);
+  carriages.push(V);
+}
+const CARRIAGE_GAP = 5.0, CARRIAGE_START = 8.1;
+
+// ---- headlamp glow sprite (procedural radial gradient) ----
+function makeGlowTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const x = c.getContext('2d'), g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
+  g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.25, 'rgba(235,235,235,0.55)');
+  g.addColorStop(0.6, 'rgba(200,200,200,0.12)'); g.addColorStop(1, 'rgba(180,180,180,0)');
+  x.fillStyle = g; x.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(c);
+}
+const glowTex = makeGlowTexture();
+const lampGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, transparent: true, opacity: 0.8 }));
+lampGlow.position.set(0, 2.5, -3.7); lampGlow.scale.set(5, 5, 1);
+loco.group.add(lampGlow);
+
+// ---- per-frame train animation ----
+const rodVec = new THREE.Vector3();
+function updateTrain(sTrain, distance) {
+  loco.place(sTrain);
+  const ang = -distance / 0.62;
+  loco.spin(ang);
+  // connecting rods (coupling rod + main rod, both sides)
+  const per = 11, base = loco.wheelBase;
+  tmpQ.setFromAxisAngle(AXIS_X, ang);
+  let ri = base;
+  for (const s of [-1, 1]) {
+    const x = s * 1.38;
+    const pin = (zc) => tmpV.set(0, 0, 0.3).applyQuaternion(tmpQ).add(tmpV2.set(x, 0.62, zc)).clone();
+    const pA = pin(-1.9), pC = pin(0.8), pB = pin(-0.55);
+    // coupling rod (horizontal, between the outer driving wheels)
+    tmpM.compose(tmpV.copy(pA).add(pC).multiplyScalar(0.5), new THREE.Quaternion(), tmpS.set(0.1, 0.16, pA.distanceTo(pC) + 0.3));
+    loco.wheelMesh.setMatrixAt(ri, tmpM); const c1 = greyLin(0.75); loco.wheelMesh.instanceColor.setXYZ(ri, c1, c1, c1); ri++;
+    // main rod: from the fixed crosshead to the middle crank pin
+    const cross = new THREE.Vector3(x, 0.95, -2.3);
+    rodVec.copy(pB).sub(cross);
+    const len = rodVec.length();
+    tmpQ.setFromUnitVectors(AXIS_Z, rodVec.normalize());
+    tmpM.compose(cross.clone().add(pB).multiplyScalar(0.5), tmpQ, tmpS.set(0.12, 0.18, len + 0.2));
+    loco.wheelMesh.setMatrixAt(ri, tmpM); loco.wheelMesh.instanceColor.setXYZ(ri, c1, c1, c1); ri++;
+    tmpQ.setFromAxisAngle(AXIS_X, ang);                       // restore for the other side
+  }
+  loco.wheelMesh.instanceColor.needsUpdate = true;
+  loco.wheelMesh.instanceMatrix.needsUpdate = true;
+  carriages.forEach((V, i) => {
+    V.place(sTrain - CARRIAGE_START - i * CARRIAGE_GAP);
+    V.spin(-distance / 0.42);
+  });
+}
+
+// ---------------------------------------------------------------------
+// 11. PARTICLES: pooled voxel smoke, train spray and falling snow
+// ---------------------------------------------------------------------
+class ParticlePool {
+  constructor(max, material) {
+    this.max = max;
+    this.pos = new Float32Array(max * 3); this.vel = new Float32Array(max * 3);
+    this.life = new Float32Array(max); this.maxLife = new Float32Array(max);
+    this.size0 = new Float32Array(max); this.size1 = new Float32Array(max); this.grey = new Float32Array(max);
+    this.next = 0;
+    this.mesh = new THREE.InstancedMesh(boxGeo, material, max);
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(max * 3), 3);
+    this.mesh.frustumCulled = false;
+    this.mesh.instanceMatrix.array.fill(0);
+    scene.add(this.mesh);
+  }
+  emit(x, y, z, vx, vy, vz, life, s0, s1, grey) {      // ring-buffer reuse: nothing is created or destroyed
+    const i = this.next; this.next = (this.next + 1) % this.max;
+    this.pos[i * 3] = x; this.pos[i * 3 + 1] = y; this.pos[i * 3 + 2] = z;
+    this.vel[i * 3] = vx; this.vel[i * 3 + 1] = vy; this.vel[i * 3 + 2] = vz;
+    this.life[i] = life; this.maxLife[i] = life; this.size0[i] = s0; this.size1[i] = s1; this.grey[i] = grey;
+  }
+  update(dt, windX, windZ, gravity, drag) {
+    const A = this.mesh.instanceMatrix.array, C = this.mesh.instanceColor.array;
+    for (let i = 0; i < this.max; i++) {
+      if (this.life[i] <= 0) { A[i * 16] = 0; A[i * 16 + 5] = 0; A[i * 16 + 10] = 0; continue; }
+      this.life[i] -= dt;
+      const t = 1 - this.life[i] / this.maxLife[i];
+      const j = i * 3;
+      this.vel[j] += (windX * 0.4 - this.vel[j]) * drag * dt; this.vel[j + 2] += (windZ * 0.4 - this.vel[j + 2]) * drag * dt;
+      this.vel[j + 1] += gravity * dt;
+      this.pos[j] += this.vel[j] * dt; this.pos[j + 1] += this.vel[j + 1] * dt; this.pos[j + 2] += this.vel[j + 2] * dt;
+      // expand, then fade away by shrinking and sinking into the fog colour
+      const s = lerp(this.size0[i], this.size1[i], Math.sqrt(t)) * (1 - sstep(0.6, 1, t));
+      const e = i * 16;
+      A[e] = s; A[e + 1] = 0; A[e + 2] = 0; A[e + 3] = 0; A[e + 4] = 0; A[e + 5] = s; A[e + 6] = 0; A[e + 7] = 0;
+      A[e + 8] = 0; A[e + 9] = 0; A[e + 10] = s; A[e + 11] = 0; A[e + 12] = this.pos[j]; A[e + 13] = this.pos[j + 1]; A[e + 14] = this.pos[j + 2]; A[e + 15] = 1;
+      const c = greyLin(this.grey[i] * (1 - 0.35 * t)); C[j] = c; C[j + 1] = c; C[j + 2] = c;
+    }
+    this.mesh.instanceMatrix.needsUpdate = true; this.mesh.instanceColor.needsUpdate = true;
+  }
+}
+const basicWhite = new THREE.MeshBasicMaterial({ color: 0xffffff });
+const smokePool = new ParticlePool(90, basicWhite);
+const sprayPool = new ParticlePool(160, basicWhite);
+
+// falling voxel snow: a recycled volume that follows the camera focus
+const SNOW_COUNT = 2600, SNOW_DIM = { x: 110, y: 56, z: 130 };
+const snow = {
+  pos: new Float32Array(SNOW_COUNT * 3), seed: new Float32Array(SNOW_COUNT), size: new Float32Array(SNOW_COUNT),
+  mesh: new THREE.InstancedMesh(boxGeo, new THREE.MeshBasicMaterial({ color: 0xffffff }), SNOW_COUNT)
+};
+snow.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); snow.mesh.frustumCulled = false;
+for (let i = 0; i < SNOW_COUNT; i++) {
+  snow.pos[i * 3] = (Math.random() - 0.5) * SNOW_DIM.x; snow.pos[i * 3 + 1] = Math.random() * SNOW_DIM.y; snow.pos[i * 3 + 2] = (Math.random() - 0.5) * SNOW_DIM.z;
+  snow.seed[i] = Math.random(); snow.size[i] = 0.07 + Math.random() * 0.12;
+}
+scene.add(snow.mesh);
+function updateSnow(dt, time, focus, u, windX, windZ) {
+  const A = snow.mesh.instanceMatrix.array;
+  const sizeScale = lerp(1, 3.3, sstep(0.3, 1, u));                 // flakes become large geometric particles
+  const fall = lerp(3.4, 1.3, u);
+  const hx = SNOW_DIM.x / 2, hz = SNOW_DIM.z / 2;
+  for (let i = 0; i < SNOW_COUNT; i++) {
+    const j = i * 3, sd = snow.seed[i];
+    const speed = fall * (0.5 + sd);                                // different speeds at different distances
+    snow.pos[j] += (windX * (0.4 + sd) + Math.sin(time * 0.7 + sd * 40) * 0.5) * dt;
+    snow.pos[j + 1] -= speed * dt;
+    snow.pos[j + 2] += (windZ * (0.4 + sd) + Math.cos(time * 0.6 + sd * 30) * 0.4) * dt;
+    // wrap inside the volume that follows the train (all in world space)
+    let dx = snow.pos[j] - focus.x, dy = snow.pos[j + 1] - focus.y, dz = snow.pos[j + 2] - focus.z;
+    if (dx > hx) snow.pos[j] -= SNOW_DIM.x; else if (dx < -hx) snow.pos[j] += SNOW_DIM.x;
+    if (dz > hz) snow.pos[j + 2] -= SNOW_DIM.z; else if (dz < -hz) snow.pos[j + 2] += SNOW_DIM.z;
+    if (dy < -10) snow.pos[j + 1] += SNOW_DIM.y; else if (dy > SNOW_DIM.y - 10) snow.pos[j + 1] -= SNOW_DIM.y;
+    dx = snow.pos[j] - focus.x; dy = snow.pos[j + 1] - focus.y; dz = snow.pos[j + 2] - focus.z;
+    const edge = Math.max(Math.abs(dx) / hx, Math.abs(dz) / hz, Math.abs(dy - 18) / 28);
+    const s = snow.size[i] * sizeScale * (1 - sstep(0.8, 1, edge));
+    const e = i * 16;
+    A[e] = s; A[e + 5] = s; A[e + 10] = s; A[e + 15] = 1;
+    A[e + 12] = snow.pos[j]; A[e + 13] = snow.pos[j + 1]; A[e + 14] = snow.pos[j + 2];
+  }
+  snow.mesh.instanceMatrix.needsUpdate = true;
+}
+
+// ---------------------------------------------------------------------
+// 12. THE CHRISTMAS TREE THAT NEVER GETS ANY CLOSER
+//     It is positioned relative to the train (always the same distance ahead on the railway),
+//     scaled to keep a near-constant apparent size, and drifts in and out of the fog.
+// ---------------------------------------------------------------------
+const hopeTree = new THREE.Group();
+const hopeMats = [];
+{
+  const mk = g => { const m = new THREE.MeshBasicMaterial({ color: new THREE.Color().setScalar(greyLin(g)), transparent: true, opacity: 0, fog: false, depthWrite: false }); hopeMats.push(m); return m; };
+  const mTree = mk(0.86), mTrunk = mk(0.55), mStar = mk(1.0);
+  const add = (w, h, l, y, mat) => { const m = new THREE.Mesh(boxGeo, mat); m.scale.set(w, h, l); m.position.y = y + h / 2; hopeTree.add(m); };
+  add(0.9, 1.6, 0.9, 0, mTrunk);
+  [[6.4, 1.3, 1.6], [5.0, 1.3, 2.9], [3.6, 1.3, 4.2], [2.2, 1.3, 5.5], [1.0, 1.1, 6.8]].forEach(t => add(t[0], t[1], t[0], t[2], mTree));
+  add(0.7, 0.7, 0.7, 8.0, mStar);
+}
+const hopeGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, transparent: true, opacity: 0 }));
+hopeGlow.position.set(0, 5, 0); hopeGlow.scale.set(34, 34, 1);
+hopeTree.add(hopeGlow);
+hopeTree.visible = false;
+scene.add(hopeTree);
+const HOPE_DISTANCE = 240;
+function updateHopeTree(sTrain, uTrain, time, camDist) {
+  const vis = sstep(0.55, 0.88, uTrain);
+  hopeTree.visible = vis > 0.01;
+  if (!hopeTree.visible) return;
+  pathAt(sTrain + HOPE_DISTANCE, tmpPath);
+  hopeTree.position.set(tmpPath.x, tmpPath.y - 0.6 + Math.sin(time * 0.3) * 0.3, tmpPath.z);
+  hopeTree.scale.setScalar((camDist + HOPE_DISTANCE) / HOPE_DISTANCE * 3.0);   // apparent size stays almost constant
+  // the fog "occasionally obscures it" and it slowly reappears
+  const pulse = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(time * 0.21) * Math.sin(time * 0.137 + 2.0));
+  hopeMats.forEach(m => m.opacity = vis * pulse * 0.95);
+  hopeGlow.material.opacity = vis * pulse * 0.8;
+}
+
+// ---------------------------------------------------------------------
+// 13. ATMOSPHERE: fog, light and the train's headlamp respond to progress
+// ---------------------------------------------------------------------
+function applyAtmosphere(u, tunnel, valley, time) {
+  const g = lerp(0.24, 0.47, sstep(0.25, 1, u)) * (1 - tunnel * 0.97);
+  scene.background.setScalar(greyLin(g)); scene.fog.color.setScalar(greyLin(g));
+  const drift = 1 + 0.12 * Math.sin(time * 0.07) + 0.06 * Math.sin(time * 0.173 + 1.0);   // slowly drifting fog
+  scene.fog.density = lerp(0.0062, 0.0135, sstep(0.1, 1, u)) * drift * (1 - 0.3 * valley) * (1 + tunnel * 0.5);
+  hemiLight.intensity = lerp(1.1, 0.95, u) * (1 - tunnel * 0.93);
+  moonLight.intensity = 1.5 * (1 - tunnel * 0.95);
+  headLight.intensity = 320 * (1 + tunnel * 1.4);
+  basicWhite.color.setScalar(greyLin(lerp(1, 0.78, tunnel)));
+  snow.mesh.material.color.setScalar(greyLin(lerp(1, 0.7, tunnel)));
+}
+
+// ---------------------------------------------------------------------
+// 14. CINEMATIC CAMERA
+// ---------------------------------------------------------------------
+const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), camTmp = new THREE.Vector3(), lookTmp = new THREE.Vector3();
+let camReady = false, camRoll = 0, camDistance = 13;
+function updateCamera(dt, time, sTrain, u, tunnel, valley) {
+  pathAt(sTrain, tmpPath);
+  const fx = Math.sin(tmpPath.h), fz = -Math.cos(tmpPath.h), rx = Math.cos(tmpPath.h), rz = Math.sin(tmpPath.h);
+  // three-quarter rear view; pulls back over the bridge, closes in for the tunnel, drifts away at the end
+  let back = 10 + 2.0 * Math.sin(time * 0.11), up = 7.0, side = 6.0, look = 15;
+  back = lerp(back, 27, valley); up = lerp(up, 13, valley); side = lerp(side, 6, valley);
+  back = lerp(back, 9.5, tunnel); up = lerp(up, 4.2, tunnel); side = lerp(side, 1.7, tunnel);
+  const fin = sstep(0.6, 1.0, u);
+  back = lerp(back, 54, fin); up = lerp(up, 22, fin); side = lerp(side, 9, fin); look = lerp(look, 42, fin);
+  camDistance = Math.hypot(back, up, side);
+  camTmp.set(tmpPath.x - fx * back + rx * side, tmpPath.y + up, tmpPath.z - fz * back + rz * side);
+  lookTmp.set(tmpPath.x + fx * look, tmpPath.y + 2.0 - fin * 1.0, tmpPath.z + fz * look);
+  if (fin > 0.01 && hopeTree.visible) lookTmp.lerp(hopeTree.position, 0.33 * fin);   // let the tree creep into view
+  if (!camReady) { camPos.copy(camTmp); camLook.copy(lookTmp); camReady = true; }
+  camPos.lerp(camTmp, 1 - Math.exp(-dt * 2.2));
+  camLook.lerp(lookTmp, 1 - Math.exp(-dt * 2.6));
+  camera.position.copy(camPos);
+  camera.up.set(0, 1, 0);
+  camera.lookAt(camLook);
+  // gentle banking into curves
+  const rollTarget = clamp(-curvatureAt(sTrain) * 9, -0.12, 0.12);
+  camRoll += (rollTarget - camRoll) * (1 - Math.exp(-dt * 1.5));
+  camera.rotateZ(camRoll);
+}
+
+// ---------------------------------------------------------------------
+// 15. PROCEDURAL AUDIO (optional; Web Audio only, no files). Starts on user gesture.
+// ---------------------------------------------------------------------
+const audio = {
+  ctx: null, master: null, noise: null, on: false, nextNote: 0, noteIdx: 0, nextWhistle: 30, windGain: null, windFilter: null, eerie: null,
+  // "Silent Night" (public domain) as a music box that slowly forgets its notes
+  melody: [[392, 1.5], [440, .5], [392, 1], [330, 3], [392, 1.5], [440, .5], [392, 1], [330, 3], [587, 2], [587, 1], [494, 3], [523, 2], [523, 1], [392, 3],
+    [440, 2], [440, 1], [523, 1.5], [494, .5], [440, 1], [392, 1.5], [440, .5], [392, 1], [330, 3], [440, 2], [440, 1], [523, 1.5], [494, .5], [440, 1],
+    [392, 1.5], [440, .5], [392, 1], [330, 3], [587, 2], [587, 1], [698, 1.5], [587, .5], [494, 1], [523, 3], [659, 3], [523, 1.5], [392, 1.5], [330, 1.5], [392, 1.5], [294, 3], [0, 6]],
+  init() {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+      const ctx = this.ctx = new AC();
+      this.master = ctx.createGain(); this.master.gain.value = 0.0; this.master.connect(ctx.destination);
+      // shared echo
+      const delay = ctx.createDelay(1.5); delay.delayTime.value = 0.42;
+      const fb = ctx.createGain(); fb.gain.value = 0.42; const wet = ctx.createGain(); wet.gain.value = 0.5;
+      delay.connect(fb); fb.connect(delay); delay.connect(wet); wet.connect(this.master);
+      this.echo = delay;
+      // noise buffer
+      const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      this.noise = buf;
+      // wind
+      const ws = ctx.createBufferSource(); ws.buffer = buf; ws.loop = true;
+      this.windFilter = ctx.createBiquadFilter(); this.windFilter.type = 'bandpass'; this.windFilter.frequency.value = 400; this.windFilter.Q.value = 0.7;
+      this.windGain = ctx.createGain(); this.windGain.gain.value = 0.05;
+      ws.connect(this.windFilter); this.windFilter.connect(this.windGain); this.windGain.connect(this.master); ws.start();
+      // low drone
+      [55, 82.5, 110.4].forEach((f, i) => {
+        const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+        const g = ctx.createGain(); g.gain.value = 0.035 / (i + 1);
+        const lfo = ctx.createOscillator(); lfo.frequency.value = 0.05 + i * 0.03;
+        const lg = ctx.createGain(); lg.gain.value = 0.02; lfo.connect(lg); lg.connect(g.gain);
+        o.connect(g); g.connect(this.master); o.start(); lfo.start();
+      });
+      // thin high tone that grows as reality fades
+      const eo = ctx.createOscillator(); eo.type = 'sine'; eo.frequency.value = 880.7;
+      this.eerie = ctx.createGain(); this.eerie.gain.value = 0; eo.connect(this.eerie); this.eerie.connect(this.master); eo.start();
+      this.nextNote = ctx.currentTime + 1; this.nextWhistle = ctx.currentTime + 20;
+      this.on = true;
+      this.master.gain.linearRampToValueAtTime(0.9, ctx.currentTime + 2);
+    } catch (e) { this.on = false; }
+  },
+  toggle() {
+    if (!this.ctx) { this.init(); return this.on; }
+    this.on = !this.on;
+    this.master.gain.linearRampToValueAtTime(this.on ? 0.9 : 0, this.ctx.currentTime + 0.6);
+    return this.on;
+  },
+  burst(freq, q, dur, vol, type = 'bandpass', delaySend = 0) {          // filtered noise hit: chuffs, clacks
+    if (!this.on) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const s = ctx.createBufferSource(); s.buffer = this.noise;
+    const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    s.connect(f); f.connect(g); g.connect(this.master); if (delaySend) g.connect(this.echo);
+    s.start(t, Math.random()); s.stop(t + dur + 0.05);
+  },
+  chuff() { this.burst(700 + Math.random() * 200, 0.8, 0.22, 0.16); },
+  clack() { this.burst(2600, 3, 0.05, 0.035, 'bandpass'); },
+  tone(freq, start, dur, vol, type = 'sine') {
+    const ctx = this.ctx, o = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type; o.frequency.value = freq; o2.type = 'sine'; o2.frequency.value = freq * 2.01;
+    g.gain.setValueAtTime(0, start); g.gain.linearRampToValueAtTime(vol, start + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+    const g2 = ctx.createGain(); g2.gain.value = 0.3;
+    o.connect(g); o2.connect(g2); g2.connect(g); g.connect(this.master); g.connect(this.echo);
+    o.start(start); o2.start(start); o.stop(start + dur + 0.1); o2.stop(start + dur + 0.1);
+  },
+  whistle() {
+    if (!this.on) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    [392, 494].forEach(f => {
+      const o = ctx.createOscillator(), g = ctx.createGain(), v = ctx.createOscillator(), vg = ctx.createGain();
+      o.type = 'triangle'; o.frequency.setValueAtTime(f * 0.97, t); o.frequency.linearRampToValueAtTime(f, t + 0.3);
+      v.frequency.value = 5; vg.gain.value = 4; v.connect(vg); vg.connect(o.frequency);
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.05, t + 0.25); g.gain.linearRampToValueAtTime(0.04, t + 1.6); g.gain.exponentialRampToValueAtTime(0.0001, t + 2.8);
+      o.connect(g); g.connect(this.master); g.connect(this.echo); o.start(t); v.start(t); o.stop(t + 3); v.stop(t + 3);
+    });
+  },
+  update(u, tunnel, gust, speed) {
+    if (!this.on) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    this.windGain.gain.setTargetAtTime(0.03 + 0.07 * gust + 0.05 * u - 0.02 * tunnel, t, 0.5);
+    this.windFilter.frequency.setTargetAtTime(300 + 500 * gust + 250 * u, t, 0.5);
+    this.eerie.gain.setTargetAtTime(0.012 * sstep(0.5, 1, u), t, 1.5);
+    // music-box lullaby that loses notes and drifts out of tune as the world dissolves
+    while (this.nextNote < t + 0.3) {
+      const [freq, beats] = this.melody[this.noteIdx % this.melody.length];
+      const beat = 0.5 * (1 + u * 0.7);
+      if (freq > 0 && Math.random() > sstep(0.3, 1, u) * 0.85) {
+        const detune = Math.pow(2, ((Math.random() - 0.5) * u * 160) / 1200);
+        this.tone(freq * detune, this.nextNote, 2.2, 0.05);
+      }
+      this.nextNote += beats * beat; this.noteIdx++;
+    }
+    if (t > this.nextWhistle) { this.whistle(); this.nextWhistle = t + 40 + Math.random() * 40; }
+  }
+};
+
+// ---------------------------------------------------------------------
+// 16. THE MAIN LOOP
+// ---------------------------------------------------------------------
+let sTrain = START_S, travelled = 0, time = 0, chuffDist = 0, clackDist = 0, smokeTimer = 0;
+const clock = new THREE.Clock();
+const focus = new THREE.Vector3(), chimney = new THREE.Vector3(), sprayAt = new THREE.Vector3();
+const hud = { title: document.getElementById('title'), btn: document.getElementById('sound') };
+maintainRows(sTrain, 999);                    // first frame: build the whole visible world at once
+
+function frame() {
+  requestAnimationFrame(frame);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  time += dt;
+  const step = TRAIN_SPEED * dt;
+  sTrain += step; travelled += step; chuffDist += step; clackDist += step;
+
+  const worldDissolution = dissolutionAt(sTrain + 20);   // the single progression variable (0 -> 1)
+  const tunnel = tunnelLightAt(sTrain - 4);
+  const valley = valleyAt(sTrain);
+
+  // wind: occasional gusts that swing the snow around
+  const gust = Math.pow(Math.max(0, Math.sin(time * 0.17) * Math.sin(time * 0.043 + 1.0)), 2);
+  const windDir = Math.sin(time * 0.05) > 0 ? 1 : -1;
+  const windX = 1.2 + 9 * gust * windDir, windZ = -1.0 + 4 * gust;
+
+  maintainRows(sTrain, 4);
+  for (const b of batches) b.update(time);
+
+  updateTrain(sTrain, travelled);
+
+  // chimney puffs and rail clatter keep time with the train
+  if (chuffDist > 6.5) {
+    chuffDist -= 6.5;
+    loco.group.updateMatrixWorld(true);
+    chimney.set((Math.random() - 0.5) * 0.2, 4.8, -2.4); loco.group.localToWorld(chimney);
+    const s1 = 0.55 + Math.random() * 0.35;
+    smokePool.emit(chimney.x, chimney.y, chimney.z, windX * 0.3 + (Math.random() - 0.5), 2.3 + Math.random(), windZ * 0.3 + (Math.random() - 0.5), 3.6, s1, s1 * 3.4, 0.9);
+    audio.chuff();
+  }
+  if (clackDist > 4.8) { clackDist -= 4.8; audio.clack(); }
+  // snow kicked up beside the wheels
+  smokeTimer += dt;
+  if (smokeTimer > 0.04) {
+    smokeTimer = 0;
+    loco.group.updateMatrixWorld(true);
+    sprayAt.set((Math.random() < 0.5 ? -1 : 1) * 1.5, 0.3, -1.0 + Math.random() * 4); loco.group.localToWorld(sprayAt);
+    const sd = Math.random() < 0.5 ? -1 : 1;
+    sprayPool.emit(sprayAt.x, sprayAt.y, sprayAt.z, sd * (1 + Math.random() * 3) * Math.cos(tmpPath.h), 1.5 + Math.random() * 2.5, sd * (1 + Math.random() * 3) * Math.sin(tmpPath.h), 0.9, 0.22, 0.12, 0.95);
+  }
+  smokePool.update(dt, windX, windZ, 0.35, 0.6);
+  sprayPool.update(dt, windX, windZ, -7, 1.0);
+
+  updateCamera(dt, time, sTrain, worldDissolution, tunnel, valley);
+  focus.set(camPos.x, camPos.y - 8, camPos.z);
+  focus.lerp(camLook, 0.5);
+  updateSnow(dt, time, focus, worldDissolution, windX, windZ);
+  updateHopeTree(sTrain, worldDissolution, time, camDistance);
+  applyAtmosphere(worldDissolution, tunnel, valley, time);
+  lampGlow.scale.setScalar(lerp(4.5, 9, sstep(0.6, 1, worldDissolution)));   // headlamp stays a small white point of light
+  audio.update(worldDissolution, tunnel, gust, TRAIN_SPEED);
+
+  // title fades away; nothing ever announces an ending
+  if (time > 9 && hud.title) { hud.title.style.opacity = '0'; }
+  renderer.render(scene, camera);
+}
+
+hud.btn.addEventListener('click', () => { const on = audio.toggle(); hud.btn.textContent = on ? 'sound: on' : 'sound: off'; });
+window.addEventListener('keydown', e => { if (e.key === 'm' || e.key === 'M') hud.btn.click(); });
+window.__debug = { setS: v => { sTrain = v; camReady = false; }, get s() { return sTrain; } };
+frame();
+</script>
+</body>
+</html>

@@ -1,0 +1,1595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MIDNIGHT ON CHRISTMAS EVE</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      background-color: #000000;
+    }
+
+    html::-webkit-scrollbar,
+    body::-webkit-scrollbar {
+      display: none;
+      width: 0;
+      height: 0;
+    }
+
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000000;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+    }
+
+    canvas:active {
+      cursor: grabbing;
+    }
+
+    #flash-overlay {
+      position: fixed;
+      inset: 0;
+      background: #ffffff;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 15;
+    }
+
+    #fade-overlay {
+      position: fixed;
+      inset: 0;
+      background: #000000;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 16;
+    }
+  </style>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="canvas-container"></div>
+  <div id="flash-overlay"></div>
+  <div id="fade-overlay"></div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+    // =========================================================================
+    // CONFIGURATION
+    // =========================================================================
+    const CONFIG = {
+      activeDuration: 55.0,    // 0 -> 55s countdown to Midnight
+      freezeHoldDuration: 8.0, // 55 -> 63s absolute frozen stillness
+      fadeOutDuration: 3.0,    // 63 -> 66s fade to black & restart
+      loopSequence: true,
+      watchRadius: 14.0,
+      vortexBrickCount: 2400,
+      ringBrickCount: 680,
+      monolithBrickCount: 360
+    };
+
+    // Strict monochromatic greyscale palette
+    const PALETTE = {
+      voidBlack: 0x000000,
+      obsidian: 0x0c0c0c,
+      charcoal: 0x181818,
+      darkGraphite: 0x2a2a2a,
+      graphite: 0x424242,
+      midGrey: 0x686868,
+      ashGrey: 0x8e8e8e,
+      silver: 0xb8b8b8,
+      offWhite: 0xe2e2e2,
+      pureWhite: 0xffffff
+    };
+
+    // =========================================================================
+    // PROCEDURAL GEOMETRY HELPERS (TRUE LEGO BRICK CONSTRUCTION)
+    // =========================================================================
+    function mergeGeometries(geos) {
+      let totalVerts = 0;
+      let totalIndices = 0;
+
+      for (const g of geos) {
+        totalVerts += g.attributes.position.count;
+        totalIndices += g.index ? g.index.count : g.attributes.position.count;
+      }
+
+      const positions = new Float32Array(totalVerts * 3);
+      const normals = new Float32Array(totalVerts * 3);
+      const uvs = new Float32Array(totalVerts * 2);
+      const indices = new Uint32Array(totalIndices);
+
+      let vertOffset = 0;
+      let idxOffset = 0;
+
+      for (const g of geos) {
+        const pos = g.attributes.position;
+        const norm = g.attributes.normal;
+        const uv = g.attributes.uv;
+
+        positions.set(pos.array, vertOffset * 3);
+        normals.set(norm.array, vertOffset * 3);
+        if (uv) {
+          uvs.set(uv.array, vertOffset * 2);
+        }
+
+        if (g.index) {
+          const idxArr = g.index.array;
+          for (let i = 0; i < idxArr.length; i++) {
+            indices[idxOffset + i] = idxArr[i] + vertOffset;
+          }
+          idxOffset += idxArr.length;
+        } else {
+          for (let i = 0; i < pos.count; i++) {
+            indices[idxOffset + i] = vertOffset + i;
+          }
+          idxOffset += pos.count;
+        }
+
+        vertOffset += pos.count;
+        g.dispose();
+      }
+
+      const merged = new THREE.BufferGeometry();
+      merged.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      merged.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+      merged.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+      merged.setIndex(new THREE.BufferAttribute(indices, 1));
+      merged.computeBoundingSphere();
+      return merged;
+    }
+
+    function createLegoBrickGeometry(studsX = 2, studsZ = 1, heightPlates = 3, unit = 1.0) {
+      const parts = [];
+      const bodyW = studsX * unit - 0.055 * unit;
+      const bodyD = studsZ * unit - 0.055 * unit;
+      const bodyH = heightPlates * 0.38 * unit - 0.02 * unit;
+
+      const mainBox = new THREE.BoxGeometry(bodyW, bodyH, bodyD);
+      parts.push(mainBox);
+
+      const shoulder = new THREE.BoxGeometry(bodyW - 0.06 * unit, 0.045 * unit, bodyD - 0.06 * unit);
+      shoulder.translate(0, bodyH * 0.5 + 0.02 * unit, 0);
+      parts.push(shoulder);
+
+      const studR = 0.285 * unit;
+      const studH = 0.17 * unit;
+      const studBaseY = bodyH * 0.5 + 0.042 * unit + studH * 0.5;
+
+      for (let ix = 0; ix < studsX; ix++) {
+        for (let iz = 0; iz < studsZ; iz++) {
+          const sx = (ix - (studsX - 1) * 0.5) * unit;
+          const sz = (iz - (studsZ - 1) * 0.5) * unit;
+
+          const stud = new THREE.CylinderGeometry(studR * 0.96, studR, studH, 10, 1);
+          stud.translate(sx, studBaseY, sz);
+          parts.push(stud);
+
+          const cap = new THREE.CylinderGeometry(studR * 0.78, studR * 0.96, 0.025 * unit, 10, 1);
+          cap.translate(sx, studBaseY + studH * 0.5 + 0.012 * unit, sz);
+          parts.push(cap);
+        }
+      }
+
+      return mergeGeometries(parts);
+    }
+
+    function createLegoRoundGeometry(heightPlates = 2, unit = 1.0) {
+      const parts = [];
+      const radius = 0.46 * unit;
+      const bodyH = heightPlates * 0.38 * unit;
+
+      const body = new THREE.CylinderGeometry(radius, radius * 0.98, bodyH, 14, 1);
+      parts.push(body);
+
+      const studR = 0.285 * unit;
+      const studH = 0.17 * unit;
+      const stud = new THREE.CylinderGeometry(studR * 0.95, studR, studH, 10, 1);
+      stud.translate(0, bodyH * 0.5 + studH * 0.5, 0);
+      parts.push(stud);
+
+      return mergeGeometries(parts);
+    }
+
+    // =========================================================================
+    // SEEDED PRNG & MATH UTILITIES
+    // =========================================================================
+    function mulberry32(seed) {
+      return function () {
+        let t = (seed += 0x6d2b79f5);
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    function smoothstep(edge0, edge1, x) {
+      const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+      return t * t * (3 - 2 * t);
+    }
+
+    function lerp(a, b, t) {
+      return a + (b - a) * t;
+    }
+
+    // =========================================================================
+    // SCENE, RENDERER & POST-PROCESSING SETUP
+    // =========================================================================
+    const container = document.getElementById('canvas-container');
+    const flashOverlay = document.getElementById('flash-overlay');
+    const fadeOverlay = document.getElementById('fade-overlay');
+
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: 'high-performance'
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.08;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(PALETTE.voidBlack);
+    scene.fog = new THREE.FogExp2(0x020202, 0.0095);
+
+    const camera = new THREE.PerspectiveCamera(44, window.innerWidth / window.innerHeight, 0.3, 420);
+    camera.position.set(0, 6, 56);
+
+    let composer, bloomPass;
+    let usePostProcessing = true;
+
+    try {
+      composer = new EffectComposer(renderer);
+      const renderPass = new RenderPass(scene, camera);
+      composer.addPass(renderPass);
+
+      bloomPass = new UnrealBloomPass(
+        new THREE.Vector2(window.innerWidth, window.innerHeight),
+        0.34,
+        0.52,
+        0.78
+      );
+      composer.addPass(bloomPass);
+    } catch (err) {
+      usePostProcessing = false;
+    }
+
+    // =========================================================================
+    // MONOCHROMATIC LIGHTING & VOLUMETRIC LIGHT SHAFTS
+    // =========================================================================
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.14);
+    scene.add(ambientLight);
+
+    const hemiLight = new THREE.HemisphereLight(0xd8d8d8, 0x0a0a0a, 0.25);
+    scene.add(hemiLight);
+
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2.35);
+    keyLight.position.set(24, 28, 26);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(2048, 2048);
+    keyLight.shadow.camera.near = 5;
+    keyLight.shadow.camera.far = 90;
+    const shadowExtent = 22;
+    keyLight.shadow.camera.left = -shadowExtent;
+    keyLight.shadow.camera.right = shadowExtent;
+    keyLight.shadow.camera.top = shadowExtent;
+    keyLight.shadow.camera.bottom = -shadowExtent;
+    keyLight.shadow.bias = -0.0005;
+    scene.add(keyLight);
+
+    const rimLight = new THREE.DirectionalLight(0xf0f0f0, 1.85);
+    rimLight.position.set(-28, 16, -24);
+    scene.add(rimLight);
+
+    const underLight = new THREE.DirectionalLight(0x9a9a9a, 0.55);
+    underLight.position.set(6, -30, 12);
+    scene.add(underLight);
+
+    const faceSpotLight = new THREE.SpotLight(0xffffff, 48, 65, Math.PI * 0.24, 0.65, 1.5);
+    faceSpotLight.position.set(-4, 10, 34);
+    scene.add(faceSpotLight);
+    scene.add(faceSpotLight.target);
+
+    const midnightPulseLight = new THREE.PointLight(0xffffff, 0, 140, 1.4);
+    midnightPulseLight.position.set(0, 0, 6);
+    scene.add(midnightPulseLight);
+
+    const beamUniforms = {
+      uTime: { value: 0 },
+      uIntensity: { value: 0.12 }
+    };
+
+    const beamMaterial = new THREE.ShaderMaterial({
+      uniforms: beamUniforms,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      vertexShader: `
+        varying vec2 vUv;
+        varying vec3 vNormalView;
+        varying vec3 vViewPos;
+        void main() {
+          vUv = uv;
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          vViewPos = -mv.xyz;
+          vNormalView = normalize(normalMatrix * normal);
+          gl_Position = projectionMatrix * mv;
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        uniform float uIntensity;
+        varying vec2 vUv;
+        varying vec3 vNormalView;
+        varying vec3 vViewPos;
+        void main() {
+          float axial = smoothstep(0.0, 0.22, vUv.y) * (1.0 - smoothstep(0.28, 1.0, vUv.y));
+          float fresnel = pow(abs(dot(normalize(vViewPos), normalize(vNormalView))), 1.7);
+          float streak = 0.72 + 0.28 * sin(vUv.x * 38.0 + uTime * 0.4);
+          float alpha = axial * fresnel * streak * uIntensity;
+          gl_FragColor = vec4(vec3(1.0), alpha);
+        }
+      `
+    });
+
+    const lightBeamsGroup = new THREE.Group();
+    const beamConfigs = [
+      { rotZ: 0.25, rotX: 0.12, topR: 7.5, botR: 26.0, h: 72 },
+      { rotZ: -0.68, rotX: -0.15, topR: 6.0, botR: 22.0, h: 66 },
+      { rotZ: 2.35, rotX: 0.08, topR: 6.5, botR: 24.0, h: 68 }
+    ];
+    for (const cfg of beamConfigs) {
+      const geo = new THREE.CylinderGeometry(cfg.topR, cfg.botR, cfg.h, 24, 1, true);
+      geo.translate(0, -cfg.h * 0.5, 0);
+      const mesh = new THREE.Mesh(geo, beamMaterial);
+      mesh.rotation.set(cfg.rotX, 0, cfg.rotZ);
+      mesh.position.z = -5;
+      lightBeamsGroup.add(mesh);
+    }
+    scene.add(lightBeamsGroup);
+
+    // =========================================================================
+    // DISTORTED INFINITE VOID SHADER DOME
+    // =========================================================================
+    const voidUniforms = {
+      uTime: { value: 0 },
+      uDistortion: { value: 0 },
+      uVortex: { value: 0 },
+      uFlash: { value: 0 }
+    };
+
+    const voidGeo = new THREE.SphereGeometry(220, 48, 32);
+    const voidMat = new THREE.ShaderMaterial({
+      uniforms: voidUniforms,
+      side: THREE.BackSide,
+      depthWrite: false,
+      vertexShader: `
+        varying vec3 vWorldPos;
+        void main() {
+          vWorldPos = position;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        uniform float uDistortion;
+        uniform float uVortex;
+        uniform float uFlash;
+        varying vec3 vWorldPos;
+
+        float hash(vec2 p) {
+          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+        }
+
+        float noise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          float a = hash(i);
+          float b = hash(i + vec2(1.0, 0.0));
+          float c = hash(i + vec2(0.0, 1.0));
+          float d = hash(i + vec2(1.0, 1.0));
+          return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+        }
+
+        void main() {
+          vec3 dir = normalize(vWorldPos);
+          float angle = atan(dir.y, dir.x);
+          float r = acos(clamp(dir.z, -1.0, 1.0));
+
+          float twist = uVortex * (2.6 * exp(-r * 0.85)) + uDistortion * 0.45 * sin(r * 6.0 - uTime * 1.4);
+          float warpedAngle = angle + twist;
+          float warpedR = r + uDistortion * 0.06 * sin(angle * 5.0 + uTime * 0.9);
+
+          float ringWave = sin(warpedR * 26.0 - uTime * (0.4 + uVortex * 3.5));
+          float radialLines = sin(warpedAngle * 18.0 + sin(warpedR * 10.0) * uDistortion * 2.0);
+          float grid = smoothstep(0.955, 1.0, abs(ringWave)) * 0.045
+                     + smoothstep(0.972, 1.0, abs(radialLines)) * 0.032;
+
+          vec2 uv = vec2(cos(warpedAngle), sin(warpedAngle)) * (warpedR * 1.6);
+          float n = noise(uv * 2.5 + uTime * 0.04) * 0.6 + noise(uv * 5.2 - uTime * 0.07) * 0.4;
+          float funnelGlow = exp(-abs(dir.z) * 2.2) * n * (0.045 + uVortex * 0.09);
+
+          float starCell = hash(floor(vec2(warpedAngle * 42.0, warpedR * 42.0)));
+          float star = step(0.9965, starCell) * 0.25;
+
+          float val = grid * (0.35 + uDistortion * 0.9) + funnelGlow + star + uFlash * 0.14;
+          gl_FragColor = vec4(vec3(clamp(val, 0.0, 0.45)), 1.0);
+        }
+      `
+    });
+    const voidDome = new THREE.Mesh(voidGeo, voidMat);
+    scene.add(voidDome);
+
+    // =========================================================================
+    // SHARED LEGO BRICK GEOMETRIES & MONOCHROME MATERIALS
+    // =========================================================================
+    const geo1x2 = createLegoBrickGeometry(2, 1, 3, 1.0);
+    const geo2x2 = createLegoBrickGeometry(2, 2, 3, 1.0);
+    const geo1x1 = createLegoBrickGeometry(1, 1, 3, 1.0);
+    const geo1x1Plate = createLegoBrickGeometry(1, 1, 1.2, 1.0);
+    const geoRound1x1 = createLegoRoundGeometry(2.2, 1.0);
+
+    function makeLegoMaterial(roughness = 0.32, metalness = 0.18) {
+      return new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        roughness,
+        metalness
+      });
+    }
+
+    const watchBrickMat = makeLegoMaterial(0.30, 0.22);
+    const metalGearMat = makeLegoMaterial(0.24, 0.55);
+    const numeralMat = makeLegoMaterial(0.22, 0.12);
+    const vortexBrickMat = makeLegoMaterial(0.34, 0.20);
+
+    // =========================================================================
+    // BUILD THE ENORMOUS ANTIQUE LEGO POCKET WATCH
+    // =========================================================================
+    const watchGroup = new THREE.Group();
+    scene.add(watchGroup);
+
+    const staticWatchBricks = {
+      b1x2: [],
+      b2x2: [],
+      b1x1: [],
+      round: []
+    };
+
+    const tempObj = new THREE.Object3D();
+
+    function pushWatchBrick(type, pos, rotEuler, scaleVec, hexColor) {
+      tempObj.position.copy(pos);
+      tempObj.rotation.copy(rotEuler);
+      tempObj.scale.copy(scaleVec);
+      tempObj.updateMatrix();
+      staticWatchBricks[type].push({
+        matrix: tempObj.matrix.clone(),
+        color: new THREE.Color(hexColor)
+      });
+    }
+
+    const casingLayers = [
+      { radius: 13.85, z: -0.9, count: 44, type: 'b1x2', scale: [1.0, 0.95, 1.15], radialOut: true, colors: [PALETTE.charcoal, PALETTE.darkGraphite, PALETTE.graphite] },
+      { radius: 13.85, z: 0.3,  count: 44, type: 'b1x2', scale: [1.0, 0.95, 1.15], radialOut: true, colors: [PALETTE.darkGraphite, PALETTE.graphite, PALETTE.charcoal], phase: 0.5 },
+      { radius: 13.45, z: -2.0, count: 42, type: 'b1x2', scale: [1.0, 0.95, 1.05], radialOut: true, colors: [PALETTE.charcoal, PALETTE.obsidian] },
+      { radius: 12.65, z: -2.9, count: 38, type: 'b2x2', scale: [1.0, 0.85, 1.0], radialOut: true, colors: [PALETTE.darkGraphite, PALETTE.charcoal], phase: 0.5 },
+
+      { radius: 13.0,  z: 1.15, count: 42, type: 'b2x2', scale: [0.98, 0.92, 0.98], radialOut: false, faceDir: 1, colors: [PALETTE.graphite, PALETTE.midGrey, PALETTE.darkGraphite] },
+      { radius: 12.05, z: 1.65, count: 40, type: 'b1x2', scale: [0.95, 0.88, 0.95], radialOut: false, faceDir: 1, colors: [PALETTE.silver, PALETTE.ashGrey, PALETTE.midGrey], phase: 0.5 },
+      { radius: 11.45, z: 2.05, count: 56, type: 'round', scale: [0.78, 0.72, 0.78], radialOut: false, faceDir: 1, colors: [PALETTE.offWhite, PALETTE.silver, PALETTE.ashGrey] },
+
+      { radius: 11.4, z: -3.25, count: 36, type: 'b1x2', scale: [0.95, 0.85, 0.95], radialOut: false, faceDir: -1, colors: [PALETTE.graphite, PALETTE.darkGraphite] },
+      { radius: 9.2,  z: -3.45, count: 28, type: 'b1x2', scale: [0.95, 0.85, 0.95], radialOut: false, faceDir: -1, colors: [PALETTE.midGrey, PALETTE.graphite], phase: 0.5 },
+      { radius: 6.8,  z: -3.55, count: 20, type: 'b1x2', scale: [0.95, 0.85, 0.95], radialOut: false, faceDir: -1, colors: [PALETTE.silver, PALETTE.midGrey] },
+      { radius: 4.2,  z: -3.65, count: 14, type: 'b1x1', scale: [0.95, 0.85, 0.95], radialOut: false, faceDir: -1, colors: [PALETTE.ashGrey, PALETTE.graphite] }
+    ];
+
+    for (const layer of casingLayers) {
+      const phaseOffset = (layer.phase || 0) * ((Math.PI * 2) / layer.count);
+      for (let i = 0; i < layer.count; i++) {
+        const angle = (i / layer.count) * Math.PI * 2 + phaseOffset;
+        const x = Math.cos(angle) * layer.radius;
+        const y = Math.sin(angle) * layer.radius;
+        const colorHex = layer.colors[i % layer.colors.length];
+        const pos = new THREE.Vector3(x, y, layer.z);
+        const rot = new THREE.Euler();
+
+        if (layer.radialOut) {
+          rot.set(0, 0, angle - Math.PI * 0.5);
+        } else {
+          rot.set(layer.faceDir > 0 ? Math.PI * 0.5 : -Math.PI * 0.5, 0, angle);
+        }
+        pushWatchBrick(
+          layer.type,
+          pos,
+          rot,
+          new THREE.Vector3(layer.scale[0], layer.scale[1], layer.scale[2]),
+          colorHex
+        );
+      }
+    }
+
+    const dialRings = [
+      { r: 10.6, count: 60, type: 'round', s: 0.36, z: 0.92, colors: [PALETTE.offWhite, PALETTE.midGrey, PALETTE.midGrey, PALETTE.midGrey, PALETTE.midGrey], fiveMinuteHighlight: true },
+      { r: 9.75, count: 48, type: 'b1x2', s: 0.65, z: 0.72, colors: [PALETTE.charcoal, PALETTE.obsidian] },
+      { r: 8.55, count: 40, type: 'b2x2', s: 0.68, z: 0.65, colors: [PALETTE.obsidian, PALETTE.charcoal] },
+      { r: 7.20, count: 34, type: 'b1x2', s: 0.65, z: 0.66, colors: [PALETTE.charcoal, PALETTE.darkGraphite] },
+      { r: 5.95, count: 28, type: 'b1x2', s: 0.62, z: 0.74, colors: [PALETTE.darkGraphite, PALETTE.graphite] },
+      { r: 4.55, count: 22, type: 'round', s: 0.56, z: 0.80, colors: [PALETTE.graphite, PALETTE.midGrey] },
+      { r: 3.15, count: 16, type: 'b1x1', s: 0.62, z: 0.72, colors: [PALETTE.obsidian, PALETTE.charcoal] },
+      { r: 1.75, count: 10, type: 'round', s: 0.52, z: 0.82, colors: [PALETTE.ashGrey, PALETTE.silver] }
+    ];
+
+    for (const dr of dialRings) {
+      for (let i = 0; i < dr.count; i++) {
+        if (dr.r === 5.95 && (i % 7 === 0 || i % 7 === 1)) continue;
+        const angle = (i / dr.count) * Math.PI * 2;
+        const pos = new THREE.Vector3(Math.cos(angle) * dr.r, Math.sin(angle) * dr.r, dr.z);
+        const rot = new THREE.Euler(Math.PI * 0.5, 0, angle);
+        let col = dr.colors[i % dr.colors.length];
+        let sc = dr.s;
+        if (dr.fiveMinuteHighlight && i % 5 === 0) {
+          col = PALETTE.pureWhite;
+          sc = dr.s * 1.38;
+        }
+        pushWatchBrick(dr.type, pos, rot, new THREE.Vector3(sc, sc * 0.75, sc), col);
+      }
+    }
+
+    for (let gx = -5; gx <= 5; gx++) {
+      for (let gy = -5; gy <= 5; gy++) {
+        const dist = Math.hypot(gx, gy);
+        if (dist > 5.3) continue;
+        if (dist > 1.8 && dist < 4.2 && Math.abs(gx) > 1 && Math.abs(gy) > 1) continue;
+        const pos = new THREE.Vector3(gx * 1.95, gy * 1.95, 0.12);
+        const rot = new THREE.Euler(Math.PI * 0.5, 0, 0);
+        const shade = (gx + gy) % 2 === 0 ? PALETTE.obsidian : PALETTE.charcoal;
+        pushWatchBrick('b2x2', pos, rot, new THREE.Vector3(0.96, 0.55, 0.96), shade);
+      }
+    }
+
+    for (let i = 0; i < 16; i++) {
+      const angle = (i / 16) * Math.PI * 2;
+      if (Math.abs(angle - Math.PI * 0.5) < 0.25) continue;
+      const pos = new THREE.Vector3(Math.cos(angle) * 14.35, Math.sin(angle) * 14.35, -0.3);
+      const rot = new THREE.Euler(0, 0, angle - Math.PI * 0.5);
+      pushWatchBrick('round', pos, rot, new THREE.Vector3(0.62, 0.75, 0.62), i % 2 === 0 ? PALETTE.silver : PALETTE.graphite);
+    }
+
+    for (let row = 0; row < 3; row++) {
+      const yBase = 14.35 + row * 0.78;
+      const w = row === 1 ? 1.5 : 1.9;
+      for (let k = -1; k <= 1; k++) {
+        pushWatchBrick(
+          'b1x2',
+          new THREE.Vector3(k * 0.9, yBase, -0.3),
+          new THREE.Euler(0, 0, 0),
+          new THREE.Vector3(w * 0.55, 0.72, 1.35),
+          row === 1 ? PALETTE.silver : PALETTE.graphite
+        );
+      }
+    }
+
+    const crownY = 17.55;
+    for (let ring = 0; ring < 2; ring++) {
+      const cy = crownY + (ring - 0.5) * 0.95;
+      for (let i = 0; i < 14; i++) {
+        const a = (i / 14) * Math.PI * 2;
+        const r = 2.15;
+        pushWatchBrick(
+          'b1x1',
+          new THREE.Vector3(Math.cos(a) * r, cy, -0.3 + Math.sin(a) * r),
+          new THREE.Euler(0, -a, 0),
+          new THREE.Vector3(0.92, 0.85, 0.92),
+          i % 2 === 0 ? PALETTE.offWhite : PALETTE.graphite
+        );
+        pushWatchBrick(
+          'round',
+          new THREE.Vector3(Math.cos(a) * (r + 0.55), cy, -0.3 + Math.sin(a) * (r + 0.55)),
+          new THREE.Euler(Math.PI * 0.5, 0, a - Math.PI * 0.5),
+          new THREE.Vector3(0.55, 0.55, 0.55),
+          PALETTE.silver
+        );
+      }
+    }
+
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      pushWatchBrick(
+        'b1x2',
+        new THREE.Vector3(Math.cos(a) * 1.1, crownY + 1.1, -0.3 + Math.sin(a) * 1.1),
+        new THREE.Euler(0, -a, 0),
+        new THREE.Vector3(0.85, 0.65, 0.85),
+        PALETTE.silver
+      );
+    }
+
+    const bowSegments = 26;
+    for (let i = 0; i < bowSegments; i++) {
+      const t = i / (bowSegments - 1);
+      const a = lerp(-0.22 * Math.PI, 1.22 * Math.PI, t);
+      const bx = Math.cos(a) * 3.85;
+      const by = 18.25 + Math.sin(a) * 3.75;
+      pushWatchBrick(
+        'b1x2',
+        new THREE.Vector3(bx, by, -0.3),
+        new THREE.Euler(0, 0, a - Math.PI * 0.5),
+        new THREE.Vector3(0.76, 0.76, 0.86),
+        i % 2 === 0 ? PALETTE.ashGrey : PALETTE.darkGraphite
+      );
+    }
+
+    function buildStaticInstancedMesh(list, geo, mat) {
+      if (!list.length) return null;
+      const im = new THREE.InstancedMesh(geo, mat, list.length);
+      im.castShadow = true;
+      im.receiveShadow = true;
+      for (let i = 0; i < list.length; i++) {
+        im.setMatrixAt(i, list[i].matrix);
+        im.setColorAt(i, list[i].color);
+      }
+      im.instanceMatrix.needsUpdate = true;
+      if (im.instanceColor) im.instanceColor.needsUpdate = true;
+      watchGroup.add(im);
+      return im;
+    }
+
+    buildStaticInstancedMesh(staticWatchBricks.b1x2, geo1x2, watchBrickMat);
+    buildStaticInstancedMesh(staticWatchBricks.b2x2, geo2x2, watchBrickMat);
+    buildStaticInstancedMesh(staticWatchBricks.b1x1, geo1x1, watchBrickMat);
+    buildStaticInstancedMesh(staticWatchBricks.round, geoRound1x1, watchBrickMat);
+
+    // =========================================================================
+    // INTERNAL MECHANICAL LEGO GEARS
+    // =========================================================================
+    const gearsGroup = new THREE.Group();
+    watchGroup.add(gearsGroup);
+
+    const gearSpecs = [
+      { x: 0,    y: 0,    z: -0.95, r: 4.4, teeth: 18, speed: -0.45, color: PALETTE.silver },
+      { x: -4.2, y: 3.1,  z: -0.55, r: 2.6, teeth: 12, speed: 0.78,  color: PALETTE.ashGrey },
+      { x: 4.3,  y: -2.8, z: -0.55, r: 2.9, teeth: 13, speed: 0.68,  color: PALETTE.graphite },
+      { x: -3.6, y: -3.9, z: -1.45, r: 3.2, teeth: 14, speed: -0.62, color: PALETTE.midGrey },
+      { x: 3.5,  y: 3.8,  z: -1.45, r: 2.3, teeth: 10, speed: -0.92, color: PALETTE.offWhite },
+      { x: 0,    y: -6.2, z: -2.25, r: 3.8, teeth: 16, speed: 0.52,  color: PALETTE.silver },
+      { x: 0,    y: 5.8,  z: -2.25, r: 3.0, teeth: 12, speed: -0.74, color: PALETTE.ashGrey }
+    ];
+
+    const gearMeshes = [];
+    for (const spec of gearSpecs) {
+      const g = new THREE.Group();
+      g.position.set(spec.x, spec.y, spec.z);
+
+      const count = spec.teeth;
+      const rimBricks = new THREE.InstancedMesh(geo1x1, metalGearMat, count * 2 + 5);
+      const dummy = new THREE.Object3D();
+      const cMain = new THREE.Color(spec.color);
+      const cTooth = new THREE.Color(PALETTE.offWhite);
+
+      let idx = 0;
+      for (let i = 0; i < count; i++) {
+        const a = (i / count) * Math.PI * 2;
+        dummy.position.set(Math.cos(a) * (spec.r * 0.82), Math.sin(a) * (spec.r * 0.82), 0);
+        dummy.rotation.set(Math.PI * 0.5, 0, a);
+        dummy.scale.set(0.52, 0.42, 0.52);
+        dummy.updateMatrix();
+        rimBricks.setMatrixAt(idx, dummy.matrix);
+        rimBricks.setColorAt(idx, cMain);
+        idx++;
+
+        dummy.position.set(Math.cos(a) * spec.r, Math.sin(a) * spec.r, 0);
+        dummy.rotation.set(0, 0, a - Math.PI * 0.5);
+        dummy.scale.set(0.36, 0.42, 0.42);
+        dummy.updateMatrix();
+        rimBricks.setMatrixAt(idx, dummy.matrix);
+        rimBricks.setColorAt(idx, cTooth);
+        idx++;
+      }
+
+      for (let s = 0; s < 4; s++) {
+        const sa = (s / 4) * Math.PI * 2;
+        dummy.position.set(Math.cos(sa) * (spec.r * 0.4), Math.sin(sa) * (spec.r * 0.4), 0);
+        dummy.rotation.set(Math.PI * 0.5, 0, sa);
+        dummy.scale.set(spec.r * 0.36, 0.35, 0.38);
+        dummy.updateMatrix();
+        rimBricks.setMatrixAt(idx, dummy.matrix);
+        rimBricks.setColorAt(idx, cMain);
+        idx++;
+      }
+
+      dummy.position.set(0, 0, 0);
+      dummy.rotation.set(Math.PI * 0.5, 0, 0);
+      dummy.scale.set(0.75, 0.7, 0.75);
+      dummy.updateMatrix();
+      rimBricks.setMatrixAt(idx, dummy.matrix);
+      rimBricks.setColorAt(idx, new THREE.Color(PALETTE.pureWhite));
+
+      rimBricks.instanceMatrix.needsUpdate = true;
+      rimBricks.instanceColor.needsUpdate = true;
+      g.add(rimBricks);
+
+      gearsGroup.add(g);
+      gearMeshes.push({ group: g, speed: spec.speed });
+    }
+
+    // =========================================================================
+    // THE TWELVE ROMAN NUMERALS (I - XII) - MELTING & REASSEMBLING TIME
+    // =========================================================================
+    const GLYPHS = {
+      I_SOLO: [
+        [1, 1, 1],
+        [0, 1, 0],
+        [0, 1, 0],
+        [0, 1, 0],
+        [0, 1, 0],
+        [0, 1, 0],
+        [1, 1, 1]
+      ],
+      I: [
+        [1],
+        [1],
+        [1],
+        [1],
+        [1],
+        [1],
+        [1]
+      ],
+      V: [
+        [1, 0, 0, 0, 1],
+        [1, 0, 0, 0, 1],
+        [1, 0, 0, 0, 1],
+        [0, 1, 0, 1, 0],
+        [0, 1, 0, 1, 0],
+        [0, 1, 0, 1, 0],
+        [0, 0, 1, 0, 0]
+      ],
+      X: [
+        [1, 0, 0, 0, 1],
+        [1, 0, 0, 0, 1],
+        [0, 1, 0, 1, 0],
+        [0, 0, 1, 0, 0],
+        [0, 1, 0, 1, 0],
+        [1, 0, 0, 0, 1],
+        [1, 0, 0, 0, 1]
+      ]
+    };
+
+    const ROMAN_SPECS = [
+      { tokens: ['X', 'I', 'I'] },
+      { tokens: ['I_SOLO'] },
+      { tokens: ['I', 'I'] },
+      { tokens: ['I', 'I', 'I'] },
+      { tokens: ['I', 'V'] },
+      { tokens: ['V'] },
+      { tokens: ['V', 'I'] },
+      { tokens: ['V', 'I', 'I'] },
+      { tokens: ['V', 'I', 'I', 'I'] },
+      { tokens: ['I', 'X'] },
+      { tokens: ['X'] },
+      { tokens: ['X', 'I'] }
+    ];
+
+    const numeralBricksData = [];
+    const randNum = mulberry32(122425);
+    const brickStep = 0.21;
+    const numeralRingRadius = 8.45;
+
+    ROMAN_SPECS.forEach((spec, numIdx) => {
+      const dialAngle = Math.PI * 0.5 - (numIdx / 12) * Math.PI * 2;
+      const radialRotZ = dialAngle - Math.PI * 0.5;
+
+      let totalCols = 0;
+      spec.tokens.forEach((tk, ti) => {
+        totalCols += GLYPHS[tk][0].length;
+        if (ti < spec.tokens.length - 1) totalCols += 1;
+      });
+
+      let cursorCol = -totalCols * 0.5;
+
+      spec.tokens.forEach((tk) => {
+        const grid = GLYPHS[tk];
+        const cols = grid[0].length;
+        const rows = grid.length;
+
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            if (!grid[r][c]) continue;
+            const gx = (cursorCol + c + 0.5) * brickStep;
+            const gy = ((rows - 1) * 0.5 - r) * brickStep;
+
+            const cosR = Math.cos(radialRotZ);
+            const sinR = Math.sin(radialRotZ);
+            const cx = Math.cos(dialAngle) * numeralRingRadius + gx * cosR - gy * sinR;
+            const cy = Math.sin(dialAngle) * numeralRingRadius + gx * sinR + gy * cosR;
+
+            const isCap = r === 0 || r === rows - 1;
+            const colHex = isCap ? PALETTE.pureWhite : PALETTE.offWhite;
+
+            numeralBricksData.push({
+              homePos: new THREE.Vector3(cx, cy, 1.24),
+              homeRotZ: radialRotZ,
+              numIdx,
+              rowNorm: r / (rows - 1),
+              seed: randNum(),
+              detachable: randNum() < 0.34,
+              driftVec: new THREE.Vector3(
+                (randNum() - 0.5) * 2.4,
+                -0.8 - randNum() * 2.2,
+                0.7 + randNum() * 2.4
+              ),
+              spinAxis: new THREE.Vector3(randNum() - 0.5, randNum() - 0.5, randNum() - 0.5).normalize(),
+              color: new THREE.Color(colHex)
+            });
+          }
+        }
+        cursorCol += cols + 1;
+      });
+    });
+
+    const numeralMesh = new THREE.InstancedMesh(geo1x1, numeralMat, numeralBricksData.length);
+    numeralMesh.castShadow = true;
+    numeralMesh.receiveShadow = true;
+    numeralBricksData.forEach((b, i) => numeralMesh.setColorAt(i, b.color));
+    numeralMesh.instanceColor.needsUpdate = true;
+    watchGroup.add(numeralMesh);
+
+    // =========================================================================
+    // ORNATE LEGO CLOCK HANDS (RUNNING BACKWARDS)
+    // =========================================================================
+    function buildLegoHand(specs, zOffset) {
+      const group = new THREE.Group();
+      group.position.set(0, 0, zOffset);
+
+      const bMesh = new THREE.InstancedMesh(geo1x1, numeralMat, specs.length);
+      bMesh.castShadow = true;
+      const dObj = new THREE.Object3D();
+
+      specs.forEach((s, idx) => {
+        dObj.position.set(s.x, s.y, s.z || 0);
+        dObj.rotation.set(Math.PI * 0.5, 0, s.rotZ || 0);
+        dObj.scale.set(s.sx, s.sy || 0.32, s.sz);
+        dObj.updateMatrix();
+        bMesh.setMatrixAt(idx, dObj.matrix);
+        bMesh.setColorAt(idx, new THREE.Color(s.color));
+      });
+      bMesh.instanceMatrix.needsUpdate = true;
+      bMesh.instanceColor.needsUpdate = true;
+      group.add(bMesh);
+      return group;
+    }
+
+    const hourHandBricks = [
+      { x: 0, y: -1.45, sx: 0.52, sz: 0.52, color: PALETTE.silver },
+      { x: 0, y: -0.95, sx: 0.42, sz: 0.65, color: PALETTE.ashGrey },
+      { x: 0, y: -0.35, sx: 0.68, sz: 0.68, color: PALETTE.silver },
+      { x: 0, y: 0.55, sx: 0.42, sz: 0.85, color: PALETTE.offWhite },
+      { x: 0, y: 1.45, sx: 0.40, sz: 0.85, color: PALETTE.offWhite },
+      { x: 0, y: 2.35, sx: 0.38, sz: 0.85, color: PALETTE.pureWhite },
+      { x: -0.45, y: 3.35, sx: 0.34, sz: 0.65, rotZ: -0.35, color: PALETTE.pureWhite },
+      { x:  0.45, y: 3.35, sx: 0.34, sz: 0.65, rotZ:  0.35, color: PALETTE.pureWhite },
+      { x: -0.45, y: 4.10, sx: 0.34, sz: 0.65, rotZ:  0.35, color: PALETTE.pureWhite },
+      { x:  0.45, y: 4.10, sx: 0.34, sz: 0.65, rotZ: -0.35, color: PALETTE.pureWhite },
+      { x: 0, y: 4.85, sx: 0.32, sz: 0.72, color: PALETTE.pureWhite },
+      { x: 0, y: 5.55, sx: 0.24, sz: 0.68, color: PALETTE.pureWhite },
+      { x: 0, y: 6.10, sx: 0.16, sz: 0.50, color: PALETTE.pureWhite }
+    ];
+    const hourHandGroup = buildLegoHand(hourHandBricks, 1.56);
+    watchGroup.add(hourHandGroup);
+
+    const minuteHandBricks = [
+      { x: 0, y: -2.05, sx: 0.42, sz: 0.45, color: PALETTE.silver },
+      { x: 0, y: -1.35, sx: 0.34, sz: 0.85, color: PALETTE.ashGrey },
+      { x: 0, y: -0.45, sx: 0.56, sz: 0.72, color: PALETTE.silver },
+      { x: 0, y: 0.65, sx: 0.34, sz: 1.05, color: PALETTE.offWhite },
+      { x: 0, y: 1.75, sx: 0.32, sz: 1.05, color: PALETTE.offWhite },
+      { x: 0, y: 2.85, sx: 0.30, sz: 1.05, color: PALETTE.pureWhite },
+      { x: 0, y: 3.95, sx: 0.28, sz: 1.05, color: PALETTE.pureWhite },
+      { x: -0.34, y: 5.05, sx: 0.26, sz: 0.62, rotZ: -0.25, color: PALETTE.pureWhite },
+      { x:  0.34, y: 5.05, sx: 0.26, sz: 0.62, rotZ:  0.25, color: PALETTE.pureWhite },
+      { x: -0.34, y: 5.75, sx: 0.26, sz: 0.62, rotZ:  0.25, color: PALETTE.pureWhite },
+      { x:  0.34, y: 5.75, sx: 0.26, sz: 0.62, rotZ: -0.25, color: PALETTE.pureWhite },
+      { x: 0, y: 6.55, sx: 0.24, sz: 0.95, color: PALETTE.pureWhite },
+      { x: 0, y: 7.55, sx: 0.20, sz: 0.95, color: PALETTE.pureWhite },
+      { x: 0, y: 8.55, sx: 0.16, sz: 0.92, color: PALETTE.pureWhite },
+      { x: 0, y: 9.35, sx: 0.12, sz: 0.65, color: PALETTE.pureWhite }
+    ];
+    const minuteHandGroup = buildLegoHand(minuteHandBricks, 1.88);
+    watchGroup.add(minuteHandGroup);
+
+    const centerPinMesh = new THREE.Mesh(geoRound1x1, metalGearMat);
+    centerPinMesh.rotation.x = Math.PI * 0.5;
+    centerPinMesh.position.set(0, 0, 2.08);
+    centerPinMesh.scale.set(0.85, 0.75, 0.85);
+    watchGroup.add(centerPinMesh);
+
+    // =========================================================================
+    // RAISED PROTECTIVE CRYSTAL / GLASS COVER
+    // =========================================================================
+    const glassGeo = new THREE.SphereGeometry(11.35, 48, 20, 0, Math.PI * 2, 0, 0.36);
+    glassGeo.rotateX(Math.PI * 0.5);
+    const glassMat = new THREE.MeshPhysicalMaterial({
+      color: 0xe8e8e8,
+      transparent: true,
+      opacity: 0.11,
+      roughness: 0.08,
+      metalness: 0.1,
+      reflectivity: 0.9,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.06,
+      depthWrite: false
+    });
+    const glassDome = new THREE.Mesh(glassGeo, glassMat);
+    glassDome.position.set(0, 0, -8.35);
+    watchGroup.add(glassDome);
+
+    const glassRimGeo = new THREE.TorusGeometry(11.35, 0.055, 8, 72);
+    const glassRimMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.22
+    });
+    const glassRim = new THREE.Mesh(glassRimGeo, glassRimMat);
+    glassRim.position.set(0, 0, 2.28);
+    watchGroup.add(glassRim);
+
+    // =========================================================================
+    // DISTORTED SURROUNDING SPACE: CONCENTRIC RINGS & MONOLITHS
+    // =========================================================================
+    const randEnv = mulberry32(991224);
+
+    const ringBrickData = [];
+    const ringConfigs = [
+      { radius: 21.5, count: 120, tiltX: 0.42, tiltY: 0.25, speed: 0.09, colors: [PALETTE.graphite, PALETTE.darkGraphite] },
+      { radius: 29.0, count: 160, tiltX: -0.58, tiltY: 0.48, speed: -0.07, colors: [PALETTE.midGrey, PALETTE.charcoal] },
+      { radius: 38.5, count: 190, tiltX: 0.95, tiltY: -0.35, speed: 0.055, colors: [PALETTE.silver, PALETTE.graphite] },
+      { radius: 50.0, count: 210, tiltX: -0.24, tiltY: -0.78, speed: -0.04, colors: [PALETTE.darkGraphite, PALETTE.charcoal] }
+    ];
+
+    ringConfigs.forEach((rc, rIdx) => {
+      const qTilt = new THREE.Quaternion().setFromEuler(new THREE.Euler(rc.tiltX, rc.tiltY, 0));
+      for (let i = 0; i < rc.count; i++) {
+        const baseAngle = (i / rc.count) * Math.PI * 2;
+        ringBrickData.push({
+          ringIdx: rIdx,
+          radius: rc.radius + (randEnv() - 0.5) * 0.8,
+          baseAngle,
+          speed: rc.speed,
+          tiltQuat: qTilt,
+          seed: randEnv(),
+          scale: 0.65 + randEnv() * 0.55,
+          color: new THREE.Color(rc.colors[i % rc.colors.length])
+        });
+      }
+    });
+
+    const ringInstancedMesh = new THREE.InstancedMesh(geo1x2, vortexBrickMat, ringBrickData.length);
+    ringBrickData.forEach((rb, i) => ringInstancedMesh.setColorAt(i, rb.color));
+    ringInstancedMesh.instanceColor.needsUpdate = true;
+    scene.add(ringInstancedMesh);
+
+    const monolithBrickData = [];
+    const numMonoliths = 12;
+    const bricksPerMonolith = Math.floor(CONFIG.monolithBrickCount / numMonoliths);
+
+    for (let m = 0; m < numMonoliths; m++) {
+      const mAngle = (m / numMonoliths) * Math.PI * 2 + (randEnv() - 0.5) * 0.22;
+      const mRadius = 62 + randEnv() * 34;
+      const mYOffset = (randEnv() - 0.5) * 32;
+      const mHeight = 22 + randEnv() * 18;
+      const mTilt = (randEnv() - 0.5) * 0.45;
+
+      for (let b = 0; b < bricksPerMonolith; b++) {
+        const hFrac = b / (bricksPerMonolith - 1) - 0.5;
+        const localY = hFrac * mHeight;
+        const bx = Math.cos(mAngle) * mRadius + (b % 2 === 0 ? 0.55 : -0.55) * Math.sin(mAngle);
+        const bz = Math.sin(mAngle) * mRadius - (b % 2 === 0 ? 0.55 : -0.55) * Math.cos(mAngle);
+
+        monolithBrickData.push({
+          basePos: new THREE.Vector3(bx, mYOffset + localY, bz),
+          hFrac,
+          mAngle,
+          mTilt,
+          seed: randEnv(),
+          scale: 0.95 + randEnv() * 0.45,
+          color: new THREE.Color(b % 3 === 0 ? PALETTE.graphite : PALETTE.charcoal)
+        });
+      }
+    }
+
+    const monolithInstancedMesh = new THREE.InstancedMesh(geo2x2, vortexBrickMat, monolithBrickData.length);
+    monolithBrickData.forEach((mb, i) => monolithInstancedMesh.setColorAt(i, mb.color));
+    monolithInstancedMesh.instanceColor.needsUpdate = true;
+    scene.add(monolithInstancedMesh);
+
+    // =========================================================================
+    // GRAVITATIONAL TIME VORTEX: THOUSANDS OF FLOATING LEGO BRICKS
+    // =========================================================================
+    const vortexPools = [
+      { geo: geo1x2, count: 780, items: [] },
+      { geo: geo2x2, count: 440, items: [] },
+      { geo: geo1x1, count: 640, items: [] },
+      { geo: geoRound1x1, count: 540, items: [] }
+    ];
+
+    const vortexGreys = [
+      PALETTE.charcoal,
+      PALETTE.darkGraphite,
+      PALETTE.graphite,
+      PALETTE.midGrey,
+      PALETTE.ashGrey,
+      PALETTE.silver,
+      PALETTE.offWhite
+    ];
+
+    const randVortex = mulberry32(20261224);
+
+    for (const pool of vortexPools) {
+      const im = new THREE.InstancedMesh(pool.geo, vortexBrickMat, pool.count);
+      pool.mesh = im;
+
+      for (let i = 0; i < pool.count; i++) {
+        const planeRoll = randVortex();
+        let tiltX, tiltZ;
+        if (planeRoll < 0.40) {
+          tiltX = (randVortex() - 0.5) * 0.55;
+          tiltZ = (randVortex() - 0.5) * 0.55;
+        } else if (planeRoll < 0.72) {
+          tiltX = Math.PI * 0.5 + (randVortex() - 0.5) * 0.65;
+          tiltZ = randVortex() * Math.PI * 2;
+        } else {
+          tiltX = (randVortex() - 0.5) * Math.PI;
+          tiltZ = (randVortex() - 0.5) * Math.PI;
+        }
+
+        const planeQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(tiltX, 0, tiltZ));
+        const baseRadius = 17.5 + Math.pow(randVortex(), 0.75) * 76.0;
+        const baseAngle = randVortex() * Math.PI * 2;
+        const baseY = (randVortex() - 0.5) * 26.0;
+        const spiralArm = Math.floor(randVortex() * 4);
+        const speedDir = randVortex() < 0.82 ? 1 : -0.65;
+
+        const shade = vortexGreys[Math.floor(Math.pow(randVortex(), 1.3) * vortexGreys.length)];
+        im.setColorAt(i, new THREE.Color(shade));
+
+        pool.items.push({
+          baseRadius,
+          baseAngle,
+          baseY,
+          planeQuat,
+          spiralArm,
+          orbitSpeed: (0.04 + randVortex() * 0.16) * speedDir,
+          spiralAccel: 0.6 + randVortex() * 1.4,
+          driftFreq: 0.3 + randVortex() * 0.9,
+          driftAmp: 0.6 + randVortex() * 2.2,
+          seed: randVortex(),
+          baseScale: 0.36 + randVortex() * 0.72,
+          rotAxis: new THREE.Vector3(randVortex() - 0.5, randVortex() - 0.5, randVortex() - 0.5).normalize(),
+          rotSpeed: (randVortex() - 0.5) * 1.8,
+          curAngle: baseAngle,
+          curSpin: randVortex() * Math.PI * 2
+        });
+      }
+
+      im.instanceColor.needsUpdate = true;
+      scene.add(im);
+    }
+
+    const floatingFragments = [];
+    for (let f = 0; f < 14; f++) {
+      const fg = new THREE.Group();
+      const segs = 5 + Math.floor(randVortex() * 4);
+      const im = new THREE.InstancedMesh(geo1x1, metalGearMat, segs * 2);
+      const dObj = new THREE.Object3D();
+      const col = new THREE.Color(f % 2 === 0 ? PALETTE.silver : PALETTE.graphite);
+      for (let s = 0; s < segs; s++) {
+        const a = (s / segs) * Math.PI * 0.95;
+        dObj.position.set(Math.cos(a) * 1.7, Math.sin(a) * 1.7, 0);
+        dObj.rotation.set(Math.PI * 0.5, 0, a);
+        dObj.scale.set(0.45, 0.38, 0.45);
+        dObj.updateMatrix();
+        im.setMatrixAt(s * 2, dObj.matrix);
+        im.setColorAt(s * 2, col);
+
+        dObj.position.set(Math.cos(a) * 2.15, Math.sin(a) * 2.15, 0);
+        dObj.rotation.set(0, 0, a - Math.PI * 0.5);
+        dObj.scale.set(0.32, 0.38, 0.35);
+        dObj.updateMatrix();
+        im.setMatrixAt(s * 2 + 1, dObj.matrix);
+        im.setColorAt(s * 2 + 1, new THREE.Color(PALETTE.offWhite));
+      }
+      im.instanceMatrix.needsUpdate = true;
+      im.instanceColor.needsUpdate = true;
+      fg.add(im);
+      scene.add(fg);
+
+      floatingFragments.push({
+        group: fg,
+        radius: 22 + randVortex() * 34,
+        angle: randVortex() * Math.PI * 2,
+        y: (randVortex() - 0.5) * 24,
+        planeQuat: new THREE.Quaternion().setFromEuler(new THREE.Euler(
+          (randVortex() - 0.5) * 1.8, 0, (randVortex() - 0.5) * 1.8
+        )),
+        orbitSpeed: 0.06 + randVortex() * 0.12,
+        spinVec: new THREE.Vector3(randVortex() - 0.5, randVortex() - 0.5, randVortex() - 0.5).multiplyScalar(0.8)
+      });
+    }
+
+    // =========================================================================
+    // CAMERA CONTROLS & CINEMATIC PATH STATE
+    // =========================================================================
+    const interaction = {
+      isDragging: false,
+      lastX: 0,
+      lastY: 0,
+      dragYaw: 0,
+      dragPitch: 0,
+      targetDragYaw: 0,
+      targetDragPitch: 0,
+      mouseNDCX: 0,
+      mouseNDCY: 0,
+      smoothMouseX: 0,
+      smoothMouseY: 0,
+      zoomOffset: 0,
+      targetZoomOffset: 0
+    };
+
+    const domElem = renderer.domElement;
+
+    domElem.addEventListener('pointerdown', (e) => {
+      interaction.isDragging = true;
+      interaction.lastX = e.clientX;
+      interaction.lastY = e.clientY;
+    });
+
+    window.addEventListener('pointerup', () => {
+      interaction.isDragging = false;
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      interaction.mouseNDCX = (e.clientX / window.innerWidth) * 2 - 1;
+      interaction.mouseNDCY = (e.clientY / window.innerHeight) * 2 - 1;
+
+      if (interaction.isDragging) {
+        const dx = e.clientX - interaction.lastX;
+        const dy = e.clientY - interaction.lastY;
+        interaction.lastX = e.clientX;
+        interaction.lastY = e.clientY;
+        interaction.targetDragYaw -= dx * 0.0055;
+        interaction.targetDragPitch = Math.max(-1.05, Math.min(1.05, interaction.targetDragPitch - dy * 0.0055));
+      }
+    });
+
+    domElem.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      interaction.targetZoomOffset = Math.max(-18, Math.min(36, interaction.targetZoomOffset + e.deltaY * 0.025));
+    }, { passive: false });
+
+    // =========================================================================
+    // TIMELINE STATE & KEYBOARD CONTROLS
+    // =========================================================================
+    let simTime = 0.0;
+    let isPaused = false;
+    let isMidnightFrozen = false;
+    let midnightFlashTimer = -1;
+    let lastTimestamp = performance.now();
+
+    function resetSequence() {
+      simTime = 0.0;
+      isMidnightFrozen = false;
+      midnightFlashTimer = -1;
+      flashOverlay.style.opacity = '0';
+      fadeOverlay.style.opacity = '0';
+      midnightPulseLight.intensity = 0;
+
+      for (const pool of vortexPools) {
+        for (const item of pool.items) {
+          item.curAngle = item.baseAngle;
+        }
+      }
+      interaction.targetDragYaw = 0;
+      interaction.targetDragPitch = 0;
+      interaction.targetZoomOffset = 0;
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        resetSequence();
+      } else if (e.key === 'p' || e.key === 'P') {
+        isPaused = !isPaused;
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+      if (composer) composer.setSize(w, h);
+    });
+
+    // =========================================================================
+    // REUSABLE SCRATCH OBJECTS
+    // =========================================================================
+    const scratchObj = new THREE.Object3D();
+    const scratchVec = new THREE.Vector3();
+    const scratchVec2 = new THREE.Vector3();
+    const scratchQuat = new THREE.Quaternion();
+    const scratchQuat2 = new THREE.Quaternion();
+    const scratchTarget = new THREE.Vector3();
+    const watchWorldPos = new THREE.Vector3();
+
+    // =========================================================================
+    // MAIN ANIMATION LOOP
+    // =========================================================================
+    function updateScene(dt, t) {
+      const activeDur = CONFIG.activeDuration;
+      const u = Math.max(0, Math.min(1, t / activeDur));
+
+      const phase2 = smoothstep(18.0, 38.0, t);
+      const phase3 = smoothstep(38.0, 54.0, t);
+      const vortex15 = smoothstep(40.0, 55.0, t);
+      const vortex10 = smoothstep(45.0, 55.0, t);
+      const vortex5  = smoothstep(50.0, 55.0, t);
+
+      const alignmentToMidnight = smoothstep(34.0, 54.0, t);
+      const wanderYaw = Math.sin(t * 0.14) * 0.42 * (1.0 - alignmentToMidnight);
+      const wanderPitch = Math.cos(t * 0.11) * 0.18 * (1.0 - alignmentToMidnight);
+      const wanderRoll = Math.sin(t * 0.09) * 0.08 * (1.0 - alignmentToMidnight);
+
+      watchGroup.rotation.set(wanderPitch, wanderYaw, wanderRoll);
+      watchGroup.position.set(
+        Math.sin(t * 0.18) * 0.85 * (1.0 - alignmentToMidnight * 0.85),
+        Math.cos(t * 0.22) * 0.75 * (1.0 - alignmentToMidnight * 0.85),
+        0
+      );
+      watchWorldPos.copy(watchGroup.position);
+
+      const handProgress = 0.48 * u + 0.52 * Math.pow(u, 2.15);
+      const totalMinuteSweep = Math.PI * 5.0;
+      const totalHourSweep = (2.5 / 12.0) * Math.PI * 2.0;
+
+      minuteHandGroup.rotation.z = -totalMinuteSweep * (1.0 - handProgress);
+      hourHandGroup.rotation.z = -totalHourSweep * (1.0 - handProgress);
+
+      const gearSpeedBoost = 1.0 + phase2 * 0.6 + vortex15 * 1.4;
+      for (const gm of gearMeshes) {
+        gm.group.rotation.z += dt * gm.speed * gearSpeedBoost;
+      }
+
+      const globalMeltEnvelope = smoothstep(17.5, 25.0, t);
+      for (let i = 0; i < numeralBricksData.length; i++) {
+        const b = numeralBricksData[i];
+
+        const cycle = Math.sin(t * 0.52 - b.numIdx * 0.58);
+        const waveMelt = Math.max(0, cycle * 0.5 + 0.5);
+        const preMidnightPull = smoothstep(51.5, 55.0, t) * 0.35;
+        const meltAmt = globalMeltEnvelope * (0.25 + 0.75 * waveMelt) * (0.45 + phase3 * 0.75 - preMidnightPull);
+
+        scratchVec.copy(b.homePos);
+        let sx = 0.21;
+        let sy = 0.21;
+        let sz = 0.21;
+
+        if (meltAmt > 0.001) {
+          const jitter = Math.sin(t * 2.4 + b.seed * 40.0) * 0.08 * meltAmt;
+          scratchVec.x += jitter;
+
+          const droop = Math.pow(b.rowNorm + 0.25, 1.35) * (0.48 + phase3 * 0.85) * meltAmt;
+          scratchVec.y -= droop;
+
+          sy *= 1.0 + droop * 0.85;
+          sx *= 1.0 - Math.min(0.28, droop * 0.16);
+
+          if (b.detachable) {
+            const detachThreshold = smoothstep(0.32, 0.88, waveMelt) * globalMeltEnvelope;
+            scratchVec.addScaledVector(b.driftVec, detachThreshold * (0.45 + phase3 * 0.65));
+          }
+        }
+
+        scratchObj.position.copy(scratchVec);
+
+        scratchQuat.setFromEuler(new THREE.Euler(Math.PI * 0.5, 0, b.homeRotZ));
+        if (meltAmt > 0.01) {
+          const tiltAngle = (b.seed - 0.5) * 0.75 * meltAmt + (b.detachable ? meltAmt * 1.4 : 0);
+          scratchQuat2.setFromAxisAngle(b.spinAxis, tiltAngle);
+          scratchQuat.multiply(scratchQuat2);
+        }
+
+        scratchObj.quaternion.copy(scratchQuat);
+        scratchObj.scale.set(sx, sy * 0.65, sz);
+        scratchObj.updateMatrix();
+        numeralMesh.setMatrixAt(i, scratchObj.matrix);
+      }
+      numeralMesh.instanceMatrix.needsUpdate = true;
+
+      const ringWarpAmp = phase2 * 0.14 + vortex15 * 0.28;
+      const ringInwardPull = 1.0 - vortex10 * 0.34;
+      for (let i = 0; i < ringBrickData.length; i++) {
+        const rb = ringBrickData[i];
+        const rotRate = rb.speed * (1.0 + vortex15 * 4.8);
+        const angle = rb.baseAngle + t * rotRate;
+
+        const warp = 1.0 + ringWarpAmp * (
+          Math.sin(angle * 2.0 + t * 0.9 + rb.ringIdx) * 0.65 +
+          Math.cos(angle * 3.0 - t * 1.3) * 0.35
+        );
+        const r = rb.radius * ringInwardPull * warp;
+        const zWave = Math.sin(angle * 4.0 + t * 1.4) * (phase2 * 1.4 + vortex15 * 3.2);
+
+        scratchVec.set(Math.cos(angle) * r, Math.sin(angle) * r, zWave);
+        scratchVec.applyQuaternion(rb.tiltQuat);
+
+        scratchObj.position.copy(scratchVec);
+        scratchQuat.setFromEuler(new THREE.Euler(0, 0, angle - Math.PI * 0.5));
+        scratchObj.quaternion.copy(rb.tiltQuat).multiply(scratchQuat);
+        scratchObj.scale.setScalar(rb.scale);
+        scratchObj.updateMatrix();
+        ringInstancedMesh.setMatrixAt(i, scratchObj.matrix);
+      }
+      ringInstancedMesh.instanceMatrix.needsUpdate = true;
+
+      const foldAmt = phase2 * 0.22 + vortex15 * 0.62;
+      for (let i = 0; i < monolithBrickData.length; i++) {
+        const mb = monolithBrickData[i];
+        scratchVec.copy(mb.basePos);
+
+        const bend = (mb.hFrac * mb.hFrac) * foldAmt * 28.0 + Math.sin(t * 0.7 + mb.hFrac * 4.0) * phase2 * 1.8;
+        scratchVec.x -= Math.cos(mb.mAngle) * bend;
+        scratchVec.z -= Math.sin(mb.mAngle) * bend;
+
+        if (vortex15 > 0.001) {
+          const twistA = vortex15 * 0.35 * (1.0 - Math.abs(mb.hFrac) * 0.4);
+          const cosT = Math.cos(twistA);
+          const sinT = Math.sin(twistA);
+          const nx = scratchVec.x * cosT - scratchVec.z * sinT;
+          const nz = scratchVec.x * sinT + scratchVec.z * cosT;
+          scratchVec.x = nx;
+          scratchVec.z = nz;
+        }
+
+        scratchObj.position.copy(scratchVec);
+        scratchObj.rotation.set(
+          mb.mTilt * foldAmt,
+          mb.mAngle,
+          bend * 0.025 * Math.sign(mb.hFrac)
+        );
+        scratchObj.scale.setScalar(mb.scale);
+        scratchObj.updateMatrix();
+        monolithInstancedMesh.setMatrixAt(i, scratchObj.matrix);
+      }
+      monolithInstancedMesh.instanceMatrix.needsUpdate = true;
+
+      const spiralFactor = Math.pow(vortex15, 1.55);
+      const intenseFactor = Math.pow(vortex10, 1.8);
+      const maxFactor = Math.pow(vortex5, 1.6);
+
+      for (const pool of vortexPools) {
+        const im = pool.mesh;
+        const items = pool.items;
+
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+
+          const radialPullFactor = 1.0 - spiralFactor * 0.56 * (0.65 + 0.35 * item.seed);
+          const curR = Math.max(15.4, item.baseRadius * radialPullFactor);
+          const keplerBoost = 22.0 / Math.max(15.0, curR);
+          const angularVel = item.orbitSpeed * (
+            1.0 +
+            phase2 * 0.9 +
+            spiralFactor * 7.5 * item.spiralAccel +
+            intenseFactor * 10.5 * keplerBoost
+          );
+          item.curAngle += dt * angularVel;
+          item.curSpin += dt * item.rotSpeed * (1.0 + spiralFactor * 4.5);
+
+          const spiralWave = Math.sin(item.curAngle * 3.0 - curR * 0.14 + item.spiralArm * 1.57) * spiralFactor * 3.2;
+          const rWithArm = Math.max(15.2, curR + spiralWave);
+
+          const ambientDriftY = Math.sin(t * item.driftFreq + item.seed * 20.0) * item.driftAmp * (1.0 - vortex10 * 0.5);
+          const funnelPinch = 1.0 - intenseFactor * 0.52;
+          const localY = item.baseY * funnelPinch + ambientDriftY;
+
+          scratchVec.set(
+            Math.cos(item.curAngle) * rWithArm,
+            localY,
+            Math.sin(item.curAngle) * rWithArm
+          );
+          scratchVec.applyQuaternion(item.planeQuat);
+          scratchVec.z *= (1.0 - maxFactor * 0.22);
+
+          scratchObj.position.copy(scratchVec);
+
+          scratchQuat.setFromAxisAngle(item.rotAxis, item.curSpin);
+          if (vortex10 > 0.05) {
+            scratchVec2.copy(scratchVec).normalize();
+            scratchQuat2.setFromUnitVectors(new THREE.Vector3(1, 0, 0), scratchVec2);
+            scratchQuat.slerp(scratchQuat2, vortex10 * 0.45);
+          }
+          scratchObj.quaternion.copy(scratchQuat);
+
+          const stretch = 1.0 + maxFactor * 0.85 * (1.0 - Math.min(1.0, (rWithArm - 15.0) / 55.0));
+          scratchObj.scale.set(item.baseScale * stretch, item.baseScale, item.baseScale);
+          scratchObj.updateMatrix();
+          im.setMatrixAt(i, scratchObj.matrix);
+        }
+        im.instanceMatrix.needsUpdate = true;
+      }
+
+      for (const frag of floatingFragments) {
+        frag.angle += dt * frag.orbitSpeed * (1.0 + spiralFactor * 9.0);
+        const r = Math.max(17.2, frag.radius * (1.0 - spiralFactor * 0.46));
+        scratchVec.set(Math.cos(frag.angle) * r, frag.y * (1.0 - intenseFactor * 0.4), Math.sin(frag.angle) * r);
+        scratchVec.applyQuaternion(frag.planeQuat);
+        frag.group.position.copy(scratchVec);
+        frag.group.rotation.x += dt * frag.spinVec.x * (1.0 + spiralFactor * 4.0);
+        frag.group.rotation.y += dt * frag.spinVec.y * (1.0 + spiralFactor * 4.0);
+        frag.group.rotation.z += dt * frag.spinVec.z * (1.0 + spiralFactor * 4.0);
+      }
+
+      voidUniforms.uTime.value = t;
+      voidUniforms.uDistortion.value = phase2 * 0.55 + phase3 * 0.45;
+      voidUniforms.uVortex.value = vortex15;
+
+      beamUniforms.uTime.value = t;
+      let flicker = 0;
+      if (t > 47.0 && t < 54.9) {
+        const pulse = Math.pow(Math.max(0, Math.sin(t * 9.5) * Math.sin(t * 23.0)), 6.0);
+        flicker = pulse * vortex5 * 1.4;
+      }
+      beamUniforms.uIntensity.value = 0.08 + vortex15 * 0.14 + flicker * 0.18;
+      voidUniforms.uFlash.value = flicker * 0.5;
+      keyLight.intensity = 2.35 + flicker * 2.2;
+      rimLight.intensity = 1.85 + vortex15 * 0.9 + flicker * 2.6;
+
+      const camZoom = smoothstep(0.0, 55.0, t);
+      const baseDist = lerp(60.0, 32.5, camZoom) + interaction.zoomOffset;
+
+      const orbitSweep = Math.sin(smoothstep(8.0, 48.0, t) * Math.PI) * 1.38;
+      const elevationSweep = lerp(-5.5, 1.5, smoothstep(0.0, 55.0, t)) + Math.sin(t * 0.16) * 3.2 * (1.0 - alignmentToMidnight);
+
+      const finalYaw = orbitSweep + interaction.dragYaw + interaction.smoothMouseX * 0.16;
+      const finalPitch = Math.max(-1.1, Math.min(1.1, (elevationSweep / 35.0) + interaction.dragPitch - interaction.smoothMouseY * 0.12));
+
+      const camX = Math.sin(finalYaw) * Math.cos(finalPitch) * baseDist;
+      const camY = Math.sin(finalPitch) * baseDist;
+      const camZ = Math.cos(finalYaw) * Math.cos(finalPitch) * baseDist;
+
+      camera.position.set(camX, camY, camZ);
+      scratchTarget.copy(watchWorldPos).add(new THREE.Vector3(0, 0.7 * (1.0 - alignmentToMidnight), 0));
+      camera.lookAt(scratchTarget);
+      faceSpotLight.target.position.copy(watchWorldPos);
+    }
+
+    function animate(now) {
+      requestAnimationFrame(animate);
+
+      const rawDt = Math.min(0.05, Math.max(0.0001, (now - lastTimestamp) / 1000));
+      lastTimestamp = now;
+
+      if (!isMidnightFrozen) {
+        interaction.dragYaw = lerp(interaction.dragYaw, interaction.targetDragYaw, Math.min(1, rawDt * 7.5));
+        interaction.dragPitch = lerp(interaction.dragPitch, interaction.targetDragPitch, Math.min(1, rawDt * 7.5));
+        interaction.zoomOffset = lerp(interaction.zoomOffset, interaction.targetZoomOffset, Math.min(1, rawDt * 7.5));
+        interaction.smoothMouseX = lerp(interaction.smoothMouseX, interaction.mouseNDCX, Math.min(1, rawDt * 4.5));
+        interaction.smoothMouseY = lerp(interaction.smoothMouseY, interaction.mouseNDCY, Math.min(1, rawDt * 4.5));
+      }
+
+      if (!isPaused) {
+        simTime += rawDt;
+
+        const freezeStart = CONFIG.activeDuration;
+        const fadeStart = freezeStart + CONFIG.freezeHoldDuration;
+        const totalCycle = fadeStart + CONFIG.fadeOutDuration;
+
+        if (simTime < freezeStart) {
+          isMidnightFrozen = false;
+          updateScene(rawDt, simTime);
+        } else {
+          if (!isMidnightFrozen) {
+            updateScene(0.0001, freezeStart);
+            minuteHandGroup.rotation.z = 0;
+            hourHandGroup.rotation.z = 0;
+            isMidnightFrozen = true;
+            midnightFlashTimer = 0.0;
+          }
+
+          if (midnightFlashTimer >= 0 && midnightFlashTimer < 0.9) {
+            midnightFlashTimer += rawDt;
+            const flashDecay = Math.exp(-midnightFlashTimer * 5.8);
+            flashOverlay.style.opacity = (flashDecay * 0.92).toFixed(3);
+            midnightPulseLight.intensity = flashDecay * 280.0;
+            keyLight.intensity = 2.35 + flashDecay * 3.5;
+            rimLight.intensity = 2.75 + flashDecay * 4.0;
+            if (bloomPass) bloomPass.strength = 0.34 + flashDecay * 1.1;
+          } else {
+            flashOverlay.style.opacity = '0';
+            midnightPulseLight.intensity = 0;
+            keyLight.intensity = 2.55;
+            rimLight.intensity = 2.75;
+            if (bloomPass) bloomPass.strength = 0.36;
+          }
+
+          if (CONFIG.loopSequence) {
+            if (simTime >= fadeStart && simTime < totalCycle) {
+              const fadeProg = (simTime - fadeStart) / CONFIG.fadeOutDuration;
+              fadeOverlay.style.opacity = Math.min(1, fadeProg).toFixed(3);
+            } else if (simTime >= totalCycle) {
+              resetSequence();
+            }
+          }
+        }
+      }
+
+      if (usePostProcessing && composer) {
+        composer.render();
+      } else {
+        renderer.render(scene, camera);
+      }
+    }
+
+    updateScene(0, 0);
+    requestAnimationFrame(animate);
+
+    window.addEventListener('beforeunload', () => {
+      geo1x2.dispose();
+      geo2x2.dispose();
+      geo1x1.dispose();
+      geo1x1Plate.dispose();
+      geoRound1x1.dispose();
+      glassGeo.dispose();
+      glassRimGeo.dispose();
+      voidGeo.dispose();
+      watchBrickMat.dispose();
+      metalGearMat.dispose();
+      numeralMat.dispose();
+      vortexBrickMat.dispose();
+      glassMat.dispose();
+      glassRimMat.dispose();
+      voidMat.dispose();
+      beamMaterial.dispose();
+      renderer.dispose();
+    });
+  </script>
+</body>
+</html>

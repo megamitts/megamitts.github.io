@@ -1,0 +1,2460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Bauble of Infinite Christmases</title>
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #000000;
+      cursor: none;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.169.0/build/three.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'three';
+
+// ============================================================================
+// CORE RENDERER, CAMERA & RENDER TARGETS
+// ============================================================================
+const renderer = new THREE.WebGLRenderer({
+  antialias: true,
+  powerPreference: 'high-performance',
+  alpha: false
+});
+const maxDpr = Math.min(window.devicePixelRatio || 1, 2);
+renderer.setPixelRatio(maxDpr);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0x000000, 1);
+renderer.toneMapping = THREE.NoToneMapping;
+renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(
+  48,
+  window.innerWidth / window.innerHeight,
+  0.05,
+  120
+);
+const portalCam = new THREE.PerspectiveCamera(
+  48,
+  window.innerWidth / window.innerHeight,
+  0.05,
+  120
+);
+
+const drawingSize = new THREE.Vector2();
+renderer.getDrawingBufferSize(drawingSize);
+
+const portalScreenRT = new THREE.WebGLRenderTarget(drawingSize.x, drawingSize.y, {
+  minFilter: THREE.LinearFilter,
+  magFilter: THREE.LinearFilter,
+  format: THREE.RGBAFormat,
+  depthBuffer: true
+});
+
+function createCubeRT(size = 256) {
+  return new THREE.WebGLCubeRenderTarget(size, {
+    generateMipmaps: true,
+    minFilter: THREE.LinearMipmapLinearFilter,
+    magFilter: THREE.LinearFilter,
+    format: THREE.RGBAFormat
+  });
+}
+
+const cubeRT0 = createCubeRT(256);
+const cubeRT1 = createCubeRT(256);
+const cubeRT2 = createCubeRT(256);
+
+// ============================================================================
+// SHARED MATH & NOISE UTILITIES
+// ============================================================================
+function smoothstep(edge0, edge1, x) {
+  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+function easeInOutCubic(x) {
+  return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+}
+
+function easeInOutSine(x) {
+  return -(Math.cos(Math.PI * x) - 1) / 2;
+}
+
+function seededRandom(seed) {
+  let s = seed % 2147483647;
+  if (s <= 0) s += 2147483646;
+  return () => {
+    s = (s * 16807) % 2147483647;
+    return (s - 1) / 2147483646;
+  };
+}
+
+// ============================================================================
+// POP ART GREYSCALE GLSL SHADERS
+// ============================================================================
+const sharedUniforms = {
+  uTime: { value: 0 },
+  uResolution: { value: drawingSize.clone() },
+  uLightDir1: { value: new THREE.Vector3(-0.6, 0.78, 0.45).normalize() },
+  uLightDir2: { value: new THREE.Vector3(0.75, 0.25, -0.6).normalize() }
+};
+
+function createPopArtMaterial({
+  baseTone = 0.85,
+  shadowTone = 0.12,
+  midTone = 0.48,
+  emissive = 0.0,
+  halftoneScale = 7.0,
+  halftoneStrength = 0.65,
+  patternType = 0, // 0: none, 1: stripes, 2: concentric rings, 3: moon craters, 4: brushed metal
+  patternScale = 6.0,
+  rimBoost = 0.35,
+  fogDensity = 0.018,
+  side = THREE.FrontSide,
+  transparent = false,
+  opacity = 1.0
+} = {}) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: sharedUniforms.uTime,
+      uLightDir1: sharedUniforms.uLightDir1,
+      uLightDir2: sharedUniforms.uLightDir2,
+      uBaseTone: { value: baseTone },
+      uShadowTone: { value: shadowTone },
+      uMidTone: { value: midTone },
+      uEmissive: { value: emissive },
+      uHalftoneScale: { value: halftoneScale },
+      uHalftoneStrength: { value: halftoneStrength },
+      uPatternType: { value: patternType },
+      uPatternScale: { value: patternScale },
+      uRimBoost: { value: rimBoost },
+      uFogDensity: { value: fogDensity },
+      uOpacity: { value: opacity }
+    },
+    side,
+    transparent,
+    vertexShader: /* glsl */ `
+      varying vec3 vWorldNormal;
+      varying vec3 vWorldPos;
+      varying vec3 vLocalPos;
+      varying vec3 vViewDir;
+
+      void main() {
+        vLocalPos = position;
+        vec4 localPos = vec4(position, 1.0);
+        vec3 localNormal = normal;
+
+        #ifdef USE_INSTANCING
+          localPos = instanceMatrix * localPos;
+          localNormal = mat3(instanceMatrix) * localNormal;
+        #endif
+
+        vec4 worldPos = modelMatrix * localPos;
+        vWorldPos = worldPos.xyz;
+        vWorldNormal = normalize(mat3(modelMatrix) * localNormal);
+
+        vec4 mvPos = viewMatrix * worldPos;
+        vViewDir = normalize(-mvPos.xyz);
+        gl_Position = projectionMatrix * mvPos;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform float uTime;
+      uniform vec3 uLightDir1;
+      uniform vec3 uLightDir2;
+      uniform float uBaseTone;
+      uniform float uShadowTone;
+      uniform float uMidTone;
+      uniform float uEmissive;
+      uniform float uHalftoneScale;
+      uniform float uHalftoneStrength;
+      uniform float uPatternType;
+      uniform float uPatternScale;
+      uniform float uRimBoost;
+      uniform float uFogDensity;
+      uniform float uOpacity;
+
+      varying vec3 vWorldNormal;
+      varying vec3 vWorldPos;
+      varying vec3 vLocalPos;
+      varying vec3 vViewDir;
+
+      float hash31(vec3 p) {
+        p = fract(p * 0.1031);
+        p += dot(p, p.yzx + 33.33);
+        return fract((p.x + p.y) * p.z);
+      }
+
+      float valueNoise(vec3 p) {
+        vec3 i = floor(p);
+        vec3 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        float n000 = hash31(i);
+        float n100 = hash31(i + vec3(1.0, 0.0, 0.0));
+        float n010 = hash31(i + vec3(0.0, 1.0, 0.0));
+        float n110 = hash31(i + vec3(1.0, 1.0, 0.0));
+        float n001 = hash31(i + vec3(0.0, 0.0, 1.0));
+        float n101 = hash31(i + vec3(1.0, 0.0, 1.0));
+        float n011 = hash31(i + vec3(0.0, 1.0, 1.0));
+        float n111 = hash31(i + vec3(1.0, 1.0, 1.0));
+        float nx00 = mix(n000, n100, f.x);
+        float nx10 = mix(n010, n110, f.x);
+        float nx01 = mix(n001, n101, f.x);
+        float nx11 = mix(n011, n111, f.x);
+        return mix(mix(nx00, nx10, f.y), mix(nx01, nx11, f.y), f.z);
+      }
+
+      float benDayDots(vec2 fragCoord, float scale, float coverage) {
+        float c = 0.819152; // cos(35 deg)
+        float s = 0.573576; // sin(35 deg)
+        vec2 rot = vec2(
+          fragCoord.x * c - fragCoord.y * s,
+          fragCoord.x * s + fragCoord.y * c
+        ) / scale;
+        vec2 cell = fract(rot) - 0.5;
+        float dist = length(cell);
+        float radius = clamp(coverage, 0.0, 1.0) * 0.52;
+        float aa = max(fwidth(dist), 0.02);
+        return 1.0 - smoothstep(radius - aa, radius + aa, dist);
+      }
+
+      void main() {
+        if (uEmissive > 0.95) {
+          float distCam = length(cameraPosition - vWorldPos);
+          float fog = exp(-pow(distCam * uFogDensity, 2.0));
+          float lum = mix(0.0, 1.0, fog);
+          gl_FragColor = vec4(vec3(lum), uOpacity);
+          return;
+        }
+
+        vec3 N = normalize(vWorldNormal);
+        if (!gl_FrontFacing) N = -N;
+        vec3 V = normalize(cameraPosition - vWorldPos);
+
+        float ndotl1 = dot(N, uLightDir1) * 0.5 + 0.5;
+        float ndotl2 = max(dot(N, uLightDir2), 0.0);
+        float fresnel = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+
+        float lightVal = ndotl1 * 0.82 + ndotl2 * 0.28 + fresnel * uRimBoost;
+
+        // Graphic stepped cel bands
+        float tone;
+        if (lightVal > 0.68) {
+          tone = uBaseTone;
+        } else if (lightVal > 0.42) {
+          tone = uMidTone;
+        } else {
+          tone = uShadowTone;
+        }
+
+        // Pattern modulation
+        if (uPatternType > 0.5 && uPatternType < 1.5) {
+          // Crisp graphic stripes
+          float stripe = step(0.5, fract((vLocalPos.x + vLocalPos.y * 0.6) * uPatternScale));
+          tone = mix(tone * 0.35, min(1.0, tone * 1.25 + 0.15), stripe);
+        } else if (uPatternType >= 1.5 && uPatternType < 2.5) {
+          // Concentric Pop Art rings
+          float r = length(vLocalPos.xz) * uPatternScale;
+          float ring = step(0.48, fract(r));
+          tone = mix(uShadowTone, uBaseTone, ring * step(0.28, lightVal));
+        } else if (uPatternType >= 2.5 && uPatternType < 3.5) {
+          // Moon craters
+          float n1 = valueNoise(vLocalPos * uPatternScale);
+          float n2 = valueNoise(vLocalPos * uPatternScale * 2.7 + 4.2);
+          float crater = smoothstep(0.58, 0.72, n1) * 0.6 + smoothstep(0.62, 0.78, n2) * 0.4;
+          tone = mix(tone, uShadowTone * 0.8, crater);
+        } else if (uPatternType >= 3.5) {
+          // Brushed metallic grooves
+          float groove = sin(vLocalPos.y * uPatternScale * 18.0) * 0.5 + 0.5;
+          float spec = smoothstep(0.86, 0.90, ndotl1);
+          tone = mix(tone * (0.8 + 0.25 * groove), 1.0, spec);
+        }
+
+        // Ben-Day halftone dots across mid and shadow bands
+        if (uHalftoneStrength > 0.01) {
+          float dotCoverage = clamp(1.0 - lightVal * 1.15, 0.12, 0.88);
+          float dotMask = benDayDots(gl_FragCoord.xy, uHalftoneScale, dotCoverage);
+          float inMid = smoothstep(0.24, 0.34, lightVal) * (1.0 - smoothstep(0.65, 0.76, lightVal));
+          float inDark = 1.0 - smoothstep(0.24, 0.36, lightVal);
+          // Black dots in midtones, crisp silver dots in deep shadow
+          float midDotted = mix(tone, 0.04, dotMask * uHalftoneStrength * inMid);
+          float darkDotted = mix(midDotted, uMidTone * 0.85, dotMask * uHalftoneStrength * 0.55 * inDark);
+          tone = darkDotted;
+        }
+
+        // Crisp comic-book specular slash on bright surfaces
+        vec3 H = normalize(uLightDir1 + V);
+        float specHighlight = smoothstep(0.955, 0.97, dot(N, H));
+        tone = max(tone, specHighlight * uBaseTone);
+
+        // Internal ink edge accent
+        float inkEdge = smoothstep(0.84, 0.95, 1.0 - max(dot(N, V), 0.0));
+        tone = mix(tone, 0.02, inkEdge * 0.35);
+
+        tone = max(tone, uEmissive);
+
+        // Black distance fog for seamless cosmic void integration
+        float distCam = length(cameraPosition - vWorldPos);
+        float fog = exp(-pow(distCam * uFogDensity, 2.0));
+        tone *= fog;
+
+        gl_FragColor = vec4(vec3(clamp(tone, 0.0, 1.0)), uOpacity);
+      }
+    `
+  });
+}
+
+function createInkOutlineMaterial(thickness = 0.035, fogDensity = 0.018) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uThickness: { value: thickness },
+      uFogDensity: { value: fogDensity }
+    },
+    side: THREE.BackSide,
+    vertexShader: /* glsl */ `
+      uniform float uThickness;
+      varying vec3 vWorldPos;
+      void main() {
+        vec3 pos = position + normalize(normal) * uThickness;
+        vec4 localPos = vec4(pos, 1.0);
+        #ifdef USE_INSTANCING
+          localPos = instanceMatrix * localPos;
+        #endif
+        vec4 worldPos = modelMatrix * localPos;
+        vWorldPos = worldPos.xyz;
+        gl_Position = projectionMatrix * viewMatrix * worldPos;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform float uFogDensity;
+      varying vec3 vWorldPos;
+      void main() {
+        // Pure comic ink black
+        gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+      }
+    `
+  });
+}
+
+// Welds vertex normals at identical positions so sharp box outlines never split
+function createSmoothOutlineGeometry(geometry) {
+  const geo = geometry.clone();
+  const posAttr = geo.attributes.position;
+  const normAttr = geo.attributes.normal;
+  if (!posAttr || !normAttr) return geo;
+
+  const map = new Map();
+  const v = new THREE.Vector3();
+  const n = new THREE.Vector3();
+
+  for (let i = 0; i < posAttr.count; i++) {
+    v.fromBufferAttribute(posAttr, i);
+    n.fromBufferAttribute(normAttr, i);
+    const key = `${Math.round(v.x * 1000)}_${Math.round(v.y * 1000)}_${Math.round(v.z * 1000)}`;
+    if (!map.has(key)) {
+      map.set(key, n.clone());
+    } else {
+      map.get(key).add(n);
+    }
+  }
+
+  for (let i = 0; i < posAttr.count; i++) {
+    v.fromBufferAttribute(posAttr, i);
+    const key = `${Math.round(v.x * 1000)}_${Math.round(v.y * 1000)}_${Math.round(v.z * 1000)}`;
+    const avg = map.get(key).clone().normalize();
+    normAttr.setXYZ(i, avg.x, avg.y, avg.z);
+  }
+  normAttr.needsUpdate = true;
+  return geo;
+}
+
+function addOutline(mesh, thickness = 0.03, smooth = false, fogDensity = 0.018) {
+  const geo = smooth ? createSmoothOutlineGeometry(mesh.geometry) : mesh.geometry;
+  const outlineMat = createInkOutlineMaterial(thickness, fogDensity);
+  const outline = new THREE.Mesh(geo, outlineMat);
+  outline.renderOrder = -1;
+  mesh.add(outline);
+  return outline;
+}
+
+// ============================================================================
+// THE BAUBLE SHADER (REFLECTION + PARALLAX INTERIOR + HALFTONE + PORTAL)
+// ============================================================================
+function createBaubleMaterial(envMap, radius = 2.0, {
+  invertTone = false,
+  geometricWarpBase = 0.0,
+  fogDensity = 0.0
+} = {}) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uEnvMap: { value: envMap },
+      uPortalTex: { value: portalScreenRT.texture },
+      uTime: sharedUniforms.uTime,
+      uResolution: sharedUniforms.uResolution,
+      uLightDir1: sharedUniforms.uLightDir1,
+      uLightDir2: sharedUniforms.uLightDir2,
+      uRadius: { value: radius },
+      uCamDist: { value: 8.5 },
+      uPortalProgress: { value: 0.0 },
+      uWarpStrength: { value: geometricWarpBase },
+      uInvertTone: { value: invertTone ? 1.0 : 0.0 },
+      uFogDensity: { value: fogDensity }
+    },
+    vertexShader: /* glsl */ `
+      varying vec3 vWorldPos;
+      varying vec3 vWorldNormal;
+      varying vec3 vLocalPos;
+
+      void main() {
+        vLocalPos = position;
+        vec4 worldPos = modelMatrix * vec4(position, 1.0);
+        vWorldPos = worldPos.xyz;
+        vWorldNormal = normalize(mat3(modelMatrix) * normal);
+        gl_Position = projectionMatrix * viewMatrix * worldPos;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform samplerCube uEnvMap;
+      uniform sampler2D uPortalTex;
+      uniform float uTime;
+      uniform vec2 uResolution;
+      uniform vec3 uLightDir1;
+      uniform vec3 uLightDir2;
+      uniform float uRadius;
+      uniform float uCamDist;
+      uniform float uPortalProgress;
+      uniform float uWarpStrength;
+      uniform float uInvertTone;
+      uniform float uFogDensity;
+
+      varying vec3 vWorldPos;
+      varying vec3 vWorldNormal;
+      varying vec3 vLocalPos;
+
+      float hash21(vec2 p) {
+        p = fract(p * vec2(123.34, 456.21));
+        p += dot(p, p + 45.32);
+        return fract(p.x * p.y);
+      }
+
+      float noise2D(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        float a = hash21(i);
+        float b = hash21(i + vec2(1.0, 0.0));
+        float c = hash21(i + vec2(0.0, 1.0));
+        float d = hash21(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+      }
+
+      float luma(vec3 c) {
+        return dot(c, vec3(0.299, 0.587, 0.114));
+      }
+
+      void main() {
+        vec3 N = normalize(vWorldNormal);
+        vec3 V = normalize(cameraPosition - vWorldPos);
+        float ndotv = max(dot(N, V), 0.0);
+
+        // Spherical coordinates in local space for procedural imperfections & halftone
+        vec3 ln = normalize(vLocalPos);
+        float theta = atan(ln.z, ln.x);
+        float phi = acos(clamp(ln.y, -1.0, 1.0));
+
+        // Subtle procedural surface imperfections (lathe micro-grooves + silver flecks)
+        float closeReveal = smoothstep(uRadius * 3.2, uRadius * 1.35, uCamDist);
+        float microGroove = sin(phi * 210.0 + sin(theta * 4.0) * 1.5) * 0.5 + 0.5;
+        float flecks = noise2D(vec2(theta * 32.0, phi * 32.0));
+        float scratch = smoothstep(0.86, 0.98, noise2D(vec2(theta * 14.0, phi * 80.0)));
+        vec3 N_imp = normalize(N + vec3(
+          (microGroove - 0.5) * 0.035 + (scratch - 0.5) * 0.04,
+          (flecks - 0.5) * 0.03,
+          (microGroove - 0.5) * 0.035
+        ) * (0.35 + 0.65 * closeReveal));
+
+        // Reflection & deep optical refraction vectors
+        vec3 R = reflect(-V, N_imp);
+        vec3 T = refract(-V, N_imp, 0.74);
+
+        // Subtle geometric / comic-panel distortion as camera approaches or warp increases
+        float dynamicWarp = uWarpStrength + closeReveal * 0.22 * (0.5 + 0.5 * sin(uTime * 0.35));
+        if (dynamicWarp > 0.01) {
+          float facetTheta = floor(atan(R.z, R.x) * 10.0) / 10.0;
+          vec3 facetDir = vec3(cos(facetTheta), R.y, sin(facetTheta));
+          R = normalize(mix(R, facetDir, dynamicWarp * 0.32));
+
+          float ripple = sin(phi * 16.0 - uTime * 0.6) * 0.08 * dynamicWarp;
+          T = normalize(T + N_imp * ripple);
+        }
+
+        // Sample live miniature Christmas worlds
+        // Outer metallic reflection + deep interior parallax refraction
+        float envRefl = luma(textureCube(uEnvMap, R).rgb);
+        float envRefr1 = luma(textureCube(uEnvMap, T).rgb);
+        float envRefr2 = luma(textureCube(uEnvMap, normalize(T - V * 0.45)).rgb);
+        float interiorWorld = mix(envRefr1, envRefr2, 0.42);
+
+        // Pop Art contrast shaping on the reflected/refracted world
+        envRefl = smoothstep(0.04, 0.85, envRefl);
+        interiorWorld = smoothstep(0.03, 0.82, interiorWorld);
+
+        float fresnel = pow(1.0 - ndotv, 2.4);
+        // Center becomes more deeply transparent into the crystal Christmas cosmos as camera nears
+        float interiorMix = mix(0.55, 0.90, closeReveal) * (1.0 - fresnel * 0.88);
+        float worldTone = mix(envRefl * 0.92 + 0.06, interiorWorld * 1.12, interiorMix);
+
+        // Studio metallic silver & Pop Art comic highlights
+        float keyDiffuse = max(dot(N_imp, uLightDir1), 0.0);
+        float rimLight = max(dot(N_imp, uLightDir2), 0.0);
+
+        // Crisp hard-edged comic-book studio specular slashes
+        float spec1 = smoothstep(0.89, 0.915, dot(R, uLightDir1));
+        float spec2 = smoothstep(0.955, 0.97, dot(R, normalize(uLightDir1 + vec3(0.28, -0.18, 0.1))));
+        float rimSlash = smoothstep(0.45, 0.56, fresnel * (0.4 + 0.8 * rimLight));
+
+        // Combine silver shell with reflected worlds
+        float tone = worldTone * (0.68 + 0.38 * keyDiffuse) + fresnel * 0.24;
+        tone = mix(tone, 0.96, rimSlash * 0.65);
+        tone = max(tone, spec1 * 0.98);
+        tone = max(tone, spec2 * 1.0);
+
+        // Surface imperfections visible up close
+        tone += (scratch * 0.08 - (1.0 - microGroove) * 0.035) * closeReveal;
+
+        // Curved Ben-Day Halftone matrix across the sphere surface
+        float gridFreq = 86.0;
+        vec2 uvHT = vec2(theta * gridFreq * 0.6366, phi * gridFreq);
+        float rowShift = mod(floor(uvHT.y), 2.0) * 0.5;
+        vec2 cell = fract(vec2(uvHT.x + rowShift, uvHT.y)) - 0.5;
+        float dotDist = length(cell);
+        float dotRadius = mix(0.42, 0.10, clamp(tone, 0.0, 1.0));
+        float aa = max(fwidth(dotDist), 0.03);
+        float htDot = 1.0 - smoothstep(dotRadius - aa, dotRadius + aa, dotDist);
+
+        float htZone = smoothstep(0.10, 0.25, tone) * (1.0 - smoothstep(0.75, 0.90, tone));
+        float htAmount = mix(0.14, 0.55, closeReveal) * htZone;
+        tone = mix(tone, tone < 0.45 ? 0.02 : 0.92, htDot * htAmount);
+
+        if (uInvertTone > 0.5) {
+          tone = 1.0 - tone;
+        }
+
+        // Crisp black graphic ink contour at the extreme silhouette
+        float inkRim = smoothstep(0.91, 0.97, 1.0 - ndotv);
+        tone = mix(tone, 0.0, inkRim * 0.85);
+
+        // Seamless Optical Portal Aperture when entering the bauble
+        if (uPortalProgress > 0.001) {
+          vec2 screenUV = gl_FragCoord.xy / uResolution;
+          // Mild edge lensing that flattens completely to 0 as uPortalProgress -> 1
+          vec2 centered = screenUV - 0.5;
+          float lens = (1.0 - uPortalProgress) * 0.09 * dot(centered, centered);
+          vec2 portalUV = clamp(screenUV - centered * lens, 0.001, 0.999);
+          float portalLum = luma(texture2D(uPortalTex, portalUV).rgb);
+
+          // Radial aperture opening from the center of the bauble to 100% of screen
+          float threshold = 1.0 - uPortalProgress * 1.18;
+          float aperture = smoothstep(threshold - 0.08, threshold + 0.08, ndotv);
+
+          // Concentric Pop Art halftone portal rim ring during crossing
+          float rimBand = aperture * (1.0 - aperture) * 4.0;
+          float portalRing = rimBand * (0.4 + 0.6 * htDot);
+
+          tone = mix(tone, portalLum, aperture);
+          tone = mix(tone, 0.98, portalRing * 0.55 * (1.0 - uPortalProgress));
+        }
+
+        // Optional cosmic depth fog for nested baubles inside worlds
+        if (uFogDensity > 0.0001) {
+          float distCam = length(cameraPosition - vWorldPos);
+          float fog = exp(-pow(distCam * uFogDensity, 2.0));
+          tone *= fog;
+        }
+
+        gl_FragColor = vec4(vec3(clamp(tone, 0.0, 1.0)), 1.0);
+      }
+    `
+  });
+}
+
+// ============================================================================
+// BAUBLE CAP, LOOP & VANISHING THREAD ASSEMBLY
+// ============================================================================
+function createFlutedCapGeometry(radius, height, ridges = 16) {
+  const geo = new THREE.CylinderGeometry(radius * 0.88, radius, height, ridges * 4, 4, false);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    const r = Math.hypot(x, z);
+    if (r > 0.001) {
+      const ang = Math.atan2(z, x);
+      const wave = 1.0 + 0.075 * Math.cos(ang * ridges);
+      // Taper slightly at very top
+      const topTaper = y > height * 0.3 ? 0.92 : 1.0;
+      pos.setX(i, x * wave * topTaper);
+      pos.setZ(i, z * wave * topTaper);
+    }
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function createBaubleAssembly(radius, envMap, {
+  invertTone = false,
+  geometricWarp = 0.0,
+  longThread = false,
+  fogDensity = 0.0
+} = {}) {
+  const group = new THREE.Group();
+
+  // Main reflective sphere
+  const sphereGeo = new THREE.SphereGeometry(radius, 84, 84);
+  const sphereMat = createBaubleMaterial(envMap, radius, {
+    invertTone,
+    geometricWarpBase: geometricWarp,
+    fogDensity
+  });
+  const sphereMesh = new THREE.Mesh(sphereGeo, sphereMat);
+  group.add(sphereMesh);
+
+  // Cap group seated cleanly at top of sphere
+  const capScale = radius * 0.22;
+  const capGroup = new THREE.Group();
+  capGroup.position.y = radius * 0.985;
+
+  const metalMat = createPopArtMaterial({
+    baseTone: 0.92,
+    shadowTone: 0.10,
+    midTone: 0.52,
+    halftoneScale: 5.5,
+    halftoneStrength: 0.55,
+    patternType: 4,
+    patternScale: 2.0,
+    fogDensity
+  });
+
+  // Collar base ring
+  const collar = new THREE.Mesh(
+    new THREE.TorusGeometry(capScale * 0.95, capScale * 0.14, 12, 36),
+    metalMat
+  );
+  collar.rotation.x = Math.PI / 2;
+  addOutline(collar, capScale * 0.05, false, fogDensity);
+  capGroup.add(collar);
+
+  // Scalloped fluted crown cylinder
+  const flutedGeo = createFlutedCapGeometry(capScale * 0.92, capScale * 0.85, 16);
+  const flutedMesh = new THREE.Mesh(flutedGeo, metalMat);
+  flutedMesh.position.y = capScale * 0.42;
+  addOutline(flutedMesh, capScale * 0.05, false, fogDensity);
+  capGroup.add(flutedMesh);
+
+  // Top dome
+  const topDome = new THREE.Mesh(
+    new THREE.SphereGeometry(capScale * 0.72, 24, 14, 0, Math.PI * 2, 0, Math.PI * 0.55),
+    metalMat
+  );
+  topDome.position.y = capScale * 0.78;
+  addOutline(topDome, capScale * 0.04, false, fogDensity);
+  capGroup.add(topDome);
+
+  // Hanging loop
+  const loop = new THREE.Mesh(
+    new THREE.TorusGeometry(capScale * 0.38, capScale * 0.07, 12, 32),
+    metalMat
+  );
+  loop.position.y = capScale * 1.45;
+  addOutline(loop, capScale * 0.035, false, fogDensity);
+  capGroup.add(loop);
+
+  // Delicate fine thread vanishing upward into darkness
+  const threadLen = longThread ? 28.0 : radius * 6.0;
+  const threadGeo = new THREE.CylinderGeometry(
+    capScale * 0.015,
+    capScale * 0.022,
+    threadLen,
+    6,
+    1
+  );
+  const threadMat = new THREE.ShaderMaterial({
+    uniforms: {
+      uLen: { value: threadLen }
+    },
+    transparent: true,
+    vertexShader: /* glsl */ `
+      varying float vY;
+      void main() {
+        vY = position.y;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform float uLen;
+      varying float vY;
+      void main() {
+        float t = clamp((vY + uLen * 0.5) / uLen, 0.0, 1.0);
+        float alpha = (1.0 - smoothstep(0.08, 0.92, t)) * 0.72;
+        gl_FragColor = vec4(vec3(0.78), alpha);
+      }
+    `
+  });
+  const threadMesh = new THREE.Mesh(threadGeo, threadMat);
+  threadMesh.position.y = capScale * 1.82 + threadLen * 0.5;
+  capGroup.add(threadMesh);
+
+  group.add(capGroup);
+
+  return { group, sphereMesh, sphereMat, capGroup, radius };
+}
+
+// ============================================================================
+// SHARED MINIATURE POP-ART MATERIALS
+// ============================================================================
+const MAT = {
+  snow: createPopArtMaterial({ baseTone: 0.96, shadowTone: 0.34, midTone: 0.74, halftoneScale: 6.5, halftoneStrength: 0.55 }),
+  charcoalWall: createPopArtMaterial({ baseTone: 0.36, shadowTone: 0.07, midTone: 0.20, halftoneScale: 6.0, halftoneStrength: 0.7 }),
+  midWall: createPopArtMaterial({ baseTone: 0.68, shadowTone: 0.16, midTone: 0.42, halftoneScale: 6.0, halftoneStrength: 0.65 }),
+  silver: createPopArtMaterial({ baseTone: 0.90, shadowTone: 0.14, midTone: 0.52, halftoneScale: 5.5, halftoneStrength: 0.5, patternType: 4, patternScale: 1.5 }),
+  darkInk: createPopArtMaterial({ baseTone: 0.14, shadowTone: 0.02, midTone: 0.06, halftoneScale: 5.0, halftoneStrength: 0.4 }),
+  striped: createPopArtMaterial({ baseTone: 0.94, shadowTone: 0.10, midTone: 0.50, patternType: 1, patternScale: 5.0, halftoneStrength: 0.45 }),
+  concentric: createPopArtMaterial({ baseTone: 0.96, shadowTone: 0.08, midTone: 0.48, patternType: 2, patternScale: 3.5, halftoneStrength: 0.45 }),
+  moon: createPopArtMaterial({ baseTone: 0.88, shadowTone: 0.16, midTone: 0.56, patternType: 3, patternScale: 1.9, halftoneScale: 6.0, halftoneStrength: 0.65 }),
+  glowWhite: createPopArtMaterial({ baseTone: 1.0, emissive: 1.0 }),
+  smoke: createPopArtMaterial({ baseTone: 0.92, shadowTone: 0.45, midTone: 0.72, halftoneScale: 5.0, halftoneStrength: 0.5 }),
+  glassDome: createPopArtMaterial({
+    baseTone: 0.95,
+    shadowTone: 0.25,
+    midTone: 0.65,
+    rimBoost: 0.85,
+    halftoneScale: 5.0,
+    halftoneStrength: 0.4,
+    transparent: true,
+    opacity: 0.28,
+    side: THREE.DoubleSide
+  })
+};
+
+function createGlowHaloSprite(size = 1.0, opacity = 0.45) {
+  const geo = new THREE.PlaneGeometry(size, size);
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uOpacity: { value: opacity } },
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        vec4 mvPosition = modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+        mvPosition.xy += position.xy;
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform float uOpacity;
+      varying vec2 vUv;
+      void main() {
+        float d = length(vUv - 0.5) * 2.0;
+        float glow = pow(max(0.0, 1.0 - d), 2.2);
+        // Subtle Pop-Art graphic ring inside halo
+        float ring = smoothstep(0.65, 0.68, d) * (1.0 - smoothstep(0.72, 0.75, d)) * 0.25;
+        float lum = (glow + ring) * uOpacity;
+        gl_FragColor = vec4(vec3(lum), lum);
+      }
+    `
+  });
+  return new THREE.Mesh(geo, mat);
+}
+
+// ============================================================================
+// MINIATURE CHRISTMAS OBJECT BUILDERS
+// ============================================================================
+function buildVictorianHouse(scale = 1.0, seed = 1, smokeList = null) {
+  const rand = seededRandom(seed);
+  const g = new THREE.Group();
+  const w = 0.55 + rand() * 0.25;
+  const h = 0.62 + rand() * 0.35;
+  const d = 0.52 + rand() * 0.22;
+
+  // Main body
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(w, h, d),
+    rand() > 0.5 ? MAT.charcoalWall : MAT.midWall
+  );
+  body.position.y = h * 0.5;
+  addOutline(body, 0.025, true);
+  g.add(body);
+
+  // Gabled pitched snow roof
+  const roofH = 0.38 + rand() * 0.14;
+  const roofGeo = new THREE.ConeGeometry(Math.max(w, d) * 0.82, roofH, 4);
+  roofGeo.rotateY(Math.PI * 0.25);
+  const roof = new THREE.Mesh(roofGeo, MAT.snow);
+  roof.position.y = h + roofH * 0.48;
+  roof.scale.set(w / Math.max(w, d) * 1.08, 1.0, d / Math.max(w, d) * 1.08);
+  addOutline(roof, 0.028, true);
+  g.add(roof);
+
+  // Chimney
+  const chimX = (rand() - 0.5) * w * 0.45;
+  const chimZ = (rand() - 0.5) * d * 0.35;
+  const chim = new THREE.Mesh(
+    new THREE.BoxGeometry(0.11, 0.34, 0.11),
+    MAT.darkInk
+  );
+  chim.position.set(chimX, h + roofH * 0.65, chimZ);
+  addOutline(chim, 0.015, true);
+  g.add(chim);
+
+  // Glowing white windows (front + sides) with tiny black mullions
+  const winGeo = new THREE.PlaneGeometry(0.13, 0.16);
+  const winPositions = [
+    [-w * 0.23, h * 0.68, d * 0.505, 0],
+    [w * 0.23, h * 0.68, d * 0.505, 0],
+    [-w * 0.23, h * 0.32, d * 0.505, 0],
+    [w * 0.505, h * 0.58, 0, Math.PI * 0.5],
+    [-w * 0.505, h * 0.58, 0, -Math.PI * 0.5]
+  ];
+  winPositions.forEach(([wx, wy, wz, ry]) => {
+    const win = new THREE.Mesh(winGeo, MAT.glowWhite);
+    win.position.set(wx, wy, wz);
+    win.rotation.y = ry;
+    // Crossbar mullion
+    const barH = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.018, 0.01), MAT.darkInk);
+    const barV = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.17, 0.01), MAT.darkInk);
+    win.add(barH, barV);
+    g.add(win);
+  });
+
+  // Front arched/rectangular door
+  const door = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.24, 0.02), MAT.darkInk);
+  door.position.set(w * 0.16, 0.12, d * 0.5);
+  g.add(door);
+
+  // Register animated chimney smoke puffs
+  if (smokeList) {
+    const puffs = [];
+    for (let i = 0; i < 4; i++) {
+      const puff = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 10), MAT.smoke);
+      addOutline(puff, 0.012);
+      g.add(puff);
+      puffs.push({
+        mesh: puff,
+        phase: i * 0.25 + rand() * 0.2,
+        origin: new THREE.Vector3(chimX, h + roofH * 0.85, chimZ)
+      });
+    }
+    smokeList.push(...puffs);
+  }
+
+  g.scale.setScalar(scale);
+  return g;
+}
+
+function buildChurch(scale = 1.0, smokeList = null) {
+  const g = new THREE.Group();
+
+  // Nave
+  const nave = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.72, 1.25), MAT.midWall);
+  nave.position.y = 0.36;
+  addOutline(nave, 0.028, true);
+  g.add(nave);
+
+  // Snow roof on nave
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(0.68, 0.45, 4), MAT.snow);
+  roof.rotation.y = Math.PI * 0.25;
+  roof.scale.set(0.9, 1.0, 1.45);
+  roof.position.y = 0.92;
+  addOutline(roof, 0.028, true);
+  g.add(roof);
+
+  // Bell tower
+  const tower = new THREE.Mesh(new THREE.BoxGeometry(0.42, 1.35, 0.42), MAT.charcoalWall);
+  tower.position.set(0, 0.675, 0.5);
+  addOutline(tower, 0.028, true);
+  g.add(tower);
+
+  // Tall pointed spire
+  const spire = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.95, 4), MAT.snow);
+  spire.rotation.y = Math.PI * 0.25;
+  spire.position.set(0, 1.82, 0.5);
+  addOutline(spire, 0.026, true);
+  g.add(spire);
+
+  // Glowing white cross / star finial
+  const finialV = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.22, 0.04), MAT.glowWhite);
+  const finialH = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.04, 0.04), MAT.glowWhite);
+  finialV.position.set(0, 2.38, 0.5);
+  finialH.position.set(0, 2.41, 0.5);
+  g.add(finialV, finialH);
+
+  // Rose glowing window on front + lancet side windows
+  const rose = new THREE.Mesh(new THREE.CircleGeometry(0.12, 16), MAT.glowWhite);
+  rose.position.set(0, 0.95, 0.715);
+  g.add(rose);
+
+  for (let i = -1; i <= 1; i++) {
+    const lw1 = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 0.30), MAT.glowWhite);
+    lw1.position.set(0.38, 0.42, i * 0.35);
+    lw1.rotation.y = Math.PI * 0.5;
+    const lw2 = lw1.clone();
+    lw2.position.x = -0.38;
+    lw2.rotation.y = -Math.PI * 0.5;
+    g.add(lw1, lw2);
+  }
+
+  if (smokeList) {
+    for (let i = 0; i < 3; i++) {
+      const puff = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), MAT.smoke);
+      g.add(puff);
+      smokeList.push({
+        mesh: puff,
+        phase: i * 0.33,
+        origin: new THREE.Vector3(0.2, 1.15, -0.4)
+      });
+    }
+  }
+
+  g.scale.setScalar(scale);
+  return g;
+}
+
+function buildChristmasMarket(scale = 1.0) {
+  const g = new THREE.Group();
+  for (let i = 0; i < 3; i++) {
+    const stall = new THREE.Group();
+    const angle = (i - 1) * 0.68;
+    stall.position.set(Math.sin(angle) * 0.85, 0, Math.cos(angle) * 0.85 - 0.55);
+    stall.rotation.y = angle;
+
+    const base = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.24, 0.32), MAT.charcoalWall);
+    base.position.y = 0.12;
+    addOutline(base, 0.018, true);
+    stall.add(base);
+
+    // Striped Pop-Art awning
+    const awning = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.06, 0.40), MAT.striped);
+    awning.position.set(0, 0.48, 0.02);
+    awning.rotation.x = 0.22;
+    addOutline(awning, 0.018, true);
+    stall.add(awning);
+
+    // Posts
+    [-0.24, 0.24].forEach((px) => {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.48, 6), MAT.darkInk);
+      post.position.set(px, 0.24, 0.14);
+      stall.add(post);
+    });
+
+    // Glowing white lantern under awning
+    const lantern = new THREE.Mesh(new THREE.SphereGeometry(0.042, 8, 8), MAT.glowWhite);
+    lantern.position.set(0, 0.40, 0.12);
+    stall.add(lantern);
+
+    // Tiny geometric gift boxes on counter
+    const gift1 = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.09), MAT.snow);
+    gift1.position.set(-0.12, 0.285, 0.05);
+    const gift2 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.11, 0.08), MAT.silver);
+    gift2.position.set(0.11, 0.295, 0.03);
+    stall.add(gift1, gift2);
+
+    g.add(stall);
+  }
+  g.scale.setScalar(scale);
+  return g;
+}
+
+function buildSnowman(scale = 1.0) {
+  const g = new THREE.Group();
+  const s1 = new THREE.Mesh(new THREE.SphereGeometry(0.20, 14, 14), MAT.snow);
+  s1.position.y = 0.18;
+  addOutline(s1, 0.02);
+  const s2 = new THREE.Mesh(new THREE.SphereGeometry(0.145, 14, 14), MAT.snow);
+  s2.position.y = 0.44;
+  addOutline(s2, 0.018);
+  const s3 = new THREE.Mesh(new THREE.SphereGeometry(0.105, 14, 14), MAT.snow);
+  s3.position.y = 0.65;
+  addOutline(s3, 0.016);
+  g.add(s1, s2, s3);
+
+  // Top hat
+  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.025, 14), MAT.darkInk);
+  brim.position.y = 0.74;
+  const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.09, 0.14, 14), MAT.darkInk);
+  crown.position.y = 0.81;
+  g.add(brim, crown);
+
+  // Nose & eyes
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.022, 0.09, 8), MAT.silver);
+  nose.rotation.x = Math.PI * 0.5;
+  nose.position.set(0, 0.65, 0.13);
+  g.add(nose);
+
+  [-0.035, 0.035].forEach((ex) => {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.014, 6, 6), MAT.darkInk);
+    eye.position.set(ex, 0.68, 0.095);
+    g.add(eye);
+  });
+
+  // Stick arms
+  [-1, 1].forEach((dir) => {
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.01, 0.24, 5), MAT.darkInk);
+    arm.position.set(dir * 0.18, 0.48, 0);
+    arm.rotation.z = -dir * 0.85;
+    g.add(arm);
+  });
+
+  g.scale.setScalar(scale);
+  return g;
+}
+
+function buildStreetlight(scale = 1.0) {
+  const g = new THREE.Group();
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.032, 0.95, 8), MAT.darkInk);
+  pole.position.y = 0.475;
+  g.add(pole);
+
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.025, 0.025), MAT.darkInk);
+  arm.position.set(0.08, 0.95, 0);
+  g.add(arm);
+
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.065, 12, 12), MAT.glowWhite);
+  lamp.position.set(0.16, 0.91, 0);
+  g.add(lamp);
+
+  const halo = createGlowHaloSprite(0.55, 0.42);
+  halo.position.copy(lamp.position);
+  g.add(halo);
+
+  g.scale.setScalar(scale);
+  return g;
+}
+
+function buildVillager(scale = 1.0) {
+  const g = new THREE.Group();
+  const coat = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.22, 10), MAT.charcoalWall);
+  coat.position.y = 0.11;
+  addOutline(coat, 0.012);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.048, 10, 10), MAT.snow);
+  head.position.y = 0.25;
+  addOutline(head, 0.01);
+  const hat = new THREE.Mesh(new THREE.ConeGeometry(0.046, 0.09, 8), MAT.striped);
+  hat.position.y = 0.31;
+  g.add(coat, head, hat);
+  g.scale.setScalar(scale);
+  return g;
+}
+
+function buildGeometricTree(height = 1.0, style = 'classic') {
+  const g = new THREE.Group();
+
+  const trunk = new THREE.Mesh(
+    new THREE.CylinderGeometry(height * 0.05, height * 0.075, height * 0.22, 8),
+    MAT.darkInk
+  );
+  trunk.position.y = height * 0.11;
+  g.add(trunk);
+
+  if (style === 'classic') {
+    const tiers = 3;
+    for (let i = 0; i < tiers; i++) {
+      const r = height * (0.34 - i * 0.08);
+      const h = height * (0.40 - i * 0.05);
+      const cone = new THREE.Mesh(
+        new THREE.ConeGeometry(r, h, 10),
+        i % 2 === 0 ? MAT.snow : MAT.midWall
+      );
+      cone.position.y = height * (0.28 + i * 0.22);
+      addOutline(cone, height * 0.022);
+      g.add(cone);
+
+      // Tiny geometric silver ornaments on tier rim
+      for (let j = 0; j < 4; j++) {
+        const a = (j / 4) * Math.PI * 2 + i * 0.7;
+        const orb = new THREE.Mesh(
+          new THREE.SphereGeometry(height * 0.032, 8, 8),
+          j % 2 === 0 ? MAT.glowWhite : MAT.silver
+        );
+        orb.position.set(
+          Math.cos(a) * r * 0.85,
+          cone.position.y - h * 0.38,
+          Math.sin(a) * r * 0.85
+        );
+        g.add(orb);
+      }
+    }
+  } else {
+    // Concentric Pop-Art geometric rings & floating cones
+    for (let i = 0; i < 4; i++) {
+      const r = height * (0.38 - i * 0.075);
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(r, height * 0.024, 8, 24),
+        i % 2 === 0 ? MAT.snow : MAT.striped
+      );
+      ring.rotation.x = Math.PI * 0.5;
+      ring.position.y = height * (0.24 + i * 0.19);
+      addOutline(ring, height * 0.015);
+      g.add(ring);
+
+      const innerCone = new THREE.Mesh(
+        new THREE.ConeGeometry(r * 0.62, height * 0.16, 6),
+        i % 2 === 0 ? MAT.concentric : MAT.charcoalWall
+      );
+      innerCone.position.y = ring.position.y + height * 0.04;
+      addOutline(innerCone, height * 0.015);
+      g.add(innerCone);
+    }
+  }
+
+  // Star topper
+  const star = new THREE.Mesh(new THREE.OctahedronGeometry(height * 0.075, 0), MAT.glowWhite);
+  star.position.y = height * 1.02;
+  g.add(star);
+
+  return g;
+}
+
+function buildToyTrain(trackRadius = 2.6, numCars = 3, verticalHelix = false) {
+  const root = new THREE.Group();
+
+  // Build track
+  if (!verticalHelix) {
+    const railOuter = new THREE.Mesh(
+      new THREE.TorusGeometry(trackRadius + 0.07, 0.018, 6, 64),
+      MAT.silver
+    );
+    railOuter.rotation.x = Math.PI * 0.5;
+    const railInner = new THREE.Mesh(
+      new THREE.TorusGeometry(trackRadius - 0.07, 0.018, 6, 64),
+      MAT.silver
+    );
+    railInner.rotation.x = Math.PI * 0.5;
+    root.add(railOuter, railInner);
+
+    // Instanced sleepers
+    const count = 48;
+    const sleeperGeo = new THREE.BoxGeometry(0.24, 0.02, 0.055);
+    const sleepers = new THREE.InstancedMesh(sleeperGeo, MAT.darkInk, count);
+    const dummy = new THREE.Object3D();
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2;
+      dummy.position.set(Math.cos(a) * trackRadius, -0.01, Math.sin(a) * trackRadius);
+      dummy.rotation.set(0, -a, 0);
+      dummy.updateMatrix();
+      sleepers.setMatrixAt(i, dummy.matrix);
+    }
+    root.add(sleepers);
+  } else {
+    // Impossible vertical twisted figure-8 / helical closed loop track
+    const pts = [];
+    const N = 80;
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      pts.push(new THREE.Vector3(
+        Math.sin(a) * trackRadius * 0.85,
+        Math.sin(a * 2.0) * trackRadius * 0.95 + Math.cos(a) * trackRadius * 0.55,
+        Math.cos(a) * trackRadius * 0.65
+      ));
+    }
+    const curve = new THREE.CatmullRomCurve3(pts, true);
+    const tubeGeo = new THREE.TubeGeometry(curve, 120, 0.032, 8, true);
+    const trackMesh = new THREE.Mesh(tubeGeo, MAT.striped);
+    addOutline(trackMesh, 0.02);
+    root.add(trackMesh);
+    root.userData.curve = curve;
+  }
+
+  // Locomotive + carriages
+  const units = [];
+  const loco = new THREE.Group();
+  const boiler = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.36, 12), MAT.charcoalWall);
+  boiler.rotation.x = Math.PI * 0.5;
+  boiler.position.set(0, 0.14, 0.06);
+  addOutline(boiler, 0.018);
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.28, 0.20), MAT.striped);
+  cab.position.set(0, 0.18, -0.18);
+  addOutline(cab, 0.018, true);
+  const stack = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.032, 0.16, 10), MAT.darkInk);
+  stack.position.set(0, 0.28, 0.16);
+  const headlight = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), MAT.glowWhite);
+  headlight.position.set(0, 0.18, 0.25);
+  const cow = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.14, 4), MAT.silver);
+  cow.rotation.x = Math.PI * 0.5;
+  cow.position.set(0, 0.07, 0.28);
+  loco.add(boiler, cab, stack, headlight, cow);
+
+  // Train smoke puffs
+  const locoSmoke = [];
+  for (let i = 0; i < 4; i++) {
+    const p = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8), MAT.smoke);
+    loco.add(p);
+    locoSmoke.push(p);
+  }
+  root.add(loco);
+  units.push({ mesh: loco, offset: 0, smoke: locoSmoke });
+
+  for (let c = 1; c <= numCars; c++) {
+    const car = new THREE.Group();
+    const box = new THREE.Mesh(
+      new THREE.BoxGeometry(0.21, 0.21, 0.32),
+      c % 2 === 1 ? MAT.midWall : MAT.charcoalWall
+    );
+    box.position.y = 0.14;
+    addOutline(box, 0.016, true);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.04, 0.34), MAT.snow);
+    roof.position.y = 0.26;
+    const winL = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 0.07), MAT.glowWhite);
+    winL.position.set(0.107, 0.15, 0);
+    winL.rotation.y = Math.PI * 0.5;
+    const winR = winL.clone();
+    winR.position.x = -0.107;
+    winR.rotation.y = -Math.PI * 0.5;
+    car.add(box, roof, winL, winR);
+    root.add(car);
+    units.push({ mesh: car, offset: c * 0.42 });
+  }
+
+  return {
+    root,
+    update(time, speed = 0.45) {
+      if (!verticalHelix) {
+        units.forEach((u) => {
+          const theta = time * speed - (u.offset / trackRadius);
+          u.mesh.position.set(
+            Math.cos(theta) * trackRadius,
+            0.02,
+            Math.sin(theta) * trackRadius
+          );
+          // Tangent forward along increasing theta: (-sin, 0, cos)
+          u.mesh.rotation.set(0, -theta, 0);
+          if (u.smoke) {
+            u.smoke.forEach((p, idx) => {
+              const ph = (time * 1.4 + idx * 0.25) % 1.0;
+              p.position.set(0, 0.36 + ph * 0.45, 0.16 - ph * 0.32);
+              p.scale.setScalar(0.5 + ph * 1.1 * (1.0 - ph * 0.5));
+              p.visible = ph < 0.92;
+            });
+          }
+        });
+      } else {
+        const curve = root.userData.curve;
+        const up = new THREE.Vector3(0, 1, 0);
+        units.forEach((u) => {
+          const t = ((time * speed * 0.16 - u.offset * 0.032) % 1.0 + 1.0) % 1.0;
+          const pos = curve.getPointAt(t);
+          const tan = curve.getTangentAt(t);
+          u.mesh.position.copy(pos);
+          const lookTarget = pos.clone().add(tan);
+          u.mesh.up.copy(up);
+          u.mesh.lookAt(lookTarget);
+          if (u.smoke) {
+            u.smoke.forEach((p, idx) => {
+              const ph = (time * 1.5 + idx * 0.25) % 1.0;
+              p.position.set(0, 0.35 + ph * 0.4, 0.16 - ph * 0.25);
+              p.scale.setScalar(0.45 + ph * 0.9);
+            });
+          }
+        });
+      }
+    }
+  };
+}
+
+function buildReindeer(scale = 1.0) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.075, 0.28, 8), MAT.silver);
+  body.rotation.x = Math.PI * 0.5;
+  body.position.y = 0.14;
+  addOutline(body, 0.014);
+
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.055, 0.16, 8), MAT.silver);
+  neck.position.set(0, 0.22, 0.12);
+  neck.rotation.x = 0.45;
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.13), MAT.snow);
+  head.position.set(0, 0.28, 0.19);
+  addOutline(head, 0.012, true);
+
+  // Branching antlers
+  [-1, 1].forEach((side) => {
+    const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.012, 0.15, 5), MAT.glowWhite);
+    ant.position.set(side * 0.04, 0.36, 0.16);
+    ant.rotation.z = -side * 0.42;
+    ant.rotation.x = -0.25;
+    g.add(ant);
+  });
+
+  // Leaping legs
+  const legs = [];
+  [[-0.04, 0.11], [0.04, 0.11], [-0.04, -0.10], [0.04, -0.10]].forEach(([lx, lz], idx) => {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.01, 0.16, 6), MAT.darkInk);
+    leg.position.set(lx, 0.06, lz);
+    leg.rotation.x = idx < 2 ? -0.55 : 0.55;
+    g.add(leg);
+    legs.push(leg);
+  });
+
+  g.add(body, neck, head);
+  g.scale.setScalar(scale);
+  g.userData.legs = legs;
+  return g;
+}
+
+function buildSantaAndReindeer(formation = 'classic') {
+  const group = new THREE.Group();
+
+  // Sleigh + Santa Claus
+  const sleigh = new THREE.Group();
+  const hull = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.16, 0.46), MAT.charcoalWall);
+  hull.position.y = 0.12;
+  addOutline(hull, 0.018, true);
+  const trim = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.04, 0.48), MAT.snow);
+  trim.position.y = 0.21;
+  [-0.14, 0.14].forEach((rx) => {
+    const runner = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.03, 0.62), MAT.silver);
+    runner.position.set(rx, 0.02, 0.02);
+    sleigh.add(runner);
+  });
+  // Santa silhouette
+  const santaTorso = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.24, 10), MAT.darkInk);
+  santaTorso.position.set(0, 0.28, 0.02);
+  addOutline(santaTorso, 0.014);
+  const santaHead = new THREE.Mesh(new THREE.SphereGeometry(0.065, 10, 10), MAT.snow);
+  santaHead.position.set(0, 0.42, 0.02);
+  const santaHat = new THREE.Mesh(new THREE.ConeGeometry(0.062, 0.14, 8), MAT.striped);
+  santaHat.position.set(0, 0.50, 0.01);
+  santaHat.rotation.x = -0.25;
+  const pom = new THREE.Mesh(new THREE.SphereGeometry(0.022, 6, 6), MAT.glowWhite);
+  pom.position.set(0, 0.57, -0.02);
+  const sack = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 10), MAT.midWall);
+  sack.position.set(0, 0.24, -0.14);
+  sleigh.add(hull, trim, santaTorso, santaHead, santaHat, pom, sack);
+  group.add(sleigh);
+
+  // Reindeer
+  const reindeer = [];
+  if (formation === 'classic') {
+    for (let i = 0; i < 6; i++) {
+      const r = buildReindeer(0.95);
+      const row = Math.floor(i / 2);
+      const side = i % 2 === 0 ? -0.22 : 0.22;
+      r.position.set(side, Math.sin(row * 0.7) * 0.08, 0.65 + row * 0.52);
+      group.add(r);
+      reindeer.push(r);
+    }
+  } else {
+    // Perfect geometric V / diamond formation
+    const offsets = [
+      [0, 0, 1.55],
+      [-0.42, 0.16, 1.15],
+      [0.42, 0.16, 1.15],
+      [-0.84, 0.32, 0.75],
+      [0, -0.25, 0.85],
+      [0.84, 0.32, 0.75],
+      [-0.42, -0.16, 0.45],
+      [0.42, -0.16, 0.45]
+    ];
+    offsets.forEach(([ox, oy, oz]) => {
+      const r = buildReindeer(0.9);
+      r.position.set(ox, oy, oz);
+      group.add(r);
+      reindeer.push(r);
+    });
+  }
+
+  // Sparkling geometric star trail
+  const stars = [];
+  for (let i = 0; i < 10; i++) {
+    const st = new THREE.Mesh(new THREE.OctahedronGeometry(0.045, 0), MAT.glowWhite);
+    group.add(st);
+    stars.push(st);
+  }
+
+  return {
+    group,
+    update(time, orbitRadius = 8.0, speed = 0.28, height = 2.4, tilt = 0.18) {
+      const a = time * speed;
+      const x = Math.cos(a) * orbitRadius;
+      const z = Math.sin(a) * orbitRadius;
+      const y = height + Math.sin(a * 2.0) * 0.75;
+      group.position.set(x, y, z);
+
+      // Face tangent direction
+      const nx = Math.cos(a + 0.05) * orbitRadius;
+      const nz = Math.sin(a + 0.05) * orbitRadius;
+      const ny = height + Math.sin((a + 0.05) * 2.0) * 0.75;
+      group.lookAt(nx, ny, nz);
+      group.rotateZ(tilt);
+
+      reindeer.forEach((r, idx) => {
+        const gallop = Math.sin(time * 7.5 + idx * 0.65);
+        r.rotation.x = gallop * 0.14;
+        if (formation === 'classic') {
+          r.position.y += gallop * 0.002;
+        }
+      });
+
+      stars.forEach((st, idx) => {
+        const phase = (time * 1.2 + idx * 0.1) % 1.0;
+        st.position.set(
+          Math.sin(idx * 2.1) * 0.18,
+          Math.cos(idx * 1.7) * 0.12,
+          -0.4 - phase * 2.2
+        );
+        const s = (1.0 - phase) * 1.1;
+        st.scale.setScalar(s);
+        st.rotation.y = time * 2.0 + idx;
+      });
+    }
+  };
+}
+
+function buildSnowIsland(radius = 3.2, depth = 1.4) {
+  const g = new THREE.Group();
+  const domeGeo = new THREE.SphereGeometry(radius, 32, 20, 0, Math.PI * 2, 0, Math.PI * 0.5);
+  domeGeo.scale(1, 0.22, 1);
+  const top = new THREE.Mesh(domeGeo, MAT.snow);
+  addOutline(top, 0.045);
+  g.add(top);
+
+  const underGeo = new THREE.ConeGeometry(radius * 0.99, depth, 24);
+  underGeo.rotateX(Math.PI);
+  const under = new THREE.Mesh(underGeo, MAT.charcoalWall);
+  under.position.y = -depth * 0.5;
+  addOutline(under, 0.045);
+  g.add(under);
+
+  return g;
+}
+
+function buildSnowfieldInstanced(count = 420, spreadRadius = 14.0, seed = 42) {
+  const rand = seededRandom(seed);
+  const geo = new THREE.OctahedronGeometry(0.055, 0);
+  const inst = new THREE.InstancedMesh(geo, MAT.glowWhite, count);
+
+  const data = [];
+  const dummy = new THREE.Object3D();
+  for (let i = 0; i < count; i++) {
+    const r = 1.8 + rand() * spreadRadius;
+    const theta = rand() * Math.PI * 2;
+    const y = (rand() - 0.5) * spreadRadius * 1.4;
+    const speed = 0.25 + rand() * 0.55;
+    const scale = 0.45 + rand() * 1.2;
+    data.push({
+      x: Math.cos(theta) * r,
+      y,
+      z: Math.sin(theta) * r,
+      speed,
+      scale,
+      phase: rand() * Math.PI * 2,
+      drift: (rand() - 0.5) * 0.4
+    });
+    dummy.position.set(data[i].x, data[i].y, data[i].z);
+    dummy.scale.setScalar(scale);
+    dummy.updateMatrix();
+    inst.setMatrixAt(i, dummy.matrix);
+  }
+
+  return {
+    mesh: inst,
+    update(time, dt, inverted = false) {
+      const bound = spreadRadius * 0.72;
+      const dir = inverted ? 1 : -1;
+      for (let i = 0; i < count; i++) {
+        const d = data[i];
+        d.y += dir * d.speed * dt;
+        if (d.y < -bound) d.y = bound;
+        if (d.y > bound) d.y = -bound;
+        dummy.position.set(
+          d.x + Math.sin(time * 0.6 + d.phase) * 0.25,
+          d.y,
+          d.z + Math.cos(time * 0.5 + d.phase) * 0.25
+        );
+        dummy.rotation.set(time * 0.8 + d.phase, time * 1.1, 0);
+        dummy.scale.setScalar(d.scale);
+        dummy.updateMatrix();
+        inst.setMatrixAt(i, dummy.matrix);
+      }
+      inst.instanceMatrix.needsUpdate = true;
+    }
+  };
+}
+
+function buildSnowmanHeadVillage() {
+  const g = new THREE.Group();
+
+  // Giant serene snowman shoulders & base
+  const shoulders = new THREE.Mesh(
+    new THREE.SphereGeometry(2.1, 28, 18, 0, Math.PI * 2, 0, Math.PI * 0.55),
+    MAT.snow
+  );
+  shoulders.position.y = -1.75;
+  addOutline(shoulders, 0.055);
+  g.add(shoulders);
+
+  // Scarf with graphic stripes
+  const scarf = new THREE.Mesh(new THREE.TorusGeometry(1.05, 0.22, 12, 32), MAT.striped);
+  scarf.rotation.x = Math.PI * 0.5;
+  scarf.position.y = -0.35;
+  addOutline(scarf, 0.04);
+  g.add(scarf);
+
+  // Lower chin/face hemisphere
+  const jaw = new THREE.Mesh(
+    new THREE.SphereGeometry(1.45, 28, 18, 0, Math.PI * 2, Math.PI * 0.48, Math.PI * 0.52),
+    MAT.snow
+  );
+  jaw.position.y = 0.85;
+  addOutline(jaw, 0.05);
+  g.add(jaw);
+
+  // Giant coal eyes & nose on lower rim
+  [-0.45, 0.45].forEach((ex) => {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 10), MAT.darkInk);
+    eye.position.set(ex, 0.55, 1.32);
+    g.add(eye);
+  });
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.45, 10), MAT.silver);
+  nose.rotation.x = Math.PI * 0.48;
+  nose.position.set(0, 0.35, 1.52);
+  addOutline(nose, 0.025);
+  g.add(nose);
+
+  // Interior snow floor inside the snowman's cranium
+  const floor = new THREE.Mesh(new THREE.CylinderGeometry(1.40, 1.28, 0.14, 28), MAT.snow);
+  floor.position.y = 0.85;
+  addOutline(floor, 0.03);
+  g.add(floor);
+
+  // Tiny complete Christmas village INSIDE the snowman's head!
+  const smokeList = [];
+  const church = buildChurch(0.32, smokeList);
+  church.position.set(0, 0.92, -0.35);
+  g.add(church);
+
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + 0.5;
+    const h = buildVictorianHouse(0.28, 200 + i, smokeList);
+    h.position.set(Math.cos(a) * 0.72, 0.92, Math.sin(a) * 0.72);
+    h.lookAt(0, 0.92, 0);
+    g.add(h);
+  }
+  const tree = buildGeometricTree(0.55, 'classic');
+  tree.position.set(0.18, 0.92, 0.25);
+  g.add(tree);
+
+  const microTrain = buildToyTrain(1.05, 2, false);
+  microTrain.root.position.y = 0.93;
+  microTrain.root.scale.setScalar(0.58);
+  g.add(microTrain.root);
+
+  // Translucent cutaway glass cranium dome + brimmed top hat above!
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(1.46, 28, 18, 0, Math.PI * 2, 0, Math.PI * 0.52),
+    MAT.glassDome
+  );
+  dome.position.y = 0.85;
+  g.add(dome);
+
+  const haloRing = new THREE.Mesh(new THREE.TorusGeometry(1.46, 0.035, 8, 36), MAT.silver);
+  haloRing.rotation.x = Math.PI * 0.5;
+  haloRing.position.y = 0.85;
+  g.add(haloRing);
+
+  return {
+    group: g,
+    update(time) {
+      microTrain.update(time, 0.85);
+      tree.rotation.y = time * 0.4;
+      smokeList.forEach((s) => {
+        const p = (time * 0.5 + s.phase) % 1.0;
+        s.mesh.position.set(
+          s.origin.x + Math.sin(time * 2.0 + s.phase * 5.0) * 0.04,
+          s.origin.y + p * 0.42,
+          s.origin.z
+        );
+        s.mesh.scale.setScalar(0.5 + (1.0 - Math.abs(p - 0.5) * 2.0) * 0.7);
+      });
+    }
+  };
+}
+
+// ============================================================================
+// WORLD 0: CLASSIC DREAMING MINIATURE CHRISTMAS UNIVERSE
+// ============================================================================
+function createWorld0(nextCubeRT) {
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000000);
+  const cubeCam = new THREE.CubeCamera(0.1, 45, nextCubeRT === cubeRT1 ? cubeRT0 : cubeRT0);
+  // Wait: each world owns its own CubeCamera targeting ITS OWN CubeRT!
+  return buildWorld0Internal(nextCubeRT);
+}
+
+function buildWorld0Internal(nestedEnvMap) {
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000000);
+  const cubeCam = new THREE.CubeCamera(0.1, 48, cubeRT0);
+  cubeCam.position.set(0, 0, 0);
+
+  const smokeList = [];
+  const rotatingTrees = [];
+  const villagers = [];
+
+  // 1. Main Snowy Victorian Village Island (placed cleanly outside safe flight sphere r > 6)
+  const villageGroup = new THREE.Group();
+  villageGroup.position.set(0, -2.1, -8.8);
+  const island = buildSnowIsland(4.2, 2.2);
+  villageGroup.add(island);
+
+  const church = buildChurch(0.95, smokeList);
+  church.position.set(-1.35, 0.62, -0.8);
+  church.rotation.y = 0.4;
+  villageGroup.add(church);
+
+  const houseConfigs = [
+    [1.3, 0.64, -0.7, -0.5, 0.85, 11],
+    [0.2, 0.68, -1.6, 0.1, 0.92, 22],
+    [-1.6, 0.58, 0.9, 1.0, 0.78, 33],
+    [1.65, 0.58, 0.85, -1.1, 0.82, 44],
+    [0.05, 0.65, 1.45, Math.PI, 0.76, 55],
+    [-0.65, 0.64, -1.75, 0.35, 0.72, 66]
+  ];
+  houseConfigs.forEach(([hx, hy, hz, ry, sc, sd]) => {
+    const h = buildVictorianHouse(sc, sd, smokeList);
+    h.position.set(hx, hy, hz);
+    h.rotation.y = ry;
+    villageGroup.add(h);
+  });
+
+  const market = buildChristmasMarket(0.92);
+  market.position.set(0.1, 0.68, 0.35);
+  villageGroup.add(market);
+
+  // Snowmen beneath streetlights
+  [[-0.75, 0.68, 0.75], [0.95, 0.66, 0.45]].forEach(([sx, sy, sz], idx) => {
+    const lamp = buildStreetlight(0.85);
+    lamp.position.set(sx, sy, sz);
+    lamp.rotation.y = idx === 0 ? 0.5 : -0.8;
+    const sm = buildSnowman(0.75);
+    sm.position.set(sx + (idx === 0 ? 0.32 : -0.32), sy, sz + 0.12);
+    sm.rotation.y = idx === 0 ? -0.4 : 0.4;
+    villageGroup.add(lamp, sm);
+  });
+
+  // Tiny strolling villagers
+  for (let i = 0; i < 6; i++) {
+    const v = buildVillager(0.85);
+    villageGroup.add(v);
+    villagers.push({ mesh: v, angle: (i / 6) * Math.PI * 2, radius: 1.0 + (i % 2) * 0.45, speed: 0.25 + (i % 3) * 0.08 });
+  }
+
+  // Geometric Christmas trees in the village
+  [[0.4, 0.72, -0.35, 1.35], [-2.1, 0.52, -0.1, 1.05], [2.2, 0.52, 0.1, 1.1]].forEach(([tx, ty, tz, th], idx) => {
+    const t = buildGeometricTree(th, idx === 0 ? 'classic' : 'classic');
+    t.position.set(tx, ty, tz);
+    villageGroup.add(t);
+    rotatingTrees.push(t);
+  });
+
+  // Toy train circling the village island
+  const villageTrain = buildToyTrain(3.25, 3, false);
+  villageTrain.root.position.y = 0.36;
+  villageGroup.add(villageTrain.root);
+  scene.add(villageGroup);
+
+  // 2. Snow-covered Forest Island on the right-front
+  const forestGroup = new THREE.Group();
+  forestGroup.position.set(8.8, -1.6, -2.5);
+  forestGroup.add(buildSnowIsland(3.1, 1.8));
+  const forestRand = seededRandom(777);
+  for (let i = 0; i < 14; i++) {
+    const a = forestRand() * Math.PI * 2;
+    const r = 0.4 + forestRand() * 2.1;
+    const tree = buildGeometricTree(0.7 + forestRand() * 0.85, i % 4 === 0 ? 'geometric' : 'classic');
+    tree.position.set(Math.cos(a) * r, 0.42 + (1 - r / 3.1) * 0.25, Math.sin(a) * r);
+    forestGroup.add(tree);
+    if (i % 3 === 0) rotatingTrees.push(tree);
+  }
+  const fHouse = buildVictorianHouse(0.85, 99, smokeList);
+  fHouse.position.set(0, 0.65, 0);
+  forestGroup.add(fHouse);
+  scene.add(forestGroup);
+
+  // 3. Cozy Hill Island on the left-back
+  const leftIsland = new THREE.Group();
+  leftIsland.position.set(-8.6, 0.8, 3.2);
+  leftIsland.add(buildSnowIsland(2.8, 1.6));
+  const lHouse1 = buildVictorianHouse(0.95, 111, smokeList);
+  lHouse1.position.set(-0.6, 0.6, 0.2);
+  const lHouse2 = buildVictorianHouse(0.82, 122, smokeList);
+  lHouse2.position.set(0.75, 0.58, -0.4);
+  lHouse2.rotation.y = -0.8;
+  const lTree = buildGeometricTree(1.25, 'classic');
+  lTree.position.set(0.1, 0.62, 0.7);
+  const lLamp = buildStreetlight(0.85);
+  lLamp.position.set(0.25, 0.62, 0.1);
+  leftIsland.add(lHouse1, lHouse2, lTree, lLamp);
+  rotatingTrees.push(lTree);
+  scene.add(leftIsland);
+
+  // 4. Flying Santa & Reindeer across the miniature sky
+  const santa = buildSantaAndReindeer('classic');
+  scene.add(santa.group);
+
+  // 5. Pop-Art Cosmic Radial Rings & Stars
+  const cosmicRing = new THREE.Mesh(new THREE.TorusGeometry(13.5, 0.04, 6, 72), MAT.striped);
+  cosmicRing.rotation.set(0.9, 0.3, 0);
+  scene.add(cosmicRing);
+
+  // 6. Falling Snow
+  const snow = buildSnowfieldInstanced(420, 14.5, 101);
+  scene.add(snow.mesh);
+
+  // 7. Nested Baubles suspended in World 0 (reflecting World 1!)
+  const targetBauble = createBaubleAssembly(1.45, nestedEnvMap, {
+    geometricWarp: 0.15,
+    longThread: false,
+    fogDensity: 0.015
+  });
+  targetBauble.group.position.set(-5.8, 1.8, -5.2);
+  scene.add(targetBauble.group);
+
+  // Secondary decorative nested baubles
+  const sideBauble1 = createBaubleAssembly(0.62, nestedEnvMap, { geometricWarp: 0.3, fogDensity: 0.018 });
+  sideBauble1.group.position.set(5.4, 3.6, -6.4);
+  scene.add(sideBauble1.group);
+
+  const sideBauble2 = createBaubleAssembly(0.54, nestedEnvMap, { invertTone: true, fogDensity: 0.018 });
+  sideBauble2.group.position.set(3.2, -2.5, 7.2);
+  scene.add(sideBauble2.group);
+
+  const scenicPoints = [
+    new THREE.Vector3(1.6, 0.4, -3.6),
+    new THREE.Vector3(3.8, -0.2, -1.2),
+    new THREE.Vector3(2.2, 1.6, 3.2),
+    new THREE.Vector3(-2.6, 1.2, 1.2)
+  ];
+  const scenicLooks = [
+    villageGroup.position.clone().add(new THREE.Vector3(0, 0.6, 0)),
+    forestGroup.position.clone().add(new THREE.Vector3(0, 0.5, 0)),
+    leftIsland.position.clone(),
+    targetBauble.group.position.clone()
+  ];
+
+  return {
+    scene,
+    cubeCam,
+    cubeRT: cubeRT0,
+    targetBauble,
+    targetBasePos: targetBauble.group.position.clone(),
+    scenicPoints,
+    scenicLooks,
+    update(time, dt, cycleLevel) {
+      villageTrain.update(time, 0.48);
+      santa.update(time, 8.2, 0.26, 3.2, 0.22);
+      snow.update(time, dt, false);
+      cosmicRing.rotation.z = time * 0.04;
+
+      rotatingTrees.forEach((t, i) => {
+        t.rotation.y = time * (0.22 + (i % 3) * 0.08);
+      });
+
+      villagers.forEach((v) => {
+        const a = v.angle + time * v.speed;
+        v.mesh.position.set(
+          0.1 + Math.cos(a) * v.radius,
+          0.68 + Math.abs(Math.sin(time * 5.0 + v.angle)) * 0.03,
+          0.35 + Math.sin(a) * v.radius
+        );
+        v.mesh.rotation.y = -a;
+      });
+
+      smokeList.forEach((s) => {
+        const p = (time * 0.38 + s.phase) % 1.0;
+        s.mesh.position.set(
+          s.origin.x + Math.sin(time * 1.5 + s.phase * 6.0) * 0.06,
+          s.origin.y + p * 0.65,
+          s.origin.z + Math.cos(time * 1.2 + s.phase * 4.0) * 0.04
+        );
+        const sc = 0.45 + Math.sin(p * Math.PI) * 0.85;
+        s.mesh.scale.setScalar(sc);
+      });
+
+      targetBauble.group.rotation.y = Math.sin(time * 0.18) * 0.4 + time * 0.06;
+      targetBauble.sphereMat.uniforms.uWarpStrength.value = 0.15 + Math.min(cycleLevel * 0.12, 0.55);
+      sideBauble1.group.rotation.y = -time * 0.14;
+      sideBauble1.group.position.y = 3.6 + Math.sin(time * 0.7) * 0.25;
+      sideBauble2.group.rotation.y = time * 0.18;
+    }
+  };
+}
+
+// ============================================================================
+// WORLD 1: THE SURREAL INVERTED & MOON-TREE CHRISTMAS UNIVERSE
+// ============================================================================
+function buildWorld1Internal(nestedEnvMap) {
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000000);
+  const cubeCam = new THREE.CubeCamera(0.1, 48, cubeRT1);
+  cubeCam.position.set(0, 0, 0);
+
+  const smokeList = [];
+  const rotatingTrees = [];
+
+  // 1. Upside-Down Victorian Snow Village suspended above!
+  const upsideDownVillage = new THREE.Group();
+  upsideDownVillage.position.set(-2.5, 4.4, -8.2);
+  upsideDownVillage.rotation.z = Math.PI; // Flipped completely upside-down!
+  upsideDownVillage.add(buildSnowIsland(3.6, 1.9));
+
+  const udChurch = buildChurch(0.92, smokeList);
+  udChurch.position.set(0, 0.62, 0);
+  upsideDownVillage.add(udChurch);
+
+  [[-1.3, 0.58, 0.7, 0.5, 10], [1.35, 0.58, -0.6, -0.7, 20], [-0.9, 0.55, -1.2, 1.2, 30], [1.1, 0.55, 1.1, -1.5, 40]]
+    .forEach(([hx, hy, hz, ry, sd]) => {
+      const h = buildVictorianHouse(0.88, sd, smokeList);
+      h.position.set(hx, hy, hz);
+      h.rotation.y = ry;
+      upsideDownVillage.add(h);
+    });
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    const t = buildGeometricTree(1.1, 'classic');
+    t.position.set(Math.cos(a) * 2.1, 0.5, Math.sin(a) * 2.1);
+    upsideDownVillage.add(t);
+    rotatingTrees.push(t);
+  }
+  const udTrain = buildToyTrain(2.85, 3, false);
+  udTrain.root.position.y = 0.32;
+  upsideDownVillage.add(udTrain.root);
+  scene.add(upsideDownVillage);
+
+  // 2. Christmas Tree Growing Out of a Miniature Cratered Moon
+  const moonGroup = new THREE.Group();
+  moonGroup.position.set(7.6, 1.2, -5.4);
+  const moonSphere = new THREE.Mesh(new THREE.SphereGeometry(1.95, 36, 36), MAT.moon);
+  addOutline(moonSphere, 0.055);
+  moonGroup.add(moonSphere);
+
+  const moonTree = buildGeometricTree(2.45, 'geometric');
+  moonTree.position.y = 1.88;
+  moonGroup.add(moonTree);
+  rotatingTrees.push(moonTree);
+
+  // Orbiting mini-baubles like a Saturn ring around the moon-tree
+  const moonRing = new THREE.Group();
+  moonRing.rotation.set(0.35, 0, -0.25);
+  const ringTorus = new THREE.Mesh(new THREE.TorusGeometry(3.0, 0.025, 8, 56), MAT.silver);
+  ringTorus.rotation.x = Math.PI * 0.5;
+  moonRing.add(ringTorus);
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const mb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.18, 12, 12),
+      i % 2 === 0 ? MAT.silver : MAT.striped
+    );
+    mb.position.set(Math.cos(a) * 3.0, 0, Math.sin(a) * 3.0);
+    addOutline(mb, 0.02);
+    moonRing.add(mb);
+  }
+  moonGroup.add(moonRing);
+  scene.add(moonGroup);
+
+  // 3. Impossible Vertical Figure-8 Toy Train looping through the sky
+  const verticalTrain = buildToyTrain(3.4, 4, true);
+  verticalTrain.root.position.set(0.4, -0.6, 8.8);
+  scene.add(verticalTrain.root);
+
+  // 4. Giant Snowman whose Head contains a Miniature Christmas Village!
+  const snowmanVillage = buildSnowmanHeadVillage();
+  snowmanVillage.group.position.set(-7.8, -1.2, 3.5);
+  snowmanVillage.group.rotation.y = 1.1;
+  scene.add(snowmanVillage.group);
+
+  // 5. Reindeer flying in Perfect Geometric Formation
+  const geoReindeer = buildSantaAndReindeer('geometric');
+  scene.add(geoReindeer.group);
+
+  // 6. Graphic Pop-Art Concentric Backdrop Rings
+  const radialDisc = new THREE.Mesh(new THREE.RingGeometry(12.2, 14.5, 48, 4), MAT.concentric);
+  radialDisc.position.set(0, 0, -14.5);
+  scene.add(radialDisc);
+
+  // 7. Inverse upward-drifting snow
+  const snow = buildSnowfieldInstanced(420, 14.5, 202);
+  scene.add(snow.mesh);
+
+  // 8. Target Bauble #2 (reflecting World 2!)
+  const targetBauble = createBaubleAssembly(1.45, nestedEnvMap, {
+    geometricWarp: 0.38,
+    fogDensity: 0.015
+  });
+  targetBauble.group.position.set(4.8, -2.1, 6.2);
+  scene.add(targetBauble.group);
+
+  const sideBauble = createBaubleAssembly(0.68, nestedEnvMap, { invertTone: true, fogDensity: 0.018 });
+  sideBauble.group.position.set(-5.4, -3.2, -5.8);
+  scene.add(sideBauble.group);
+
+  const scenicPoints = [
+    new THREE.Vector3(-1.4, 1.2, -3.5),
+    new THREE.Vector3(3.4, 1.0, -2.8),
+    new THREE.Vector3(-3.2, -0.4, 2.2),
+    new THREE.Vector3(0.8, -1.0, 3.6)
+  ];
+  const scenicLooks = [
+    upsideDownVillage.position.clone().add(new THREE.Vector3(0, -1.0, 0)),
+    moonGroup.position.clone().add(new THREE.Vector3(0, 1.2, 0)),
+    snowmanVillage.group.position.clone().add(new THREE.Vector3(0, 0.8, 0)),
+    targetBauble.group.position.clone()
+  ];
+
+  return {
+    scene,
+    cubeCam,
+    cubeRT: cubeRT1,
+    targetBauble,
+    targetBasePos: targetBauble.group.position.clone(),
+    scenicPoints,
+    scenicLooks,
+    update(time, dt, cycleLevel) {
+      udTrain.update(time, -0.55);
+      verticalTrain.update(time, 0.65);
+      snowmanVillage.update(time);
+      geoReindeer.update(time, 8.8, -0.24, -1.2, -0.25);
+      snow.update(time, dt, true);
+
+      moonRing.rotation.y = time * 0.32;
+      moonGroup.rotation.y = Math.sin(time * 0.15) * 0.3;
+      radialDisc.rotation.z = -time * 0.08;
+
+      rotatingTrees.forEach((t, i) => {
+        t.rotation.y = time * (0.28 + (i % 2) * 0.15);
+      });
+
+      smokeList.forEach((s) => {
+        const p = (time * 0.42 + s.phase) % 1.0;
+        s.mesh.position.set(
+          s.origin.x + Math.sin(time * 2.0 + s.phase * 5.0) * 0.05,
+          s.origin.y + p * 0.65,
+          s.origin.z
+        );
+        s.mesh.scale.setScalar(0.45 + Math.sin(p * Math.PI) * 0.8);
+      });
+
+      targetBauble.group.rotation.y = -Math.sin(time * 0.2) * 0.45 + time * 0.08;
+      targetBauble.sphereMat.uniforms.uWarpStrength.value = 0.38 + Math.min(cycleLevel * 0.12, 0.55);
+      sideBauble.group.rotation.y = time * 0.22;
+    }
+  };
+}
+
+// ============================================================================
+// WORLD 2: THE INFINITE ABSTRACT POP-ART CHRISTMAS COSMOS
+// ============================================================================
+function buildWorld2Internal(nestedEnvMap) {
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000000);
+  const cubeCam = new THREE.CubeCamera(0.1, 48, cubeRT2);
+  cubeCam.position.set(0, 0, 0);
+
+  // 1. Forest of Christmas Trees made from Concentric Geometric Shapes
+  const forestRings = [];
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    const rad = 7.8 + (i % 2) * 2.4;
+    const h = 2.0 + (i % 3) * 0.7;
+    const gt = buildGeometricTree(h, 'geometric');
+    gt.position.set(Math.cos(a) * rad, Math.sin(a * 2.0) * 2.2 - 0.8, Math.sin(a) * rad);
+    gt.rotation.z = (i % 2 === 0 ? 1 : -1) * 0.14;
+    scene.add(gt);
+    forestRings.push(gt);
+  }
+
+  // 2. Warhol-inspired Constellation of Nested Baubles
+  const warholCluster = new THREE.Group();
+  warholCluster.position.set(-7.5, 2.2, -5.5);
+  for (let gx = -1; gx <= 1; gx++) {
+    for (let gy = -1; gy <= 1; gy++) {
+      const miniB = createBaubleAssembly(0.48, nestedEnvMap, {
+        invertTone: (gx + gy) % 2 !== 0,
+        geometricWarp: 0.6,
+        fogDensity: 0.016
+      });
+      miniB.group.position.set(gx * 1.45, gy * 1.65, ((gx + gy) % 2) * 0.4);
+      warholCluster.add(miniB.group);
+    }
+  }
+  scene.add(warholCluster);
+
+  // 3. Impossible Infinity-Track Candy-Stripe Trains
+  const infinityTrain = buildToyTrain(4.2, 4, true);
+  infinityTrain.root.position.set(7.6, 0.2, -4.5);
+  infinityTrain.root.rotation.y = 0.6;
+  scene.add(infinityTrain.root);
+
+  // 4. Kaleidoscopic Mirrored Reindeer & Santa Squadron
+  const santa1 = buildSantaAndReindeer('geometric');
+  const santa2 = buildSantaAndReindeer('geometric');
+  scene.add(santa1.group, santa2.group);
+
+  // 5. Giant Concentric Pop-Art Celestial Halos
+  const celestialGroup = new THREE.Group();
+  for (let i = 0; i < 3; i++) {
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(11.5 + i * 1.6, 0.055, 8, 72),
+      i % 2 === 0 ? MAT.striped : MAT.concentric
+    );
+    ring.rotation.set(i * 0.85, i * 0.5, 0);
+    celestialGroup.add(ring);
+  }
+  scene.add(celestialGroup);
+
+  // 6. Cosmic Geometric Snowflakes
+  const snow = buildSnowfieldInstanced(460, 15.0, 303);
+  scene.add(snow.mesh);
+
+  // 7. Target Bauble #3 (loops recursively back into World 0's CubeRT!)
+  const targetBauble = createBaubleAssembly(1.5, nestedEnvMap, {
+    geometricWarp: 0.55,
+    fogDensity: 0.015
+  });
+  targetBauble.group.position.set(0.4, -1.6, 8.0);
+  scene.add(targetBauble.group);
+
+  const scenicPoints = [
+    new THREE.Vector3(-2.6, 1.2, -3.2),
+    new THREE.Vector3(2.8, 1.0, -3.0),
+    new THREE.Vector3(3.4, -0.5, 2.2),
+    new THREE.Vector3(-1.2, -0.8, 3.8)
+  ];
+  const scenicLooks = [
+    warholCluster.position.clone(),
+    infinityTrain.root.position.clone(),
+    new THREE.Vector3(0, -1.2, 8.0),
+    targetBauble.group.position.clone()
+  ];
+
+  return {
+    scene,
+    cubeCam,
+    cubeRT: cubeRT2,
+    targetBauble,
+    targetBasePos: targetBauble.group.position.clone(),
+    scenicPoints,
+    scenicLooks,
+    update(time, dt, cycleLevel) {
+      infinityTrain.update(time, 0.72);
+      santa1.update(time, 9.2, 0.30, 2.8, 0.28);
+      santa2.update(time + 10.5, 9.2, 0.30, -2.2, -0.28);
+      snow.update(time, dt, false);
+
+      forestRings.forEach((gt, i) => {
+        gt.rotation.y = time * (i % 2 === 0 ? 0.35 : -0.35);
+      });
+
+      warholCluster.rotation.y = Math.sin(time * 0.25) * 0.35;
+      warholCluster.children.forEach((c, idx) => {
+        c.rotation.y = time * (0.3 + (idx % 3) * 0.15);
+      });
+
+      celestialGroup.rotation.y = time * 0.05;
+      celestialGroup.rotation.x = Math.sin(time * 0.07) * 0.15;
+
+      targetBauble.group.rotation.y = time * 0.12;
+      targetBauble.sphereMat.uniforms.uWarpStrength.value = 0.55 + Math.min(cycleLevel * 0.1, 0.45);
+    }
+  };
+}
+
+// ============================================================================
+// VOID EXTERIOR SCENE (THE SOLITARY HERO BAUBLE IN EMPTY BLACKNESS)
+// ============================================================================
+function createVoidScene(envMap) {
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000000);
+
+  const heroBauble = createBaubleAssembly(2.0, envMap, {
+    longThread: true,
+    geometricWarp: 0.0,
+    fogDensity: 0.0
+  });
+  scene.add(heroBauble.group);
+
+  // Subtle drifting monochromatic dust / distant snowflakes around the bauble
+  const dustCount = 150;
+  const dustGeo = new THREE.OctahedronGeometry(0.022, 0);
+  const dustMat = createPopArtMaterial({ baseTone: 0.85, emissive: 0.75 });
+  const dust = new THREE.InstancedMesh(dustGeo, dustMat, dustCount);
+  const rand = seededRandom(999);
+  const dustData = [];
+  const dummy = new THREE.Object3D();
+
+  for (let i = 0; i < dustCount; i++) {
+    const r = 3.2 + rand() * 8.5;
+    const theta = rand() * Math.PI * 2;
+    const phi = Math.acos(2 * rand() - 1);
+    const x = r * Math.sin(phi) * Math.cos(theta);
+    const y = r * Math.cos(phi);
+    const z = r * Math.sin(phi) * Math.sin(theta);
+    const sc = 0.4 + rand() * 1.1;
+    dustData.push({ x, y, z, sc, speed: 0.08 + rand() * 0.16, phase: rand() * Math.PI * 2 });
+    dummy.position.set(x, y, z);
+    dummy.scale.setScalar(sc);
+    dummy.updateMatrix();
+    dust.setMatrixAt(i, dummy.matrix);
+  }
+  scene.add(dust);
+
+  return {
+    scene,
+    heroBauble,
+    update(time, dt) {
+      // Imperceptibly slow rotation occasionally reversing slightly
+      heroBauble.group.rotation.y = time * 0.035 + Math.sin(time * 0.11) * 0.22;
+
+      for (let i = 0; i < dustCount; i++) {
+        const d = dustData[i];
+        d.y -= d.speed * dt;
+        if (d.y < -7.5) d.y = 7.5;
+        dummy.position.set(
+          d.x + Math.sin(time * 0.35 + d.phase) * 0.18,
+          d.y,
+          d.z + Math.cos(time * 0.3 + d.phase) * 0.18
+        );
+        dummy.rotation.set(time * 0.4 + d.phase, time * 0.5, 0);
+        dummy.scale.setScalar(d.sc);
+        dummy.updateMatrix();
+        dust.setMatrixAt(i, dummy.matrix);
+      }
+      dust.instanceMatrix.needsUpdate = true;
+    }
+  };
+}
+
+// ============================================================================
+// INSTANTIATE ALL WORLDS & INITIAL CUBE WARMUP
+// ============================================================================
+const world0 = buildWorld0Internal(cubeRT1.texture);
+const world1 = buildWorld1Internal(cubeRT2.texture);
+const world2 = buildWorld2Internal(cubeRT0.texture);
+const worlds = [world0, world1, world2];
+const voidScene = createVoidScene(cubeRT0.texture);
+
+// Prime all CubeRenderTargets once at startup so no reflection is ever blank
+worlds.forEach((w) => {
+  w.update(0, 0.016, 0);
+  w.cubeCam.update(renderer, w.scene);
+});
+
+// ============================================================================
+// CINEMATIC JOURNEY STATE MACHINE (SEAMLESS INFINITE RECURSION)
+// ============================================================================
+let state = 'EXTERIOR'; // 'EXTERIOR' -> 'INTERIOR' (loops endlessly deeper)
+let extTime = 0;
+const EXT_DURATION = 34.0;
+
+let activeWorldIdx = 0;
+let depthLevel = 0;
+let intTime = 0;
+const INT_DURATION = 26.0;
+
+let flightCurve = null;
+let lookCurve = null;
+let approachStartPos = new THREE.Vector3();
+let entryForwardDir = new THREE.Vector3(0, 0, -1);
+
+function enterWorld(worldIdx, forwardDir) {
+  activeWorldIdx = worldIdx;
+  intTime = 0;
+  entryForwardDir.copy(forwardDir).normalize();
+
+  const w = worlds[worldIdx];
+
+  // Apply subtle surreal mutation on deeper cycles so infinity never feels static
+  if (depthLevel > 0) {
+    const twistAngle = (depthLevel * 0.55) % (Math.PI * 2);
+    w.scene.rotation.y = twistAngle;
+  }
+
+  // Compute target bauble's live world position
+  w.targetBauble.group.updateMatrixWorld(true);
+  const targetPos = new THREE.Vector3();
+  w.targetBauble.group.getWorldPosition(targetPos);
+
+  // Safe approach start right in front of targetBauble (facing toward origin)
+  const dirFromCenter = targetPos.clone().normalize();
+  const rB = w.targetBauble.radius;
+  approachStartPos.copy(targetPos).sub(dirFromCenter.clone().multiplyScalar(rB * 3.4));
+
+  // Build C1-continuous safe flight spline inside the open central corridor
+  const p0 = new THREE.Vector3(0, 0, 0);
+  const p1 = entryForwardDir.clone().multiplyScalar(2.4);
+  const sideAxis = new THREE.Vector3().crossVectors(entryForwardDir, new THREE.Vector3(0, 1, 0)).normalize();
+  if (sideAxis.lengthSq() < 0.01) sideAxis.set(1, 0, 0);
+  const p2 = entryForwardDir.clone().multiplyScalar(3.5).add(sideAxis.multiplyScalar(1.2));
+
+  // Transform world scenic points by scene rotation
+  const rotMat = new THREE.Matrix4().makeRotationY(w.scene.rotation.y);
+  const pts = [p0, p1, p2];
+  w.scenicPoints.forEach((sp) => {
+    pts.push(sp.clone().applyMatrix4(rotMat));
+  });
+  pts.push(approachStartPos.clone());
+  flightCurve = new THREE.CatmullRomCurve3(pts);
+
+  const lPts = [entryForwardDir.clone().multiplyScalar(10.0)];
+  w.scenicLooks.forEach((sl) => {
+    lPts.push(sl.clone().applyMatrix4(rotMat));
+  });
+  lPts.push(targetPos.clone());
+  lookCurve = new THREE.CatmullRomCurve3(lPts);
+}
+
+// ============================================================================
+// RESIZE HANDLER
+// ============================================================================
+window.addEventListener('resize', () => {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+  renderer.setPixelRatio(dpr);
+  renderer.setSize(w, h);
+  renderer.getDrawingBufferSize(drawingSize);
+  sharedUniforms.uResolution.value.copy(drawingSize);
+
+  portalScreenRT.setSize(drawingSize.x, drawingSize.y);
+
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  portalCam.aspect = w / h;
+  portalCam.updateProjectionMatrix();
+});
+
+// ============================================================================
+// MAIN ANIMATION LOOP
+// ============================================================================
+const clock = new THREE.Clock();
+let frameCount = 0;
+const tmpPos = new THREE.Vector3();
+const tmpLook = new THREE.Vector3();
+const tmpTargetWorld = new THREE.Vector3();
+const tmpQuat = new THREE.Quaternion();
+const tmpMat = new THREE.Matrix4();
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const elapsed = clock.elapsedTime;
+  sharedUniforms.uTime.value = elapsed;
+  frameCount++;
+
+  // 1. Update all 3 interior worlds so nested reflections stay continuously animated
+  for (let i = 0; i < worlds.length; i++) {
+    worlds[i].update(elapsed, dt, depthLevel);
+    worlds[i].targetBauble.sphereMat.uniforms.uPortalProgress.value = 0.0;
+  }
+
+  // 2. Update CubeRenderTargets smartly:
+  //    Always update the primarily viewed world's CubeRT every frame;
+  //    Round-robin update the next deeper recursive CubeRT every other frame!
+  const primaryCubeIdx = state === 'EXTERIOR' ? 0 : (activeWorldIdx + 1) % 3;
+  const secondaryCubeIdx = (primaryCubeIdx + 1) % 3;
+
+  worlds[primaryCubeIdx].cubeCam.update(renderer, worlds[primaryCubeIdx].scene);
+  if (frameCount % 2 === 0) {
+    worlds[secondaryCubeIdx].cubeCam.update(renderer, worlds[secondaryCubeIdx].scene);
+  } else {
+    const tertiaryCubeIdx = (primaryCubeIdx + 2) % 3;
+    worlds[tertiaryCubeIdx].cubeCam.update(renderer, worlds[tertiaryCubeIdx].scene);
+  }
+
+  // 3. Camera choreography & seamless optical portal rendering
+  let portalProgress = 0.0;
+
+  if (state === 'EXTERIOR') {
+    voidScene.update(elapsed, dt);
+    extTime += dt;
+    const t = Math.min(extTime / EXT_DURATION, 1.0);
+
+    // Wide contemplative pause -> gradual approach -> close orbit -> smooth dive
+    let dist, angle, elev;
+    if (t < 0.20) {
+      const k = easeInOutSine(t / 0.20);
+      dist = 8.6 - k * 0.55;
+      angle = k * 0.08;
+      elev = 0.35 - k * 0.05;
+    } else if (t < 0.58) {
+      const k = easeInOutCubic((t - 0.20) / 0.38);
+      dist = 8.05 - k * 4.35; // 8.05 -> 3.70
+      angle = 0.08 + k * 0.72;
+      elev = 0.30 - k * 0.45;
+    } else if (t < 0.80) {
+      const k = easeInOutSine((t - 0.58) / 0.22);
+      dist = 3.70 - k * 0.92; // 3.70 -> 2.78 (close inspection of halftone & nested baubles)
+      angle = 0.80 + k * 0.58;
+      elev = -0.15 + k * 0.28;
+    } else {
+      const k = easeInOutCubic((t - 0.80) / 0.20);
+      dist = 2.78 - k * 0.64; // 2.78 -> 2.14 (fills 100% of screen without clipping surface R=2.0)
+      angle = 1.38 + k * 0.14;
+      elev = 0.13 * (1.0 - k);
+    }
+
+    // Subtle organic camera breathing drift (fades out cleanly before portal entry)
+    const swayFade = 1.0 - smoothstep(0.75, 0.92, t);
+    const swayX = Math.sin(elapsed * 0.24) * 0.18 * swayFade;
+    const swayY = Math.cos(elapsed * 0.19) * 0.10 * swayFade;
+
+    camera.position.set(
+      Math.sin(angle) * dist + swayX,
+      elev + swayY,
+      Math.cos(angle) * dist
+    );
+    camera.lookAt(0, 0, 0);
+
+    // Update hero bauble shader uniforms
+    const heroMat = voidScene.heroBauble.sphereMat;
+    heroMat.uniforms.uCamDist.value = camera.position.length();
+    heroMat.uniforms.uWarpStrength.value = smoothstep(5.5, 2.5, camera.position.length()) * 0.32;
+
+    if (t > 0.84) {
+      portalProgress = smoothstep(0.84, 1.0, t);
+      heroMat.uniforms.uPortalProgress.value = portalProgress;
+
+      // Render World 0 from (0,0,0) matching exact camera orientation for zero-seam entry
+      portalCam.position.set(0, 0, 0);
+      portalCam.quaternion.copy(camera.quaternion);
+      renderer.setRenderTarget(portalScreenRT);
+      renderer.clear();
+      renderer.render(world0.scene, portalCam);
+      renderer.setRenderTarget(null);
+    } else {
+      heroMat.uniforms.uPortalProgress.value = 0.0;
+    }
+
+    renderer.render(voidScene.scene, camera);
+
+    if (t >= 1.0) {
+      state = 'INTERIOR';
+      const fwd = new THREE.Vector3();
+      camera.getWorldDirection(fwd);
+      enterWorld(0, fwd);
+    }
+  } else {
+    // INTERIOR STATE
+    const w = worlds[activeWorldIdx];
+    const nextIdx = (activeWorldIdx + 1) % 3;
+    const nextW = worlds[nextIdx];
+
+    intTime += dt;
+    const u = Math.min(intTime / INT_DURATION, 1.0);
+
+    w.targetBauble.group.updateMatrixWorld(true);
+    w.targetBauble.group.getWorldPosition(tmpTargetWorld);
+    const rB = w.targetBauble.radius;
+
+    if (u < 0.78) {
+      const k = u / 0.78;
+      // Smooth slight ease at both ends of spline
+      const ek = k * k * (3.0 - 2.0 * k) * 0.25 + k * 0.75;
+      flightCurve.getPoint(ek, tmpPos);
+      lookCurve.getPoint(ek, tmpLook);
+
+      // Blend look direction smoothly from initial entryForward at u=0
+      if (u < 0.16) {
+        const blend = smoothstep(0.0, 0.16, u);
+        const entryLook = tmpPos.clone().add(entryForwardDir.clone().multiplyScalar(10.0));
+        tmpLook.lerpVectors(entryLook, tmpLook, blend);
+      }
+
+      // Gently pre-lock look onto targetBauble as we finish the scenic sweep
+      if (u > 0.64) {
+        const lockBlend = smoothstep(0.64, 0.78, u);
+        tmpLook.lerp(tmpTargetWorld, lockBlend);
+      }
+
+      camera.position.copy(tmpPos);
+      tmpMat.lookAt(camera.position, tmpLook, camera.up);
+      tmpQuat.setFromRotationMatrix(tmpMat);
+      if (u < 0.05) {
+        camera.quaternion.slerp(tmpQuat, 0.25);
+      } else {
+        camera.quaternion.slerp(tmpQuat, 1.0 - Math.exp(-4.5 * dt));
+      }
+    } else {
+      // Smooth final approach directly into the nested Target Bauble
+      const k = easeInOutCubic((u - 0.78) / 0.22);
+      const startVec = approachStartPos.clone().sub(tmpTargetWorld);
+      const dir = startVec.clone().normalize();
+      const startDist = startVec.length();
+      const endDist = rB * 1.075; // Fills 100% of screen safely outside sphere surface
+      const curDist = THREE.MathUtils.lerp(startDist, endDist, k);
+
+      camera.position.copy(tmpTargetWorld).addScaledVector(dir, curDist);
+      tmpMat.lookAt(camera.position, tmpTargetWorld, camera.up);
+      tmpQuat.setFromRotationMatrix(tmpMat);
+      camera.quaternion.slerp(tmpQuat, 1.0 - Math.exp(-8.0 * dt));
+    }
+
+    const camDistToTarget = camera.position.distanceTo(tmpTargetWorld);
+    const targetMat = w.targetBauble.sphereMat;
+    targetMat.uniforms.uCamDist.value = camDistToTarget;
+
+    if (u > 0.85) {
+      portalProgress = smoothstep(0.85, 1.0, u);
+      targetMat.uniforms.uPortalProgress.value = portalProgress;
+
+      portalCam.position.set(0, 0, 0);
+      portalCam.quaternion.copy(camera.quaternion);
+      renderer.setRenderTarget(portalScreenRT);
+      renderer.clear();
+      renderer.render(nextW.scene, portalCam);
+      renderer.setRenderTarget(null);
+    } else {
+      targetMat.uniforms.uPortalProgress.value = 0.0;
+    }
+
+    renderer.render(w.scene, camera);
+
+    if (u >= 1.0) {
+      depthLevel++;
+      const fwd = new THREE.Vector3();
+      camera.getWorldDirection(fwd);
+      enterWorld(nextIdx, fwd);
+    }
+  }
+}
+
+animate();
+</script>
+</body>
+</html>

@@ -1,0 +1,1388 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Bauble of Infinite Christmases</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  body { cursor: none; }
+  canvas { display: block; width: 100%; height: 100%; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'three';
+
+/* =====================================================================
+   THE BAUBLE OF INFINITE CHRISTMASES
+   A single mirrored bauble hangs in a void. Its surface reflects a
+   cube-map "universe" of miniature Christmas worlds, which also contain
+   smaller baubles that reflect the previous frame of that same universe:
+   a ping-pong feedback loop that gives endless, shifting recursion.
+   Everything is strictly greyscale.
+   ===================================================================== */
+
+THREE.ColorManagement.enabled = false;
+
+const PI = Math.PI, TAU = PI * 2;
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const mix = (a, b, t) => a + (b - a) * t;
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const smoother = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * t * (t * (t * 6 - 15) + 10); };
+function rngFrom(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function randomUnit(rng) {
+  const y = rng() * 2 - 1, a = rng() * TAU, r = Math.sqrt(1 - y * y);
+  return new THREE.Vector3(Math.cos(a) * r, y, Math.sin(a) * r);
+}
+
+/* ---------------------------------------------------------------------
+   Renderer and quality control
+   --------------------------------------------------------------------- */
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+renderer.setClearColor(0x000000, 1);
+document.body.appendChild(renderer.domElement);
+
+const QUALITY_LEVELS = [
+  { cubeRes: 512, dprCap: 2.0, cubeEvery: 1 },
+  { cubeRes: 384, dprCap: 1.5, cubeEvery: 1 },
+  { cubeRes: 256, dprCap: 1.25, cubeEvery: 2 },
+  { cubeRes: 192, dprCap: 1.0, cubeEvery: 2 },
+];
+let qualityLevel = 0;
+
+/* Uniform objects shared between many materials */
+const U = {
+  time: { value: 0 },
+  scaleCube: { value: 256 },      // pixels per world unit at depth 1 (cube faces, 90 degrees)
+  scaleMain: { value: 600 },
+  light: { value: new THREE.Vector3(0.5, 0.8, 0.6).normalize() },
+  cellCube: { value: 4.3 },
+  prCube: { value: 1 },
+  env: { value: null },           // previous-frame universe, read by in-world baubles
+  mainEnv: { value: null },       // freshest universe, read by the hero bauble
+};
+
+/* ---------------------------------------------------------------------
+   Shaders: toon fill, ink outline, dome, points
+   --------------------------------------------------------------------- */
+const FILL_VS = /* glsl */`
+attribute float aTone;
+attribute float aEmit;
+varying vec3 vN;
+varying float vTone;
+varying float vEmit;
+varying vec3 vP;
+void main() {
+  vP = position;
+  vTone = aTone;
+  vEmit = aEmit;
+  vN = normalize(mat3(modelMatrix) * normal);
+  gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0);
+}`;
+
+const FILL_FS = /* glsl */`
+precision highp float;
+uniform vec3 uLight;
+uniform float uCell;
+uniform float uDouble;
+uniform vec3 uCutC;
+uniform float uCutR;
+varying vec3 vN;
+varying float vTone;
+varying float vEmit;
+varying vec3 vP;
+void main() {
+  if (uCutR > 0.0 && length(vP - uCutC) < uCutR) discard;
+  vec3 N = normalize(vN);
+  bool front = gl_FrontFacing;
+  if (!front) N = -N;
+  float d = dot(N, normalize(uLight));
+  float tone = vTone;
+  vec2 g = mat2(0.7071, -0.7071, 0.7071, 0.7071) * gl_FragCoord.xy / uCell;
+  float dd = length(fract(g) - 0.5);
+  float v;
+  if (d > 0.3) {
+    v = tone;
+    if (d > 0.93 && tone > 0.4) v = min(1.0, tone + 0.28);
+  } else if (d > -0.2) {
+    v = tone * 0.72;
+  } else {
+    v = tone * 0.55;
+    if (dd < 0.28) v *= 0.3;
+  }
+  if (uDouble > 0.5 && !front) v = tone * 0.28;
+  if (vEmit > 0.5) v = 1.0;
+  gl_FragColor = vec4(vec3(clamp(v, 0.0, 1.0)), 1.0);
+}`;
+
+const HULL_VS = /* glsl */`
+attribute vec3 aCentre;
+attribute float aW;
+void main() {
+  vec3 dir = position - aCentre;
+  float l = length(dir);
+  dir = l > 0.0001 ? dir / l : vec3(0.0, 1.0, 0.0);
+  vec3 p = position + dir * aW;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+}`;
+const HULL_FS = /* glsl */`
+void main() { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); }`;
+
+function makeFill(isDouble, cellUniform) {
+  return new THREE.ShaderMaterial({
+    vertexShader: FILL_VS,
+    fragmentShader: FILL_FS,
+    side: isDouble ? THREE.DoubleSide : THREE.FrontSide,
+    uniforms: {
+      uLight: U.light,
+      uCell: cellUniform || U.cellCube,
+      uDouble: { value: isDouble ? 1 : 0 },
+      uCutC: { value: new THREE.Vector3(0, 0, 0) },
+      uCutR: { value: 0 },
+    },
+  });
+}
+const fillMat = makeFill(false);
+const fillDouble = makeFill(true);
+const hullMat = new THREE.ShaderMaterial({
+  vertexShader: HULL_VS, fragmentShader: HULL_FS, side: THREE.BackSide,
+});
+
+const domeMat = new THREE.ShaderMaterial({
+  side: THREE.BackSide,
+  depthWrite: false,
+  uniforms: { uTime: U.time },
+  vertexShader: /* glsl */`
+    varying vec3 vD;
+    void main() {
+      vD = position;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }`,
+  fragmentShader: /* glsl */`
+    precision highp float;
+    uniform float uTime;
+    varying vec3 vD;
+    float hash21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+    void main() {
+      vec3 d = normalize(vD);
+      float c = cos(uTime * 0.02), s = sin(uTime * 0.02);
+      d = vec3(c * d.x + s * d.z, d.y, -s * d.x + c * d.z);
+      float a = atan(d.x, d.z);
+      float ring1 = step(0.5, fract(acos(clamp(dot(d, normalize(vec3(0.3, 0.9, 0.2))), -1.0, 1.0)) * 6.0));
+      float ring2 = step(0.5, fract(acos(clamp(dot(d, normalize(vec3(-0.8, -0.2, 0.5))), -1.0, 1.0)) * 5.0));
+      float rays = step(0.5, fract(a * 16.0 / 6.2831853 + d.y * 1.5));
+      vec2 uv = vec2(a * 8.0, d.y * 14.0);
+      vec2 cell = fract(uv) - 0.5;
+      float dots = step(length(cell), 0.26 + 0.12 * sin(uTime * 0.3 + floor(uv.y)));
+      float v = 0.05 + 0.07 * ring1 + 0.06 * ring2 + 0.07 * rays + 0.09 * dots;
+      vec3 sp = d * 70.0;
+      vec3 id = floor(sp);
+      float h = hash21(id.xy + id.z * 17.0);
+      vec3 f = fract(sp) - 0.5;
+      if (h > 0.985 && length(f) < 0.18) v = 1.0;
+      gl_FragColor = vec4(vec3(v), 1.0);
+    }`,
+});
+
+/* Falling snow (in-world, local to each island) */
+const snowMat = new THREE.ShaderMaterial({
+  uniforms: { uTime: U.time, uScale: U.scaleCube, uH: { value: 3.2 } },
+  vertexShader: /* glsl */`
+    attribute float aSeed;
+    uniform float uTime;
+    uniform float uScale;
+    uniform float uH;
+    void main() {
+      float sp = 0.22 + 0.3 * fract(aSeed * 13.7);
+      float y = mod(position.y - uTime * sp, uH);
+      vec3 p = vec3(position.x + sin(uTime * 0.7 + aSeed * 40.0) * 0.13,
+                    y - 0.15,
+                    position.z + cos(uTime * 0.55 + aSeed * 23.0) * 0.13);
+      vec4 mv = modelViewMatrix * vec4(p, 1.0);
+      gl_Position = projectionMatrix * mv;
+      float sz = 0.04 + 0.05 * fract(aSeed * 91.3);
+      gl_PointSize = clamp(sz * uScale / max(-mv.z, 0.01), 1.0, 40.0);
+    }`,
+  fragmentShader: /* glsl */`
+    void main() {
+      float d = length(gl_PointCoord - 0.5);
+      if (d > 0.5) discard;
+      gl_FragColor = vec4(vec3(d > 0.34 ? 0.0 : 1.0), 1.0);
+    }`,
+});
+
+/* Chimney smoke puffs */
+const puffMat = new THREE.ShaderMaterial({
+  uniforms: { uTime: U.time, uScale: U.scaleCube },
+  vertexShader: /* glsl */`
+    attribute float aSeed;
+    uniform float uTime;
+    uniform float uScale;
+    varying float vG;
+    void main() {
+      float t = fract(uTime * 0.16 + aSeed);
+      vec3 p = position;
+      p.y += t * 0.9;
+      p.x += sin(t * 5.0 + aSeed * 30.0) * 0.07 * t + t * 0.15;
+      float sz = mix(0.05, 0.22, t) * (1.0 - smoothstep(0.75, 1.0, t));
+      vec4 mv = modelViewMatrix * vec4(p, 1.0);
+      gl_Position = projectionMatrix * mv;
+      gl_PointSize = clamp(sz * uScale / max(-mv.z, 0.01), 0.0, 64.0);
+      vG = mix(0.98, 0.55, t);
+    }`,
+  fragmentShader: /* glsl */`
+    varying float vG;
+    void main() {
+      float d = length(gl_PointCoord - 0.5);
+      if (d > 0.5) discard;
+      gl_FragColor = vec4(vec3(d > 0.36 ? 0.0 : vG), 1.0);
+    }`,
+});
+
+/* ---------------------------------------------------------------------
+   Geometry library and merge builder (one draw call per island part)
+   --------------------------------------------------------------------- */
+function ni(g) {
+  const r = g.index ? g.toNonIndexed() : g;
+  r.computeBoundingSphere();
+  return r;
+}
+const G = {
+  box: ni(new THREE.BoxGeometry(1, 1, 1)),
+  cyl: ni(new THREE.CylinderGeometry(1, 1, 1, 16, 1)),
+  cone: ni(new THREE.ConeGeometry(1, 1, 16, 1)),
+  cone4: ni(new THREE.ConeGeometry(1, 1, 4, 1)),
+  cone5: ni(new THREE.ConeGeometry(1, 1, 5, 1)),
+  tri: ni(new THREE.CylinderGeometry(1, 1, 1, 3, 1)),
+  sph: ni(new THREE.SphereGeometry(1, 12, 8)),
+  sphHi: ni(new THREE.SphereGeometry(1, 28, 18)),
+  torus: ni(new THREE.TorusGeometry(1, 0.045, 6, 30)),
+  torusFat: ni(new THREE.TorusGeometry(1, 0.14, 8, 28)),
+  shell: ni(new THREE.SphereGeometry(1, 40, 26)),
+};
+
+const M4 = new THREE.Matrix4(), NM = new THREE.Matrix3();
+const QQ = new THREE.Quaternion(), EU = new THREE.Euler(0, 0, 0, 'YXZ');
+const VA = new THREE.Vector3(), VB = new THREE.Vector3(), VC = new THREE.Vector3(), VD = new THREE.Vector3();
+const ZERO3 = [0, 0, 0];
+
+class Builder {
+  constructor() {
+    this.P = []; this.N = []; this.T = []; this.E = []; this.C = []; this.W = [];
+    this.stack = []; this.cur = null;
+  }
+  at(x, y, z, ry = 0, s = 1) {
+    return this._push(VA.set(x, y, z), QQ.setFromEuler(EU.set(0, ry, 0)), s);
+  }
+  atQ(x, y, z, q, s = 1) {
+    return this._push(VA.set(x, y, z), q, s);
+  }
+  _push(p, q, s) {
+    const m = new THREE.Matrix4().compose(p, q, VB.set(s, s, s));
+    if (this.cur) m.premultiply(this.cur);
+    this.stack.push(this.cur);
+    this.cur = m;
+    return this;
+  }
+  end() { this.cur = this.stack.pop() || null; return this; }
+  pt(x, y, z) {
+    VC.set(x, y, z);
+    if (this.cur) VC.applyMatrix4(this.cur);
+    return [VC.x, VC.y, VC.z];
+  }
+  add(geo, x, y, z, sx, sy, sz, tone, o) {
+    o = o || {};
+    if (o.q) QQ.copy(o.q);
+    else { const r = o.r || ZERO3; QQ.setFromEuler(EU.set(r[0], r[1], r[2])); }
+    M4.compose(VA.set(x, y, z), QQ, VB.set(sx, sy, sz));
+    if (this.cur) M4.premultiply(this.cur);
+    NM.getNormalMatrix(M4);
+    const e = M4.elements, cx = e[12], cy = e[13], cz = e[14];
+    const ps = this.cur ? this.cur.getMaxScaleOnAxis() : 1;
+    const rr = geo.boundingSphere.radius * M4.getMaxScaleOnAxis();
+    const w = (o.w !== undefined) ? o.w * ps : (0.014 + 0.04 * rr);
+    const emit = o.emit || 0;
+    const pa = geo.attributes.position.array, na = geo.attributes.normal.array;
+    const n = pa.length / 3;
+    for (let i = 0; i < n; i++) {
+      VC.set(pa[i * 3], pa[i * 3 + 1], pa[i * 3 + 2]).applyMatrix4(M4);
+      this.P.push(VC.x, VC.y, VC.z);
+      VD.set(na[i * 3], na[i * 3 + 1], na[i * 3 + 2]).applyMatrix3(NM).normalize();
+      this.N.push(VD.x, VD.y, VD.z);
+      this.T.push(tone); this.E.push(emit);
+      this.C.push(cx, cy, cz); this.W.push(w);
+    }
+    return this;
+  }
+  box(x, y, z, w, h, d, t, o) { return this.add(G.box, x, y, z, w, h, d, t, o); }
+  cyl(x, y, z, r, h, t, o) { return this.add(G.cyl, x, y, z, r, h, r, t, o); }
+  cone(x, y, z, r, h, t, o) { return this.add(G.cone, x, y, z, r, h, r, t, o); }
+  pyr(x, y, z, w, h, t, o) {
+    o = Object.assign({ r: [0, PI / 4, 0] }, o || {});
+    return this.add(G.cone4, x, y, z, w * 0.72, h, w * 0.72, t, o);
+  }
+  gable(x, topY, z, w, h, len, t, o) {
+    o = Object.assign({ r: [-PI / 2, 0, 0] }, o || {});
+    return this.add(G.tri, x, topY + h / 3, z, w / 1.732, len, h / 1.5, t, o);
+  }
+  sph(x, y, z, r, t, o) { return this.add(r > 0.35 ? G.sphHi : G.sph, x, y, z, r, r, r, t, o); }
+  ell(x, y, z, rx, ry, rz, t, o) {
+    return this.add(Math.max(rx, ry, rz) > 0.35 ? G.sphHi : G.sph, x, y, z, rx, ry, rz, t, o);
+  }
+  tor(x, y, z, r, t, o) { return this.add(G.torus, x, y, z, r, r, r, t, o); }
+  torF(x, y, z, r, t, o) { return this.add(G.torusFat, x, y, z, r, r, r, t, o); }
+  build() {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(this.P, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(this.N, 3));
+    g.setAttribute('aTone', new THREE.Float32BufferAttribute(this.T, 1));
+    g.setAttribute('aEmit', new THREE.Float32BufferAttribute(this.E, 1));
+    g.setAttribute('aCentre', new THREE.Float32BufferAttribute(this.C, 3));
+    g.setAttribute('aW', new THREE.Float32BufferAttribute(this.W, 1));
+    g.computeBoundingSphere();
+    return g;
+  }
+}
+
+function mk(geo, isDouble) {
+  const grp = new THREE.Group();
+  grp.add(new THREE.Mesh(geo, isDouble ? fillDouble : fillMat));
+  if (!isDouble) grp.add(new THREE.Mesh(geo, hullMat));
+  return grp;
+}
+
+/* ---------------------------------------------------------------------
+   Miniature Christmas props
+   --------------------------------------------------------------------- */
+function starburst(b, x, y, z, s, tone, emit) {
+  const o = emit ? { emit: 1, w: 0.006 * s } : { w: 0.006 * s };
+  for (let i = 0; i < 5; i++) {
+    const phi = PI / 2 + i * TAU / 5, th = phi - PI / 2;
+    b.cone(x + Math.cos(phi) * 0.4 * s, y + Math.sin(phi) * 0.4 * s, z, 0.2 * s, 0.85 * s, tone, Object.assign({ r: [0, 0, th] }, o));
+  }
+  b.sph(x, y, z, 0.28 * s, emit ? 1 : tone, o);
+}
+
+function baseDisc(b, R, tone) {
+  b.cyl(0, -0.1, 0, R, 0.2, tone === undefined ? 0.96 : tone, { w: 0.03 });
+  b.cyl(0, -0.17, 0, R * 1.006, 0.035, 0.12, { w: -0.002 });
+  b.cone(0, -0.2 - R * 0.42, 0, R * 0.97, R * 0.84, 0.24, { r: [PI, 0, 0], w: 0.035 });
+  b.cone(R * 0.3, -0.2 - R * 0.62, R * 0.1, R * 0.35, R * 0.5, 0.14, { r: [PI, 0, 0], w: 0.03 });
+}
+
+function pine(b, s, tone, snow) {
+  b.cyl(0, 0.07 * s, 0, 0.04 * s, 0.14 * s, 0.12, { w: 0.008 * s });
+  for (let i = 0; i < 3; i++) {
+    const r = (0.27 - i * 0.065) * s, h = 0.32 * s, y = (0.14 + i * 0.2) * s + h / 2;
+    b.cone(0, y, 0, r, h, tone, { w: 0.012 * s });
+    if (snow !== false) {
+      const f = 0.55;
+      b.cone(0, y + h * (1 - f) / 2, 0, r * f * 1.05, h * f, 0.97, { w: -0.002 });
+    }
+  }
+}
+
+function xmasTree(b, s, rng) {
+  b.cyl(0, 0.1 * s, 0, 0.07 * s, 0.2 * s, 0.14, { w: 0.01 * s });
+  const tiers = 5;
+  for (let k = 0; k < tiers; k++) {
+    const r = (0.85 - k * 0.14) * s, h = 0.62 * s, yb = (0.18 + k * 0.4) * s;
+    b.cone(0, yb + h / 2, 0, r, h, k % 2 ? 0.34 : 0.5, { w: 0.02 * s });
+    b.torF(0, yb + h * 0.3, 0, r * 0.7, 0.95, { r: [PI / 2, 0, 0], w: 0.004 * s });
+    const m = 8 - k;
+    for (let i = 0; i < m; i++) {
+      const a = i / m * TAU + k * 0.5;
+      const rad = r * 0.84;
+      const lit = rng() < 0.3;
+      b.sph(Math.cos(a) * rad, yb + h * 0.16, Math.sin(a) * rad, 0.07 * s,
+        [0.04, 0.96, 0.58][(i + k) % 3], lit ? { emit: 1, w: 0.012 * s } : { w: 0.012 * s });
+    }
+  }
+  starburst(b, 0, (0.18 + tiers * 0.4) * s + 0.08 * s, 0, 0.3 * s, 1, true);
+}
+
+function present(b, x, z, s, tone, ry) {
+  b.at(x, 0, z, ry, s);
+  b.box(0, 0.1, 0, 0.22, 0.2, 0.22, tone, { w: 0.012 });
+  b.box(0, 0.1, 0, 0.235, 0.205, 0.04, tone > 0.5 ? 0.08 : 0.96, { w: -0.002 });
+  b.box(0, 0.1, 0, 0.04, 0.205, 0.235, tone > 0.5 ? 0.08 : 0.96, { w: -0.002 });
+  b.end();
+}
+
+function lamp(b, h) {
+  h = h || 0.9;
+  b.cyl(0, h / 2, 0, 0.025, h, 0.1, { w: 0.006 });
+  b.cyl(0, 0.03, 0, 0.06, 0.06, 0.1, { w: 0.008 });
+  b.sph(0, h + 0.05, 0, 0.07, 1, { emit: 1, w: 0.02 });
+  b.tor(0, h + 0.05, 0, 0.14, 1, { r: [PI / 2, 0, 0], emit: 1, w: -0.001 });
+  b.tor(0, h + 0.05, 0, 0.2, 0.85, { r: [PI / 2, 0, 0], emit: 1, w: -0.001 });
+}
+
+function snowman(b) {
+  b.sph(0, 0.2, 0, 0.2, 0.96);
+  b.sph(0, 0.52, 0, 0.15, 0.96);
+  b.sph(0, 0.77, 0, 0.11, 0.96);
+  b.sph(-0.04, 0.8, 0.095, 0.014, 0.0, { w: 0.003 });
+  b.sph(0.04, 0.8, 0.095, 0.014, 0.0, { w: 0.003 });
+  b.cone(0, 0.765, 0.15, 0.02, 0.12, 0.62, { r: [PI / 2, 0, 0], w: 0.004 });
+  b.cyl(0, 0.9, 0, 0.075, 0.12, 0.08, { w: 0.01 });
+  b.cyl(0, 0.845, 0, 0.12, 0.02, 0.08, { w: 0.006 });
+  b.tor(0, 0.66, 0, 0.115, 0.3, { r: [PI / 2, 0, 0], w: 0.006 });
+  b.cyl(-0.19, 0.55, 0, 0.012, 0.28, 0.2, { r: [0, 0, 1.0], w: 0.004 });
+  b.cyl(0.19, 0.55, 0, 0.012, 0.28, 0.2, { r: [0, 0, -1.0], w: 0.004 });
+  for (let i = 0; i < 3; i++) b.sph(0, 0.36 + i * 0.1, 0.142 - i * 0.012, 0.016, 0.06, { w: 0.003 });
+}
+
+function house(b, rng, smoke) {
+  const w = 0.34 + rng() * 0.16, h = 0.28 + rng() * 0.2, d = w * (1.0 + rng() * 0.4);
+  const tone = [0.5, 0.68, 0.34, 0.8][(rng() * 4) | 0];
+  b.box(0, h / 2, 0, w, h, d, tone);
+  b.gable(0, h, 0, w * 1.1, h * 0.75, d * 1.12, 0.97);
+  b.box(-w * 0.22, h * 0.6, d / 2 + 0.004, w * 0.2, h * 0.28, 0.012, 1, { emit: 1, w: -0.003 });
+  b.box(w * 0.22, h * 0.6, d / 2 + 0.004, w * 0.2, h * 0.28, 0.012, 1, { emit: 1, w: -0.003 });
+  b.box(0, h * 0.2, d / 2 + 0.004, w * 0.16, h * 0.4, 0.012, 0.05, { w: -0.003 });
+  b.box(w / 2 + 0.004, h * 0.6, 0, 0.012, h * 0.28, d * 0.22, 1, { emit: 1, w: -0.003 });
+  b.box(-w / 2 - 0.004, h * 0.6, 0, 0.012, h * 0.28, d * 0.22, 1, { emit: 1, w: -0.003 });
+  const cx = w * 0.26, cz = -d * 0.2;
+  b.box(cx, h + h * 0.5, cz, 0.08, 0.24, 0.08, 0.28, { w: 0.008 });
+  b.box(cx, h + h * 0.5 + 0.13, cz, 0.11, 0.03, 0.11, 0.97, { w: 0.004 });
+  if (smoke) smoke.push(b.pt(cx, h + h * 0.5 + 0.16, cz));
+}
+
+function church(b, smoke) {
+  b.box(0, 0.3, 0, 0.5, 0.6, 0.8, 0.72);
+  b.gable(0, 0.6, 0, 0.58, 0.3, 0.86, 0.97);
+  b.box(0, 0.55, 0.5, 0.3, 1.1, 0.3, 0.6);
+  b.pyr(0, 1.1 + 0.25, 0.5, 0.3, 0.5, 0.18, { w: 0.01 });
+  b.box(0, 1.1 + 0.62, 0.5, 0.02, 0.2, 0.02, 0.97, { w: 0.004 });
+  b.box(0, 1.1 + 0.66, 0.5, 0.1, 0.02, 0.02, 0.97, { w: 0.004 });
+  b.cyl(0, 0.82, 0.655, 0.07, 0.012, 1, { r: [PI / 2, 0, 0], emit: 1, w: -0.002 });
+  b.box(0, 0.13, 0.655, 0.12, 0.26, 0.012, 0.05, { w: -0.003 });
+  for (let i = 0; i < 2; i++) {
+    b.box(0.255, 0.35, -0.2 + i * 0.35, 0.012, 0.22, 0.1, 1, { emit: 1, w: -0.003 });
+    b.box(-0.255, 0.35, -0.2 + i * 0.35, 0.012, 0.22, 0.1, 1, { emit: 1, w: -0.003 });
+  }
+}
+
+function stall(b) {
+  b.box(0, 0.2, 0, 0.62, 0.4, 0.34, 0.45);
+  b.box(0, 0.42, 0.05, 0.66, 0.03, 0.38, 0.9, { w: 0.006 });
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    b.cyl(sx * 0.3, 0.57, sz * 0.15, 0.015, 0.96, 0.15, { w: 0.005 });
+  }
+  for (let i = 0; i < 7; i++) {
+    b.box(-0.33 + i * 0.11, 1.07, 0, 0.11, 0.04, 0.44, i % 2 ? 0.08 : 0.96, { r: [0.16, 0, 0], w: 0.006 });
+  }
+  for (let i = 0; i < 5; i++) b.sph(-0.24 + i * 0.12, 0.49, 0.05, 0.04, [0.95, 0.3, 0.7, 0.1, 0.85][i], { w: 0.008 });
+  b.sph(-0.3, 0.88, 0.17, 0.035, 1, { emit: 1, w: 0.008 });
+  b.sph(0.3, 0.88, 0.17, 0.035, 1, { emit: 1, w: 0.008 });
+}
+
+function locoParts(b) {
+  b.box(0, 0.14, 0, 0.2, 0.16, 0.4, 0.22);
+  b.cyl(0, 0.2, 0.1, 0.085, 0.3, 0.5, { r: [PI / 2, 0, 0] });
+  b.cyl(0, 0.34, 0.17, 0.035, 0.12, 0.15, { w: 0.006 });
+  b.box(0, 0.26, -0.12, 0.22, 0.16, 0.16, 0.4);
+  b.box(0.115, 0.27, -0.12, 0.012, 0.07, 0.07, 1, { emit: 1, w: -0.003 });
+  b.box(-0.115, 0.27, -0.12, 0.012, 0.07, 0.07, 1, { emit: 1, w: -0.003 });
+  b.sph(0, 0.2, 0.215, 0.03, 1, { emit: 1, w: 0.006 });
+  for (const sx of [-1, 1]) for (const z of [-0.12, 0.05, 0.15]) {
+    b.cyl(sx * 0.105, 0.05, z, 0.05, 0.03, 0.08, { r: [0, 0, PI / 2], w: 0.006 });
+  }
+}
+function wagonParts(b, v) {
+  b.box(0, 0.13, 0, 0.19, 0.12, 0.34, v ? 0.78 : 0.3);
+  b.box(0, 0.2, 0, 0.21, 0.02, 0.36, 0.95, { w: 0.004 });
+  if (v) { b.sph(0, 0.26, 0.05, 0.07, 0.55); b.box(0, 0.26, -0.08, 0.1, 0.08, 0.1, 0.15); }
+  else { b.cyl(0, 0.24, 0, 0.06, 0.3, 0.9, { r: [PI / 2, 0, 0] }); }
+  for (const sx of [-1, 1]) for (const z of [-0.11, 0.11]) {
+    b.cyl(sx * 0.1, 0.045, z, 0.045, 0.03, 0.08, { r: [0, 0, PI / 2], w: 0.006 });
+  }
+}
+
+/* A train that circles a flat track or loops vertically */
+const ZAXIS = new THREE.Vector3(0, 0, 1);
+function makeTrain(S, anims, opts) {
+  const lb = new Builder(); locoParts(lb);
+  const wa = new Builder(); wagonParts(wa, true);
+  const wb = new Builder(); wagonParts(wb, false);
+  const geos = [lb.build(), wa.build(), wb.build()];
+  const cars = [];
+  for (let i = 0; i < opts.n; i++) {
+    const g = mk(i === 0 ? geos[0] : geos[1 + (i % 2)]);
+    S.add(g); cars.push(g);
+  }
+  const gap = 0.46 / opts.R;
+  const bx = new THREE.Vector3(), by = new THREE.Vector3(), bz = new THREE.Vector3();
+  const mat = new THREE.Matrix4();
+  anims.push((t) => {
+    for (let i = 0; i < cars.length; i++) {
+      const a = t * opts.speed - i * gap, c = Math.cos(a), s = Math.sin(a), g = cars[i];
+      if (opts.loop) {
+        const rad = opts.R - 0.03 * opts.up;
+        g.position.set(c * rad, s * rad, 0);
+        bz.set(-s, c, 0);
+        by.set(c * opts.up, s * opts.up, 0);
+        bx.crossVectors(by, bz);
+        mat.makeBasis(bx, by, bz);
+        g.quaternion.setFromRotationMatrix(mat);
+      } else {
+        g.position.set(c * opts.R, opts.y, s * opts.R);
+        g.rotation.set(0, -a, 0);
+      }
+    }
+  });
+}
+
+function walkers(S, anims, rng, Rw, n) {
+  const b = new Builder();
+  b.cone(0, 0.1, 0, 0.06, 0.2, 0.3, { w: 0.006 });
+  b.sph(0, 0.235, 0, 0.04, 0.92, { w: 0.006 });
+  b.cone(0, 0.3, 0, 0.04, 0.08, 0.12, { w: 0.005 });
+  const geo = b.build();
+  const figs = [];
+  for (let i = 0; i < n; i++) {
+    const g = mk(geo); S.add(g);
+    figs.push({ g, ph: rng() * TAU, sp: (0.15 + rng() * 0.1) * (rng() < 0.5 ? -1 : 1), r: Rw + (rng() - 0.5) * 0.18 });
+  }
+  anims.push((t) => {
+    for (const f of figs) {
+      const a = f.ph + t * f.sp;
+      f.g.position.set(Math.cos(a) * f.r, Math.abs(Math.sin(t * 7 + f.ph)) * 0.012, Math.sin(a) * f.r);
+      f.g.rotation.y = -a + (f.sp > 0 ? 0 : PI);
+    }
+  });
+}
+
+function snowPoints(R, n, rng) {
+  const pos = new Float32Array(n * 3), seed = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const a = rng() * TAU, r = Math.sqrt(rng()) * R;
+    pos[i * 3] = Math.cos(a) * r; pos[i * 3 + 1] = rng() * 3.2; pos[i * 3 + 2] = Math.sin(a) * r;
+    seed[i] = rng();
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
+  const p = new THREE.Points(g, snowMat);
+  p.frustumCulled = false;
+  return p;
+}
+function puffPoints(list, rng) {
+  const per = 6, n = list.length * per;
+  const pos = new Float32Array(n * 3), seed = new Float32Array(n);
+  let k = 0;
+  for (const p of list) for (let i = 0; i < per; i++) {
+    pos[k * 3] = p[0]; pos[k * 3 + 1] = p[1]; pos[k * 3 + 2] = p[2];
+    seed[k] = (i / per + rng() * 0.08) % 1;
+    k++;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
+  const p = new THREE.Points(g, puffMat);
+  p.frustumCulled = false;
+  return p;
+}
+
+/* Reindeer and sleigh */
+function reindeerGeo() {
+  const b = new Builder();
+  b.ell(0, 0, 0, 0.1, 0.095, 0.22, 0.5);
+  b.ell(0, 0.03, 0.16, 0.085, 0.09, 0.09, 0.55);
+  b.cyl(0, 0.14, 0.22, 0.035, 0.18, 0.5, { r: [0.7, 0, 0], w: 0.006 });
+  b.ell(0, 0.24, 0.3, 0.06, 0.06, 0.09, 0.58, { w: 0.008 });
+  b.ell(0, 0.21, 0.4, 0.035, 0.032, 0.05, 0.4, { w: 0.006 });
+  b.sph(0, 0.22, 0.445, 0.022, 1, { emit: 1, w: 0.004 });
+  for (const sx of [-1, 1]) {
+    b.cone(sx * 0.05, 0.34, 0.27, 0.014, 0.2, 0.95, { r: [0.3, 0, -sx * 0.5], w: 0.006 });
+    b.cone(sx * 0.11, 0.42, 0.25, 0.01, 0.12, 0.95, { r: [0.2, 0, -sx * 0.9], w: 0.005 });
+    b.cone(sx * 0.055, 0.29, 0.32, 0.02, 0.07, 0.3, { r: [0, 0, -sx * 0.9], w: 0.004 });
+    b.cyl(sx * 0.05, -0.08, 0.18, 0.016, 0.2, 0.4, { r: [1.2, 0, 0], w: 0.006 });
+    b.cyl(sx * 0.05, -0.08, -0.17, 0.016, 0.2, 0.4, { r: [-1.0, 0, 0], w: 0.006 });
+  }
+  b.ell(0, 0.04, -0.24, 0.04, 0.05, 0.05, 0.97, { w: 0.006 });
+  return b.build();
+}
+function sleighGeo() {
+  const b = new Builder();
+  b.box(0, 0.1, 0, 0.34, 0.14, 0.55, 0.18);
+  b.box(0, 0.22, -0.22, 0.34, 0.2, 0.08, 0.18);
+  b.ell(0, 0.16, 0.3, 0.17, 0.1, 0.1, 0.18);
+  for (const sx of [-1, 1]) {
+    b.box(sx * 0.15, -0.02, 0, 0.03, 0.04, 0.7, 0.85, { w: 0.006 });
+    b.tor(sx * 0.15, 0.03, 0.38, 0.07, 0.85, { r: [0, PI / 2, 0], w: 0.006 });
+  }
+  b.ell(0, 0.3, -0.02, 0.12, 0.14, 0.11, 0.32);
+  b.sph(0, 0.48, -0.02, 0.07, 0.85, { w: 0.008 });
+  b.ell(0, 0.43, 0.03, 0.06, 0.06, 0.04, 1.0, { w: 0.006 });
+  b.cone(0, 0.58, -0.03, 0.07, 0.16, 0.32, { r: [-0.3, 0, 0], w: 0.006 });
+  b.sph(0, 0.66, -0.1, 0.03, 1.0, { w: 0.006 });
+  b.sph(0, 0.28, -0.3, 0.15, 0.55, { w: 0.01 });
+  return b.build();
+}
+
+/* ---------------------------------------------------------------------
+   The islands: each a miniature world
+   --------------------------------------------------------------------- */
+function buildVillage(S, anims, rng) {
+  const R = 2.2, b = new Builder(); baseDisc(b, R);
+  const smoke = [];
+  b.tor(0, 0.035, 0, 1.72, 0.2, { r: [PI / 2, 0, 0], w: 0.012 });
+  b.at(0, 0, 0, rng() * TAU, 0.8); church(b, smoke); b.end();
+  const nh = 5;
+  for (let i = 0; i < nh; i++) {
+    const a = (i + 0.2 * rng()) / nh * TAU + 0.3, rr = R * (0.58 + 0.04 * rng());
+    b.at(Math.cos(a) * rr, 0, Math.sin(a) * rr, PI / 2 - a + PI + (rng() - 0.5) * 0.4, 0.85 + rng() * 0.2);
+    house(b, rng, smoke); b.end();
+  }
+  for (let i = 0; i < 9; i++) {
+    const a = rng() * TAU, rr = R * (0.89 + 0.04 * rng());
+    b.at(Math.cos(a) * rr, 0, Math.sin(a) * rr, rng() * TAU, 0.5 + rng() * 0.3);
+    pine(b, 1, [0.3, 0.55, 0.15][i % 3]); b.end();
+  }
+  for (let i = 0; i < 2; i++) {
+    const a = rng() * TAU;
+    b.at(Math.cos(a) * 0.95, 0, Math.sin(a) * 0.95, 0, 0.9); lamp(b); b.end();
+  }
+  const a0 = rng() * TAU;
+  b.at(Math.cos(a0) * 0.92, 0, Math.sin(a0) * 0.92, rng() * TAU, 0.8); snowman(b); b.end();
+  S.add(mk(b.build()));
+  if (smoke.length) S.add(puffPoints(smoke, rng));
+  makeTrain(S, anims, { R: 1.72, y: 0.05, n: 4, speed: 0.34 });
+  walkers(S, anims, rng, 0.98, 3);
+  S.add(snowPoints(R * 0.95, 70, rng));
+}
+
+function buildTreeIsland(S, anims, rng) {
+  const R = 2.0, b = new Builder(); baseDisc(b, R);
+  for (let i = 0; i < 9; i++) {
+    const a = i / 9 * TAU + rng() * 0.3, rr = R * (0.45 + 0.4 * rng());
+    present(b, Math.cos(a) * rr, Math.sin(a) * rr, 0.8 + rng() * 0.8, [0.95, 0.3, 0.7, 0.12][i % 4], rng() * TAU);
+  }
+  for (let i = 0; i < 3; i++) {
+    const a = i / 3 * TAU + 0.5;
+    b.at(Math.cos(a) * 1.7, 0, Math.sin(a) * 1.7, 0, 1.0); lamp(b, 1.1); b.end();
+  }
+  S.add(mk(b.build()));
+  const tb = new Builder(); xmasTree(tb, 1.5, rng);
+  const tree = mk(tb.build()); S.add(tree);
+  const ob = new Builder();
+  for (let i = 0; i < 6; i++) {
+    const a = i / 6 * TAU, tone = [0.05, 0.95, 0.55][i % 3];
+    ob.sph(Math.cos(a) * 1.35, 1.2 + 0.35 * Math.sin(a * 2), Math.sin(a) * 1.35, 0.13, tone, i % 2 ? { emit: 1, w: 0.02 } : { w: 0.02 });
+    ob.tor(Math.cos(a) * 1.35, 1.2 + 0.35 * Math.sin(a * 2) + 0.15, Math.sin(a) * 1.35, 0.035, 0.8, { w: 0.006 });
+  }
+  const orbit = mk(ob.build()); S.add(orbit);
+  anims.push((t, dt) => { tree.rotation.y += dt * 0.25; orbit.rotation.y -= dt * 0.4; });
+  S.add(snowPoints(R * 0.95, 70, rng));
+}
+
+function buildForest(S, anims, rng) {
+  const R = 2.3, b = new Builder(); baseDisc(b, R);
+  const smoke = [];
+  b.at(0, 0, 0, rng() * TAU, 1.5); house(b, rng, smoke); b.end();
+  const placed = [];
+  const tones = [0.32, 0.6, 0.14, 0.46];
+  let tries = 0;
+  while (placed.length < 32 && tries++ < 400) {
+    const a = rng() * TAU, rr = R * (0.3 + 0.62 * rng());
+    const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
+    if (Math.hypot(x, z) < 0.85) continue;
+    if (placed.some(p => Math.hypot(p[0] - x, p[1] - z) < 0.3)) continue;
+    placed.push([x, z]);
+    b.at(x, 0, z, rng() * TAU, 0.55 + rng() * 0.6);
+    pine(b, 1, tones[placed.length % 4]); b.end();
+  }
+  b.at(0.8, 0, 0.5, 0, 1.0); lamp(b, 0.8); b.end();
+  S.add(mk(b.build()));
+  S.add(puffPoints(smoke, rng));
+  S.add(snowPoints(R * 0.95, 80, rng));
+}
+
+function buildSnowmen(S, anims, rng) {
+  const R = 2.1, b = new Builder(); baseDisc(b, R);
+  b.at(0, 0, 0, 0, 1.15); lamp(b, 1.25); b.end();
+  for (const rad of [0.55, 0.95, 1.35]) b.tor(0, 0.012, 0, rad, 0.12 + rad * 0.2, { r: [PI / 2, 0, 0], w: 0.005 });
+  const n = 6;
+  for (let i = 0; i < n; i++) {
+    const a = i / n * TAU + rng() * 0.4, rr = R * (0.38 + 0.36 * rng());
+    b.at(Math.cos(a) * rr, 0, Math.sin(a) * rr, PI / 2 - a + PI + (rng() - 0.5) * 0.6, 0.6 + rng() * 0.55);
+    snowman(b); b.end();
+  }
+  for (let i = 0; i < 7; i++) {
+    const a = rng() * TAU, rr = R * (0.86 + 0.06 * rng());
+    b.at(Math.cos(a) * rr, 0, Math.sin(a) * rr, rng() * TAU, 0.5 + rng() * 0.3);
+    pine(b, 1, [0.3, 0.55, 0.15][i % 3]); b.end();
+  }
+  for (let i = 0; i < 5; i++) {
+    const a = rng() * TAU, rr = R * (0.2 + 0.7 * rng());
+    b.ell(Math.cos(a) * rr, 0, Math.sin(a) * rr, 0.3 + rng() * 0.2, 0.1, 0.25, 0.97, { w: 0.01 });
+  }
+  S.add(mk(b.build()));
+  S.add(snowPoints(R * 0.95, 110, rng));
+}
+
+function buildMarket(S, anims, rng) {
+  const R = 2.3, b = new Builder(); baseDisc(b, R);
+  for (let k = 0; k < 5; k++) b.cyl(0, 0.003 * (k + 1), 0, R * (0.95 - k * 0.17), 0.008, k % 2 ? 0.96 : 0.3, { w: -0.001 });
+  const ns = 6;
+  for (let i = 0; i < ns; i++) {
+    const a = i / ns * TAU + 0.3, rr = 1.55;
+    if (i === 0) continue;
+    b.at(Math.cos(a) * rr, 0, Math.sin(a) * rr, PI / 2 - a + PI, 0.85);
+    stall(b); b.end();
+  }
+  for (let i = 0; i < 4; i++) {
+    const a = rng() * TAU, rr = 0.9 + rng() * 0.2;
+    b.at(Math.cos(a) * rr, 0, Math.sin(a) * rr, 0, 0.9 + rng() * 0.4); lamp(b, 0.9 + rng() * 0.3); b.end();
+  }
+  const wheelYaw = rng() * TAU;
+  b.at(-0.6, 0, -1.45, wheelYaw, 1);
+  for (const sz of [-0.12, 0.12]) for (const sx of [-1, 1]) {
+    b.box(sx * 0.3, 0.6, sz, 0.05, 1.3, 0.05, 0.2, { r: [0, 0, -sx * 0.5], w: 0.008 });
+  }
+  b.end();
+  S.add(mk(b.build()));
+  const cb = new Builder();
+  cb.cyl(0, 0.06, 0, 0.62, 0.12, 0.8);
+  cb.cyl(0, 0.5, 0, 0.05, 1.0, 0.15, { w: 0.008 });
+  cb.cone(0, 1.12, 0, 0.72, 0.3, 0.18);
+  cb.torF(0, 0.98, 0, 0.7, 0.95, { r: [PI / 2, 0, 0], w: 0.004 });
+  cb.sph(0, 1.3, 0, 0.06, 1, { emit: 1, w: 0.01 });
+  for (let i = 0; i < 5; i++) {
+    const a = i / 5 * TAU, x = Math.cos(a) * 0.45, z = Math.sin(a) * 0.45;
+    cb.cyl(x, 0.55, z, 0.012, 0.9, 0.7, { w: 0.004 });
+    cb.ell(x, 0.4, z, 0.07, 0.06, 0.12, i % 2 ? 0.95 : 0.3, { r: [0, -a, 0], w: 0.008 });
+    cb.sph(x + Math.cos(a - PI / 2) * 0.1, 0.46, z + Math.sin(a - PI / 2) * -0.1, 0.04, i % 2 ? 0.95 : 0.3, { w: 0.006 });
+  }
+  const carousel = mk(cb.build());
+  carousel.scale.setScalar(0.8);
+  S.add(carousel);
+  const wb = new Builder();
+  wb.add(G.torus, 0, 0, 0, 0.95, 0.95, 0.95, 0.9, { w: 0.01 });
+  wb.add(G.torus, 0, 0, 0, 0.55, 0.55, 0.55, 0.3, { w: 0.008 });
+  for (let i = 0; i < 8; i++) {
+    const a = i / 8 * TAU;
+    wb.box(Math.cos(a) * 0.475, Math.sin(a) * 0.475, 0, 0.95, 0.025, 0.025, 0.2, { r: [0, 0, a], w: 0.004 });
+  }
+  wb.cyl(0, 0, 0, 0.07, 0.15, 0.1, { r: [PI / 2, 0, 0], w: 0.008 });
+  const wheel = mk(wb.build());
+  const wheelRoot = new THREE.Group();
+  wheelRoot.position.set(-0.6, 1.2, -1.45);
+  wheelRoot.rotation.y = wheelYaw;
+  wheelRoot.add(wheel);
+  S.add(wheelRoot);
+  const gb = new Builder();
+  gb.box(0, -0.1, 0, 0.16, 0.14, 0.16, 0.9);
+  gb.box(0, -0.02, 0, 0.18, 0.02, 0.18, 0.15, { w: 0.004 });
+  gb.box(0.083, -0.1, 0, 0.01, 0.07, 0.07, 1, { emit: 1, w: -0.003 });
+  gb.box(-0.083, -0.1, 0, 0.01, 0.07, 0.07, 1, { emit: 1, w: -0.003 });
+  const gGeo = gb.build();
+  const gons = [];
+  for (let i = 0; i < 8; i++) {
+    const g = mk(gGeo); wheelRoot.add(g); gons.push(g);
+  }
+  anims.push((t, dt) => {
+    carousel.rotation.y += dt * 0.5;
+    carousel.position.y = 0;
+    wheel.rotation.z += dt * 0.18;
+    for (let i = 0; i < 8; i++) {
+      const a = wheel.rotation.z + i / 8 * TAU;
+      gons[i].position.set(Math.cos(a) * 0.95, Math.sin(a) * 0.95, 0);
+      gons[i].rotation.z = 0;
+    }
+  });
+  walkers(S, anims, rng, 1.05, 4);
+  S.add(snowPoints(R * 0.95, 80, rng));
+}
+
+function buildSky(S, anims, rng) {
+  const b = new Builder();
+  b.sph(-1.3, 1.7, -2.2, 1.1, 0.96, { w: 0.05 });
+  b.sph(-0.75, 1.95, -1.85, 1.0, 0.03, { w: 0.0 });
+  for (let i = 0; i < 9; i++) {
+    const a = rng() * TAU, y = 0.6 + rng() * 2.2, rr = 2.6 + rng() * 0.8;
+    b.at(Math.cos(a) * rr, y, Math.sin(a) * rr, rng() * TAU, 0.3 + rng() * 0.3);
+    starburst(b, 0, 0, 0, 1, 1, true); b.end();
+  }
+  for (let c = 0; c < 4; c++) {
+    const a = rng() * TAU, rr = 2.9, y = -0.3 + rng() * 0.6;
+    b.at(Math.cos(a) * rr, y, Math.sin(a) * rr, a, 0.6 + rng() * 0.4);
+    for (let k = 0; k < 5; k++) b.sph((k - 2) * 0.35, Math.sin(k * 1.7) * 0.1 + (k % 2) * 0.1, 0, 0.3 + (k === 2 ? 0.12 : 0), 0.9, { w: 0.02 });
+    b.end();
+  }
+  S.add(mk(b.build()));
+  const fly = new THREE.Group(); fly.rotation.order = 'YXZ'; S.add(fly);
+  const sl = mk(sleighGeo()); sl.position.set(0, 0, -0.25); fly.add(sl);
+  const rg = reindeerGeo();
+  const form = [[0, 2.15], [-0.32, 1.75], [0.32, 1.75], [-0.64, 1.35], [0.64, 1.35], [-0.96, 0.95], [0.96, 0.95]];
+  const deer = form.map(p => { const d = mk(rg); d.position.set(p[0], 0, p[1]); fly.add(d); return d; });
+  anims.push((t) => {
+    const a = t * 0.26, Rc = 2.0;
+    fly.position.set(Math.cos(a) * Rc, 1.0 + 0.35 * Math.sin(a * 2), Math.sin(a) * Rc);
+    fly.rotation.set(-0.18 * Math.cos(a * 2), -a, -0.12);
+    for (let i = 0; i < deer.length; i++) {
+      deer[i].position.y = Math.sin(t * 3.2 + i * 0.9) * 0.06;
+      deer[i].rotation.x = Math.sin(t * 3.2 + i * 0.9 + 1.0) * 0.12;
+    }
+  });
+  S.add(snowPoints(2.6, 50, rng));
+}
+
+function buildMoonTree(S, anims, rng) {
+  const b = new Builder(), MR = 1.25;
+  b.sph(0, 0, 0, MR, 0.9, { w: 0.05 });
+  const up = new THREE.Vector3(0, 1, 0), q = new THREE.Quaternion();
+  for (let i = 0; i < 13; i++) {
+    const n = randomUnit(rng);
+    q.setFromUnitVectors(up, n);
+    b.atQ(n.x * MR * 0.995, n.y * MR * 0.995, n.z * MR * 0.995, q, 1);
+    const cr = 0.12 + rng() * 0.22;
+    b.cyl(0, 0, 0, cr, 0.05, 0.5, { w: 0.008 });
+    b.cyl(0, 0.004, 0, cr * 0.55, 0.05, 0.3, { w: 0.004 });
+    b.end();
+  }
+  q.identity();
+  b.atQ(0, MR * 0.97, 0, q, 0.55); xmasTree(b, 1.0, rng); b.end();
+  for (let i = 0; i < 7; i++) {
+    const n = randomUnit(rng);
+    if (n.y > 0.8) continue;
+    q.setFromUnitVectors(up, n);
+    b.atQ(n.x * MR * 0.97, n.y * MR * 0.97, n.z * MR * 0.97, q, 0.5);
+    if (i % 2) xmasTree(b, 1.0, rng); else pine(b, 1.4, [0.3, 0.55][i % 2]);
+    b.end();
+  }
+  b.add(G.torus, 0, 0, 0, 2.0, 2.0, 2.0, 0.95, { r: [1.15, 0, 0.3], w: 0.02 });
+  b.add(G.torus, 0, 0, 0, 2.35, 2.35, 2.35, 0.2, { r: [1.15, 0, 0.3], w: 0.015 });
+  S.add(mk(b.build()));
+  return { scale: 0.9 };
+}
+
+function buildVTrain(S, anims, rng) {
+  const b = new Builder(), R1 = 1.55;
+  b.add(G.torus, 0, 0, 0, R1, R1, R1 * 1.6, 0.15, { w: 0.012 });
+  b.add(G.torus, 0, 0, 0, R1 * 0.82, R1 * 0.82, R1 * 1.2, 0.5, { w: 0.01 });
+  const q = new THREE.Quaternion();
+  for (let i = 0; i < 36; i++) {
+    const a = i / 36 * TAU;
+    q.setFromAxisAngle(ZAXIS, a - PI / 2);
+    b.atQ(Math.cos(a) * R1, Math.sin(a) * R1, 0, q, 1);
+    b.box(0, 0, 0, 0.07, 0.05, 0.5, 0.1, { w: 0.005 });
+    b.end();
+  }
+  const nh = 9;
+  for (let i = 0; i < nh; i++) {
+    const a = i / nh * TAU + 0.2;
+    q.setFromAxisAngle(ZAXIS, a - PI / 2);
+    b.atQ(Math.cos(a) * (R1 + 0.06), Math.sin(a) * (R1 + 0.06), 0, q, 0.85);
+    if (i % 3 === 0) pine(b, 1.2, 0.3); else if (i % 3 === 1) house(b, rng, null); else { lamp(b, 0.8); }
+    b.end();
+  }
+  starburst(b, 0, 0, 0, 0.7, 1, true);
+  b.sph(0, 0, 0, 0.12, 1, { emit: 1, w: 0.02 });
+  S.add(mk(b.build()));
+  makeTrain(S, anims, { R: R1, loop: true, up: -1, n: 5, speed: 0.38 });
+  return { scale: 0.95 };
+}
+
+function buildHead(S, anims, rng) {
+  const base = new Builder(); baseDisc(base, 1.8);
+  S.add(mk(base.build()));
+  const shell = new Builder();
+  shell.add(G.shell, 0, 1.5, 0, 1.5, 1.5, 1.5, 0.96, { w: 0 });
+  const shellGroup = mk(shell.build(), true);
+  fillDouble.uniforms.uCutC.value.set(0, 0.95, 1.75);
+  fillDouble.uniforms.uCutR.value = 0.8;
+  S.add(shellGroup);
+  const inner = new Builder();
+  inner.at(0, 0.28, -0.05, 0, 0.42);
+  inner.cyl(0, -0.1, 0, 2.0, 0.2, 0.9, { w: 0.03 });
+  const smoke = [];
+  inner.at(0, 0, 0, rng() * TAU, 0.8); church(inner, smoke); inner.end();
+  for (let i = 0; i < 4; i++) {
+    const a = i / 4 * TAU + 0.4, rr = 1.3;
+    inner.at(Math.cos(a) * rr, 0, Math.sin(a) * rr, PI / 2 - a + PI, 0.85); house(inner, rng, smoke); inner.end();
+  }
+  inner.end();
+  S.add(mk(inner.build()));
+  const outer = new Builder();
+  for (const sx of [-1, 1]) outer.sph(sx * 0.45, 1.95, 1.3, 0.09, 0.0, { w: 0.01 });
+  outer.cone(0, 1.58, 1.65, 0.09, 0.55, 0.65, { r: [PI / 2, 0, 0], w: 0.012 });
+  outer.cyl(0, 3.2, 0, 0.7, 0.9, 0.1, { w: 0.03 });
+  outer.cyl(0, 2.8, 0, 1.05, 0.08, 0.1, { w: 0.02 });
+  outer.torF(0, 2.9, 0, 0.72, 0.9, { r: [PI / 2, 0, 0], w: 0.01 });
+  starburst(outer, 0, 3.85, 0, 0.35, 1, true);
+  const u = new THREE.Vector3(0, -0.2999, 0.954), q = new THREE.Quaternion().setFromUnitVectors(ZAXIS, u);
+  outer.atQ(0, 1.093, 1.294, q, 1);
+  outer.torF(0, 0, 0, 0.64, 0.06, { w: 0.01 });
+  outer.end();
+  outer.tor(0, 0.06, 0, 1.2, 0.2, { r: [PI / 2, 0, 0], w: 0.01 });
+  S.add(mk(outer.build()));
+  S.add(snowPoints(1.5, 40, rng));
+  return { scale: 0.62 };
+}
+
+function buildConcentric(S, anims, rng) {
+  const R = 2.3, b = new Builder();
+  b.cone(0, -0.2 - R * 0.42, 0, R * 0.97, R * 0.84, 0.2, { r: [PI, 0, 0], w: 0.035 });
+  for (let k = 0; k < 8; k++) {
+    b.cyl(0, -0.1 + k * 0.014, 0, R * (1 - k * 0.12), 0.2, k % 2 ? 0.08 : 0.97, { w: k === 0 ? 0.03 : -0.001 });
+  }
+  const placed = [];
+  let tries = 0;
+  while (placed.length < 12 && tries++ < 200) {
+    const a = rng() * TAU, rr = R * (0.15 + 0.72 * rng());
+    const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
+    if (placed.some(p => Math.hypot(p[0] - x, p[1] - z) < 0.62)) continue;
+    placed.push([x, z]);
+    const s = 0.6 + rng() * 0.6, inv = rng() < 0.5;
+    b.at(x, 0.1, z, 0, s);
+    for (let k = 0; k < 8; k++) {
+      const even = k % 2 === 0;
+      b.cyl(0, 0.07 + k * 0.14, 0, 0.45 - k * 0.052, 0.14, (even !== inv) ? 0.97 : 0.07, { w: 0.01 });
+    }
+    starburst(b, 0, 1.28, 0, 0.18, 1, true);
+    b.end();
+  }
+  S.add(mk(b.build()));
+  S.add(snowPoints(R * 0.9, 60, rng));
+}
+
+/* ---------------------------------------------------------------------
+   The universe: islands on a sphere around the bauble's centre
+   --------------------------------------------------------------------- */
+const world = new THREE.Scene();
+const anims = [];
+
+const dome = new THREE.Mesh(new THREE.SphereGeometry(80, 48, 32), domeMat);
+dome.frustumCulled = false; dome.renderOrder = -10;
+world.add(dome);
+
+const TYPES = {
+  village: buildVillage, tree: buildTreeIsland, forest: buildForest, snow: buildSnowmen,
+  market: buildMarket, sky: buildSky, moon: buildMoonTree, vtrain: buildVTrain,
+  head: buildHead, concentric: buildConcentric,
+};
+const PLAN = [
+  'village', 'tree', 'sky', 'forest', 'market', 'moon', 'village*', 'snow', 'vtrain', 'concentric', 'head', 'sky',
+  'village', 'tree', 'market', 'forest', 'concentric', 'moon', 'snow', 'village*', 'vtrain', 'head', 'tree', 'sky',
+];
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
+
+PLAN.forEach((name, k) => {
+  const rng = rngFrom(1000 + k * 77);
+  const flip = name.endsWith('*');
+  const fn = TYPES[name.replace('*', '')];
+  const n = PLAN.length;
+  const y = 1 - (k + 0.5) * 2 / n, rr = Math.sqrt(1 - y * y), th = k * 2.399963;
+  const dir = new THREE.Vector3(Math.cos(th) * rr, y, Math.sin(th) * rr);
+  const dist = 8.5 + rng() * 4;
+  const root = new THREE.Group();
+  root.position.copy(dir).multiplyScalar(dist);
+  const inward = dir.clone().negate();
+  const wu = new THREE.Vector3(0, 1, 0).addScaledVector(dir, -dir.y);
+  if (wu.lengthSq() < 1e-3) wu.set(1, 0, 0);
+  wu.normalize();
+  const up = flip
+    ? inward.clone().multiplyScalar(0.55).addScaledVector(wu, -0.85)
+    : inward.clone().multiplyScalar(0.5 + rng() * 0.3).addScaledVector(wu, 0.5 + rng() * 0.3);
+  up.normalize();
+  root.quaternion.setFromUnitVectors(WORLD_UP, up);
+  const spin = new THREE.Group();
+  spin.rotation.y = rng() * TAU;
+  root.add(spin);
+  const res = fn(spin, anims, rng) || {};
+  root.scale.setScalar((0.95 + rng() * 0.5) * (res.scale || 1));
+  const spinSpeed = (rng() - 0.5) * 0.1;
+  anims.push((t, dt) => { spin.rotation.y += dt * spinSpeed; });
+  world.add(root);
+});
+
+/* ---------------------------------------------------------------------
+   The bauble material: reflective, parallax-corrected, halftoned
+   --------------------------------------------------------------------- */
+const BAUBLE_VS = /* glsl */`
+varying vec3 vWorldPos;
+varying vec3 vNormalW;
+varying vec3 vLocal;
+void main() {
+  vec4 wp = modelMatrix * vec4(position, 1.0);
+  vWorldPos = wp.xyz;
+  vNormalW = normalize(mat3(modelMatrix) * normal);
+  vLocal = position;
+  gl_Position = projectionMatrix * viewMatrix * wp;
+}`;
+
+const BAUBLE_FS = /* glsl */`
+precision highp float;
+uniform samplerCube uEnv;
+uniform mat3 uRot;
+uniform float uTime, uNear, uEnter, uSurreal, uInvert, uPR, uRw, uImperf;
+uniform vec3 uSeed;
+varying vec3 vWorldPos;
+varying vec3 vNormalW;
+varying vec3 vLocal;
+
+float hash(vec3 p) {
+  p = fract(p * 0.3183099 + 0.1);
+  p *= 17.0;
+  return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+}
+float vnoise(vec3 x) {
+  vec3 i = floor(x);
+  vec3 f = fract(x);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = mix(hash(i), hash(i + vec3(1.0, 0.0, 0.0)), f.x);
+  float b = mix(hash(i + vec3(0.0, 1.0, 0.0)), hash(i + vec3(1.0, 1.0, 0.0)), f.x);
+  float c = mix(hash(i + vec3(0.0, 0.0, 1.0)), hash(i + vec3(1.0, 0.0, 1.0)), f.x);
+  float d = mix(hash(i + vec3(0.0, 1.0, 1.0)), hash(i + vec3(1.0, 1.0, 1.0)), f.x);
+  return mix(mix(a, b, f.y), mix(c, d, f.y), f.z);
+}
+float aa(float v, float e) {
+  float w = fwidth(v) * 0.75 + 0.0001;
+  return smoothstep(e - w, e + w, v);
+}
+vec3 kaleido(vec3 d, float amt) {
+  float a = atan(d.x, d.z);
+  float e = asin(clamp(d.y, -1.0, 1.0));
+  float segs = 3.0 + floor(uSeed.x * 4.0);
+  float seg = 6.2831853 / segs;
+  float a2 = abs(mod(a + uTime * 0.03, seg) - seg * 0.5);
+  vec3 k = vec3(sin(a2) * cos(e), sin(e), cos(a2) * cos(e));
+  vec3 r = mix(d, k, amt);
+  return dot(r, r) > 0.0001 ? normalize(r) : d;
+}
+float lookup(vec3 dir) {
+  dir = normalize(uRot * dir);
+  dir.y += 0.18 * uSurreal * sin(dir.x * 5.0 + dir.z * 3.0 + uTime * 0.35 + uSeed.z * 6.2831);
+  dir = normalize(dir);
+  float kal = uSurreal * pow(0.5 + 0.5 * sin(uTime * 0.17 + uSeed.y * 6.2831), 3.0);
+  dir = kaleido(dir, kal * 0.9);
+  float b = dot(vWorldPos, dir);
+  float c = dot(vWorldPos, vWorldPos) - uRw * uRw;
+  float t = -b + sqrt(max(b * b - c, 0.0));
+  vec3 hd = normalize(vWorldPos + dir * t);
+  return texture(uEnv, hd).r;
+}
+void main() {
+  vec3 Ng = normalize(vNormalW);
+  vec3 V = normalize(vWorldPos - cameraPosition);
+  vec3 q = vLocal * 5.0 + uSeed * 9.0;
+  vec3 pn = vec3(vnoise(q), vnoise(q + 17.3), vnoise(q + 41.7)) - 0.5;
+  vec3 q2 = vLocal * 21.0 + uSeed * 3.0;
+  pn += (vec3(vnoise(q2), vnoise(q2 + 7.1), vnoise(q2 + 3.3)) - 0.5) * 0.45;
+  vec3 N = normalize(Ng + pn * 0.06 * uImperf);
+  float ndv = clamp(dot(Ng, -V), 0.0, 1.0);
+
+  vec3 R = reflect(V, N);
+  vec3 F = refract(V, Ng, 0.62);
+  if (dot(F, F) < 0.01) F = V;
+  float lumR = lookup(R);
+  float lumF = uEnter > 0.001 ? lookup(F) : lumR;
+
+  /* halftone dissolve between the reflected and the entered universe */
+  vec2 gp2 = mat2(0.7071, -0.7071, 0.7071, 0.7071) * gl_FragCoord.xy / (14.0 * uPR);
+  float thr = length(fract(gp2) - 0.5) * 1.4142;
+  float useF = step(thr + 0.001, uEnter);
+  float t = mix(lumR, lumF, useF);
+  t = mix(t, 1.0 - t, uInvert);
+  t = clamp((t - 0.03) / 0.9, 0.0, 1.0);
+  t = mix(t, 1.0, pow(1.0 - ndv, 3.0) * 0.3);
+
+  /* comic-book hard shadow */
+  float sh = aa(-Ng.y + 0.3 * Ng.x, 0.55);
+  t *= 1.0 - 0.55 * sh;
+
+  /* posterise then Ben-Day halftone, stronger as the camera approaches */
+  float post = floor(t * 5.0 + 0.5) / 5.0;
+  t = mix(t, post, 0.75);
+  float cell = mix(4.0, 12.0, uNear) * uPR;
+  vec2 gp = mat2(0.7071, -0.7071, 0.7071, 0.7071) * gl_FragCoord.xy / cell;
+  float dd = length(fract(gp) - 0.5);
+  float rad = sqrt(clamp(1.0 - t, 0.0, 1.0) / 3.14159);
+  float aw = 0.8 / cell;
+  float ht = smoothstep(rad - aw, rad + aw, dd);
+  float hm = 0.1 + 0.75 * uNear;
+  t = mix(t, ht, hm);
+
+  /* studio softbox "window" and a sharp spark, printed as pure graphic shapes */
+  vec3 Rg = reflect(V, Ng);
+  float az = atan(Rg.x, Rg.z);
+  float el = asin(clamp(Rg.y, -1.0, 1.0));
+  vec2 bp = vec2(az - 0.55, el - 0.5);
+  float inBox = aa(0.36 - abs(bp.x), 0.0) * aa(0.25 - abs(bp.y), 0.0);
+  float mull = max(aa(0.022 - abs(bp.x), 0.0), aa(0.016 - abs(bp.y), 0.0));
+  float pane = inBox * (1.0 - mull);
+  float spark = aa(dot(Rg, normalize(vec3(-0.55, 0.75, 0.45))), 0.994);
+  t = max(t, pane * 0.97 * (0.5 + 0.5 * ndv));
+  t = mix(t, 0.02, inBox * mull * 0.9);
+  t = max(t, spark);
+
+  /* thick black outline with a bright rim-light edge */
+  float inner = aa(ndv, 0.12);
+  float outer = aa(ndv, 0.045);
+  t = mix(0.0, t, inner);
+  t = mix(0.96, t, outer);
+
+  gl_FragColor = vec4(vec3(clamp(t, 0.0, 1.0)), 1.0);
+}`;
+
+function baubleMaterial(envUniform, extra) {
+  return new THREE.ShaderMaterial({
+    vertexShader: BAUBLE_VS,
+    fragmentShader: BAUBLE_FS,
+    uniforms: Object.assign({
+      uEnv: envUniform,
+      uRot: { value: new THREE.Matrix3() },
+      uTime: U.time,
+      uNear: { value: 0 },
+      uEnter: { value: 0 },
+      uSurreal: { value: 0.2 },
+      uInvert: { value: 0 },
+      uPR: { value: 1 },
+      uRw: { value: 10 },
+      uImperf: { value: 1 },
+      uSeed: { value: new THREE.Vector3(0.3, 0.6, 0.9) },
+    }, extra || {}),
+  });
+}
+
+/* Cap, loop and thread */
+function capParts(b, threadLen) {
+  b.cyl(0, 0.1, 0, 0.2, 0.2, 0.7, { w: 0.008 });
+  for (let i = 0; i < 6; i++) b.cyl(0, 0.035 + i * 0.032, 0, 0.226, 0.018, 0.85, { w: 0.004 });
+  b.ell(0, 0.2, 0, 0.19, 0.045, 0.19, 0.75, { w: 0.006 });
+  b.torF(0, 0.3, 0, 0.09, 0.85, { w: 0.003 });
+  b.cyl(0, 0.38 + threadLen / 2, 0, 0.006, threadLen, 0.8, { w: 0.003 });
+}
+
+/* Smaller baubles living inside the universe, reflecting the previous frame */
+const sphGeo = new THREE.SphereGeometry(1, 56, 40);
+const capShort = (() => { const b = new Builder(); capParts(b, 2.4); return b.build(); })();
+const MINI = 16;
+const minis = [];
+const miniRoot = new THREE.Group();
+world.add(miniRoot);
+for (let i = 0; i < MINI; i++) {
+  const rng = rngFrom(9000 + i * 31);
+  const y = 1 - (i + 0.2) * 2 / MINI, rr = Math.sqrt(1 - y * y), th = i * 2.399963 + 1.1;
+  const dir = new THREE.Vector3(Math.cos(th) * rr, y, Math.sin(th) * rr);
+  const rad = 0.55 + rng() * 0.6, dist = 5.0 + rng() * 2.6;
+  const mat = baubleMaterial(U.env, {
+    uSurreal: { value: 0.3 + 0.6 * rng() },
+    uInvert: { value: rng() < 0.28 ? 1 : 0 },
+    uSeed: { value: new THREE.Vector3(rng(), rng(), rng()) },
+    uPR: U.prCube,
+    uNear: { value: 0.0 },
+  });
+  const g = new THREE.Group();
+  g.position.copy(dir).multiplyScalar(dist);
+  g.add(new THREE.Mesh(sphGeo, mat));
+  g.add(mk(capShort));
+  g.scale.setScalar(rad);
+  miniRoot.add(g);
+  minis.push({ g, mat, axis: randomUnit(rng), sp: (rng() - 0.5) * 0.25, ph: rng() * TAU, base: g.position.clone() });
+}
+
+/* ---------------------------------------------------------------------
+   Cube-map universe, ping-pong feedback
+   --------------------------------------------------------------------- */
+let cubeTargets = [], cubeCams = [], cubeFrame = 0, cubeEvery = 1;
+function makeCubes(res) {
+  for (const t of cubeTargets) t.dispose();
+  cubeTargets = [0, 1].map(() => new THREE.WebGLCubeRenderTarget(res, {
+    generateMipmaps: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
+  }));
+  cubeCams = cubeTargets.map(t => {
+    const c = new THREE.CubeCamera(0.1, 200, t);
+    c.position.set(0, 0, 0);
+    return c;
+  });
+  U.env.value = cubeTargets[1].texture;
+  U.mainEnv.value = cubeTargets[0].texture;
+  U.scaleCube.value = res / 2;
+  U.cellCube.value = res / 120;
+  U.prCube.value = res / 512 * 0.8;
+}
+function updateCube() {
+  const w = cubeFrame & 1, r = 1 - w;
+  U.env.value = cubeTargets[r].texture;
+  cubeCams[w].update(renderer, world);
+  U.mainEnv.value = cubeTargets[w].texture;
+  cubeFrame++;
+}
+
+/* ---------------------------------------------------------------------
+   Main scene: the bauble, its cap, thread and drifting dust
+   --------------------------------------------------------------------- */
+const mainScene = new THREE.Scene();
+mainScene.background = new THREE.Color(0x000000);
+const camera = new THREE.PerspectiveCamera(36, 1, 0.05, 400);
+
+const mainMat = baubleMaterial(U.mainEnv, { uSeed: { value: new THREE.Vector3(0.37, 0.71, 0.13) } });
+const baubleGroup = new THREE.Group();
+const baubleMesh = new THREE.Mesh(new THREE.SphereGeometry(1, 160, 112), mainMat);
+baubleGroup.add(baubleMesh);
+const capCell = { value: 6 };
+const capFill = makeFill(false, capCell);
+const capBuilder = new Builder(); capParts(capBuilder, 70);
+const capGeo = capBuilder.build();
+const capGroup = new THREE.Group();
+capGroup.add(new THREE.Mesh(capGeo, capFill));
+capGroup.add(new THREE.Mesh(capGeo, hullMat));
+capGroup.position.y = 0.985;
+baubleGroup.add(capGroup);
+mainScene.add(baubleGroup);
+
+(function makeDust() {
+  const n = 420, rng = rngFrom(424242);
+  const pos = new Float32Array(n * 3), seed = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const v = randomUnit(rng), r = 2.2 + rng() * 12;
+    pos[i * 3] = v.x * r; pos[i * 3 + 1] = v.y * r; pos[i * 3 + 2] = v.z * r;
+    seed[i] = rng();
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
+  const m = new THREE.ShaderMaterial({
+    uniforms: { uTime: U.time, uScale: U.scaleMain },
+    vertexShader: /* glsl */`
+      attribute float aSeed;
+      uniform float uTime;
+      uniform float uScale;
+      void main() {
+        vec3 p = position;
+        p.y += sin(uTime * 0.08 + aSeed * 40.0) * 0.8;
+        p.x += sin(uTime * 0.05 + aSeed * 17.0) * 0.8;
+        p.z += cos(uTime * 0.06 + aSeed * 29.0) * 0.8;
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        gl_Position = projectionMatrix * mv;
+        float tw = 0.6 + 0.4 * sin(uTime * 1.5 + aSeed * 90.0);
+        gl_PointSize = clamp(0.03 * tw * uScale / max(-mv.z, 0.01), 1.0, 9.0);
+      }`,
+    fragmentShader: /* glsl */`
+      void main() {
+        float d = length(gl_PointCoord - 0.5);
+        if (d > 0.5) discard;
+        gl_FragColor = vec4(vec3(0.9 * (1.0 - d * 1.2)), 1.0);
+      }`,
+  });
+  const pts = new THREE.Points(g, m);
+  pts.frustumCulled = false;
+  mainScene.add(pts);
+})();
+
+/* ---------------------------------------------------------------------
+   Resize, quality, camera
+   --------------------------------------------------------------------- */
+const sizeVec = new THREE.Vector2();
+function resize() {
+  const q = QUALITY_LEVELS[qualityLevel];
+  const dpr = Math.min(window.devicePixelRatio || 1, q.dprCap);
+  renderer.setPixelRatio(dpr);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / Math.max(1, window.innerHeight);
+  camera.updateProjectionMatrix();
+  renderer.getDrawingBufferSize(sizeVec);
+  U.scaleMain.value = sizeVec.y / (2 * Math.tan(camera.fov * PI / 360));
+  mainMat.uniforms.uPR.value = dpr;
+  capCell.value = 6 * dpr;
+}
+function applyQuality() {
+  const q = QUALITY_LEVELS[qualityLevel];
+  cubeEvery = q.cubeEvery;
+  makeCubes(q.cubeRes);
+  updateCube(); updateCube();
+  resize();
+}
+
+const CYCLE = 170;
+const tgt = new THREE.Vector3();
+function updateCamera(t) {
+  const tau = (t % CYCLE) / CYCLE;
+  const tri = tau < 0.5 ? tau * 2 : 2 - tau * 2;
+  const appr = smoother(0.06, 0.74, tri);
+  const dist = Math.exp(mix(Math.log(14), Math.log(1.3), appr));
+  const az = 0.30 * Math.sin(t * 0.085) + 0.14 * Math.sin(t * 0.031 + 1.0) + 3.0 * smoother(0.18, 0.56, tri);
+  const el = 0.10 + 0.15 * Math.sin(t * 0.047 + 0.6) + 0.20 * smooth(0.3, 0.7, tri) * Math.sin(t * 0.061);
+  const ce = Math.cos(el);
+  camera.position.set(dist * Math.sin(az) * ce, dist * Math.sin(el), dist * Math.cos(az) * ce);
+  const closeness = smooth(6, 1.5, dist);
+  tgt.set(0.05 * Math.sin(t * 0.13) * (1 - closeness), 0.03 * Math.sin(t * 0.11) * (1 - closeness), 0);
+  camera.lookAt(tgt);
+  return dist;
+}
+
+/* ---------------------------------------------------------------------
+   The animation loop
+   --------------------------------------------------------------------- */
+const rotM4 = new THREE.Matrix4();
+let time = 0, rotY = 0, last = 0, ema = 1 / 60, frameCount = 0, cooldown = 150;
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  const raw = Math.min(Math.max((now - last) / 1000, 0), 0.25);
+  last = now;
+  const dt = Math.min(raw, 0.05);
+  time += dt;
+  U.time.value = time;
+
+  /* performance safeguard: step quality down if frames run long */
+  frameCount++;
+  ema = ema * 0.96 + raw * 0.04;
+  if (cooldown > 0) cooldown--;
+  else if (ema > 0.024 && qualityLevel < QUALITY_LEVELS.length - 1) {
+    qualityLevel++;
+    applyQuality();
+    ema = 1 / 60; cooldown = 150;
+  }
+
+  /* world animation */
+  for (let i = 0; i < anims.length; i++) anims[i](time, dt);
+  for (const m of minis) {
+    rotM4.makeRotationAxis(m.axis, time * m.sp + m.ph);
+    m.mat.uniforms.uRot.value.setFromMatrix4(rotM4);
+    m.g.position.set(m.base.x, m.base.y + Math.sin(time * 0.4 + m.ph) * 0.12, m.base.z);
+  }
+
+  /* hero bauble: barely perceptible rotation with the occasional change of heart */
+  rotY += dt * (0.03 + 0.045 * Math.sin(time * 0.13) + 0.02 * Math.sin(time * 0.37));
+  baubleGroup.rotation.y = rotY;
+  rotM4.makeRotationY(-rotY * 0.8 + 0.2 * Math.sin(time * 0.11));
+  mainMat.uniforms.uRot.value.setFromMatrix4(rotM4);
+
+  const dist = updateCamera(time);
+  mainMat.uniforms.uNear.value = 1 - smooth(1.6, 7.0, dist);
+  mainMat.uniforms.uEnter.value = smoother(3.4, 1.5, dist);
+  mainMat.uniforms.uSurreal.value = 0.1 + 0.9 * smooth(10, 1.6, dist);
+
+  if (cubeFrame % cubeEvery === 0 || cubeFrame < 2) updateCube(); else cubeFrame++;
+  renderer.setRenderTarget(null);
+  renderer.render(mainScene, camera);
+}
+
+window.addEventListener('resize', resize);
+document.addEventListener('visibilitychange', () => { last = performance.now(); });
+
+applyQuality();
+last = performance.now();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

@@ -590,7 +590,14 @@ class Pinball{
       }
     }
   }
-  onSling(s){ s.anim=1; this.award(50); this.sfx('sling',rnd(0.9,1.2)); this.registerHit(); }
+  onSling(s,b){
+  s.anim=1; this.award(50); this.sfx('sling',rnd(0.9,1.2)); this.registerHit();
+  const B=this.bonus;
+  if(this.mode==='bonus'&&B&&b){
+    B.slingRun=(B.slingRun||0)+1;                    // consecutive sling hits with nothing else in between
+    if(B.slingRun>3){ b.vx=rnd(-70,70); b.vy=-rnd(400,470); B.slingRun=0; this.sfx('eject'); this.burst(b.x,b.y,C.red3,8,100); }
+  }
+}
   onSeg(s,imp){
     if(s.target&&imp>35&&this.time>s.cd){
       s.cd=this.time+0.15; s.anim=1; const i=s.target.idx;
@@ -713,6 +720,14 @@ class Pinball{
     this.sfx('hiveDone'); this.flashA=0.7; this.flashCol='#7dff3a'; this.shake=0.5;
   }
   canEnterBonus(){ return this.mode==='main'&&this.activeCount()===1&&!this.mouths.some(m=>m.ball)&&!this.balls.some(b=>b.state==='rail'); }
+  
+  cheatBonus(){
+  if(this.phase!=='play'||this.tilt) return;
+  const b=this.balls.find(q=>q.state==='play'&&!(q.x>217&&q.y>400));
+  if(!b||!this.canEnterBonus()){ this.say('NOT NOW','#ff3b2e'); return; }
+  this.enterBonus(b);
+}
+  
   enterBonus(b){
     this.mode='bonus'; b.state='play'; b.x=120; b.y=60; b.vx=rnd(-40,40); b.vy=180; b.cool=0.5; b.trail=[];
     this.bonus={t:45,wave:0,pool:2000,kills:0,clock:0,nextT:0,done:false,tick:0};
@@ -745,16 +760,26 @@ class Pinball{
     for(const s of this.slingSegs){ const imp=this.hitSeg(b,s); if(imp>40&&s.kick) this.onSling(s); }
     for(const p of this.bpops){
       if(!p.alive) continue;
-      const imp=this.hitPop(b,p); if(imp>15) this.onBonusHit(p);
+      const imp=this.hitPop(b,p); if(imp>15) this.onBonusHit(p,b);
     }
   }
-  onBonusHit(p){
-    const B=this.bonus; if(!B||this.time<p.cd) return; p.cd=this.time+0.06; p.flash=0.18;
-    if(p.type==='bbump'){ B.pool+=200; this.sfx('bumper',rnd(1,1.4)); this.burst(p.x,p.y,C.pur3,5,100); }
-    else if(p.type==='larva'){
+  onBonusHit(p,b){
+  const B=this.bonus; if(!B||this.time<p.cd) return; p.cd=this.time+0.06; p.flash=0.18; B.slingRun=0;
+  if(p.type==='bbump'){
+    B.streak=(B.streak||0)+1;
+    if(B.streak<=3) B.pool+=200;                       // stop the points farm too
+    if(b){
+      b.vx+=rnd(-70,70);                               // break up the perfect ping-pong
+      if(B.streak>=3){ b.vx=rnd(-110,110); b.vy=-rnd(320,400); B.streak=0; }   // fire it at the aliens
+    }
+    this.sfx('bumper',rnd(1,1.4)); this.burst(p.x,p.y,C.pur3,5,100);
+  }
+  else if(p.type==='larva'){
+    B.streak=0;
       p.alive=false; B.kills++; B.pool+=1000*B.wave; this.award(500,p.x,p.y); this.sfx('creatureDie'); this.burst(p.x,p.y,C.grn3,14,150);
       if(this.aliens.every(a=>!a.alive)){ B.nextT=0.9; }
     } else if(p.type==='boss'){
+    B.streak=0;
       p.hp--; B.pool+=1500; this.sfx('creatureHit',rnd(0.7,1)); this.burst(p.x,p.y,C.red3,10,140); this.flashA=0.2; this.flashCol='#ff3b2e';
       if(p.hp===3) this.say('CRITICAL DAMAGE','#ff3b2e');
       if(p.hp<=0){ p.alive=false; this.burst(p.x,p.y,C.orange,40,230); this.completeBonus(true); }
@@ -1347,7 +1372,7 @@ class Renderer{
     const hs='HIGH SCORE'; this.txt(hs,Math.round((W-this.txtW(hs,1))/2),346,1,'#8a6a3a');
     const hv=pad(hi,8); this.led(hv,Math.round((W-this.txtW(hv,2))/2),358,2,'#ff5030','#220a06');
     if(Math.floor(t*2)%2===0){ const ps='PRESS ENTER'; this.txt(ps,Math.round((W-this.txtW(ps,3))/2),388,3,C.white,C.red1); }
-    const dbg='` = DEVELOPER DEBUG OVERLAY'; this.txt(dbg,Math.round((W-this.txtW(dbg,1))/2),430,1,'#3a3a52');
+    //const dbg='` = DEVELOPER DEBUG OVERLAY'; this.txt(dbg,Math.round((W-this.txtW(dbg,1))/2),430,1,'#3a3a52');
   }
 }
 
@@ -1375,6 +1400,179 @@ function getScreen(scene){
   return tex;
 }
 
+/* ============================================================== INTRO ===
+   NIDUS 10 second sci-fi intro.
+   PASTE THIS WHOLE BLOCK directly above `class TitleScene extends Phaser.Scene{`
+   THEN change the scene list in the Phaser.Game config to:
+        scene:[IntroScene,TitleScene,GameScene]
+
+   Timeline (seconds after power-on):
+     0.0 - 2.4   terminal boot log, typed
+     2.2 - 7.0   warp streaks, planet swells, HUD
+     5.0 - 7.0   red alarm, crew life signs drop to 0, ECG flatlines
+     7.1 - 9.0   the great eye opens in the dark: "IT IS HUNGRY"
+     9.0 - 10.0  white flash, NIDUS title slam, then cut to the title screen
+   Any key / click skips (Q still mutes). A "power on" gate comes first because
+   browsers refuse to play audio until the player has pressed something. */
+Object.assign(SFX.gap,{introKey:30,introAlarm:100});
+Object.assign(SFX.snd,{
+  introKey(){ this.tone({f:1800,dur:.02,type:'square',vol:.035}); },
+  introBoot(){ this.tone({f:40,f2:130,dur:1.4,type:'sawtooth',vol:.2,lp:500}); this.noise({dur:1,vol:.06,type:'lowpass',f:300,f2:1500}); },
+  introWarp(){ this.noise({dur:2.4,vol:.12,type:'lowpass',f:250,f2:4200,q:.8}); this.tone({f:60,f2:340,dur:2.4,type:'sawtooth',vol:.1,lp:1400}); },
+  introAlarm(){ this.tone({f:880,dur:.2,type:'square',vol:.12,lp:3000}); this.tone({f:620,dur:.2,type:'square',vol:.12,delay:.24,lp:3000}); },
+  introFlat(){ this.tone({f:1000,dur:1,type:'sine',vol:.12,att:.01}); },
+  introEye(){ this.tone({f:70,f2:28,dur:1.8,type:'sine',vol:.35}); this.noise({dur:1.4,vol:.1,f:200,f2:900,q:3}); },
+  introSlam(){ this.tone({f:90,f2:30,dur:.9,type:'sawtooth',vol:.3,lp:800}); this.tone({f:55,dur:.9,type:'sine',vol:.3}); this.noise({dur:.5,vol:.25,type:'lowpass',f:3000,f2:100}); }
+});
+
+class IntroScene extends Phaser.Scene{
+  constructor(){ super('Intro'); }
+  create(){
+    this.tex=getScreen(this); this.t=0; this.gt=0; this.gate=true; this.done=false; this.fired=0; this.typed=0; this.sp=0.05;
+    this.stars=[]; for(let i=0;i<110;i++) this.stars.push({x:rnd(-1,1),y:rnd(-1,1),z:rnd(0.05,1)});
+    this.cues=[[0,'introBoot'],[2.2,'introWarp'],[5.0,'introAlarm'],[5.5,'introAlarm'],[6.0,'introAlarm'],[6.5,'introFlat'],[7.1,'introEye'],[9.0,'introSlam']];
+    this.finish=()=>{ if(this.done) return; this.done=true; this.scene.start('Title'); };
+    const poke=()=>{ SFX.init(); if(this.gate){ this.gate=false; this.t=0; } else this.finish(); };
+    bindKeys(this,code=>{ if(code==='KeyQ'){ SFX.toggleMute(); return; } poke(); });
+    this.input.on('pointerdown',poke);
+  }
+  speed(){
+    if(this.gate) return 0.05; const t=this.t;
+    if(t<2.2) return 0.05;
+    if(t<3.0) return lerp(0.05,2.2,(t-2.2)/0.8);
+    if(t<4.2) return 2.2;
+    if(t<5.2) return lerp(2.2,0.12,(t-4.2)/1.0);
+    return 0.1;
+  }
+  update(time,delta){
+    if(this.done) return;
+    const dt=Math.min(delta/1000,0.05);
+    if(this.gate) this.gt+=dt;
+    else {
+      this.t+=dt;
+      while(this.fired<this.cues.length&&this.t>=this.cues[this.fired][0]){ SFX.play(this.cues[this.fired][1]); this.fired++; }
+      if(this.t>=15){ this.finish(); return; }
+    }
+    this.sp=this.speed();
+    for(const s of this.stars){ s.z-=this.sp*dt; if(s.z<=0.03){ s.z=1; s.x=rnd(-1,1); s.y=rnd(-1,1); } }
+    this.paint(); this.tex.refresh();
+  }
+  centre(r,str,y,s,c,sh){ r.txt(str,Math.round((W-r.txtW(str,s))/2),y,s,c,sh); }
+  glitch(r,p){
+    if(Math.random()>=p) return;
+    const h=Math.round(rnd(3,14)), y=Math.round(rnd(0,H-h)), o=Math.round(rnd(-14,14));
+    r.g.drawImage(r.g.canvas,0,y,W,h,o,y,W,h);
+  }
+  paint(){
+    const r=RD, t=this.t; r.begin();
+    if(this.gate){
+      this.drawStars(r);
+      this.centre(r,'KERES-9 DEEP STATION',170,1,C.grn2);
+      this.centre(r,'SYSTEM STANDBY',184,1,'#4c5468');
+      if(Math.floor(this.gt*2)%2===0) this.centre(r,'PRESS ANY KEY TO POWER ON',222,1,C.white);
+      return;
+    }
+    if(t<7.0){ this.drawStars(r); if(t>=2.8) this.planet(r,t); }
+    if(t<2.4) this.terminal(r,t);
+    if(t>=2.2&&t<7.0) this.hud(r,t);
+    if(t>=5.0&&t<7.0) this.alarm(r,t);
+    if(t>=7.1&&t<9.0) this.eyeScene(r,t);
+    if(t>=9.0) this.titleSlam(r,t);
+    this.glitch(r,t>=5.0&&t<7.0?0.5:(t>=9.0&&t<9.5?0.8:0.03));
+    if(t<9) this.centre(r,'PRESS ANY KEY TO SKIP',H-14,1,'#3a4a3a');
+  }
+  drawStars(r){
+    for(const s of this.stars){
+      const x=180+s.x/s.z*90, y=224+s.y/s.z*110; if(x<0||x>=W||y<0||y>=H) continue;
+      const b=clamp(1.2-s.z,0.15,1), col=b>0.8?'#f4f4ff':(b>0.5?'#8a94a8':'#4c5468');
+      if(this.sp>0.5){ const pz=s.z+this.sp*0.035; r.line(180+s.x/pz*90,224+s.y/pz*110,x,y,col,1); }
+      else r.px(x,y,b>0.7?2:1,b>0.7?2:1,col);
+    }
+  }
+  terminal(r,t){
+    const L=[[0.1,'> KERES-9 DEEP STATION',C.grn3],[0.6,'> UPLINK ESTABLISHED',C.grn3],[1.1,'> LONG RANGE SCAN...',C.grn3],[1.5,'> ANOMALY: SECTOR 7',C.yel],[1.9,'> ALTERING COURSE',C.yel]];
+    let total=0, last=-1, lastN=0;
+    L.forEach((l,i)=>{
+      const n=clamp(Math.floor((t-l[0])*45),0,l[1].length); total+=n;
+      if(n>0){ r.txt(l[1].slice(0,n),16,150+i*14,1,l[2]); last=i; lastN=n; }
+    });
+    if(total>this.typed) SFX.play('introKey'); this.typed=total;
+    if(last>=0&&Math.floor(t*4)%2===0) r.px(16+lastN*6,150+last*14,5,7,C.grn3);
+  }
+  planet(r,t){
+    const k=clamp((t-2.8)/2.6,0,1), e=1-Math.pow(1-k,3), R=Math.round(4+e*74), cx=180, cy=236;
+    const bands=['#1a0e28','#2b0f2f','#431549','#2b0f2f','#1d5a12','#431549'], bh=Math.max(3,Math.round(R/5));
+    for(let dy=-R;dy<=R;dy++){
+      const w=Math.floor(Math.sqrt(R*R-dy*dy+0.5)), band=bands[Math.floor((dy+R)/bh)%bands.length];
+      r.px(cx-w,cy+dy,w*2+1,1,band);
+      const sh=Math.floor(w*0.35); r.px(cx+sh,cy+dy,w-sh+1,1,'rgba(0,0,0,0.55)');
+    }
+    r.ring(cx,cy,R+2,C.grn1);
+    if(R>40&&t>4.4){ const px0=cx-Math.round(R*0.3), py0=cy-Math.round(R*0.2); r.px(px0-1,py0-1,3,3,C.red3); r.ring(px0,py0,3+(t*6)%8,C.red2); }
+  }
+  hud(r,t){
+    const s=14;
+    for(const q of [[6,6,1,1],[W-6,6,-1,1],[6,H-6,1,-1],[W-6,H-6,-1,-1]]){
+      const hx=q[2]>0?q[0]:q[0]-s, vy=q[3]>0?q[1]:q[1]-s; r.px(hx,q[1],s,1,C.grn2); r.px(q[0],vy,1,s,C.grn2);
+    }
+    r.txt('KERES-9 DEEP STATION',16,14,1,C.grn3); r.txt('SECTOR 7',16,26,1,C.grn2);
+    const k=clamp((t-2.2)/3,0,1);
+    r.txt('RANGE '+(12-11.6*k*k).toFixed(1)+' AU',16,H-26,1,C.grn3);
+    if(t<4.4){ if(Math.floor(t*4)%2===0) r.txt('SCANNING...',16,H-38,1,C.grn2); }
+    else r.txt('SOURCE LOCKED',16,H-38,1,C.yel);
+  }
+  alarm(r,t){
+    const g=r.g, a=t-5.0;
+    g.globalAlpha=0.10+0.12*Math.abs(Math.sin(a*6.3)); g.fillStyle='#ff1010'; g.fillRect(0,0,W,H); g.globalAlpha=1;
+    r.px(30,40,300,120,'rgba(0,0,0,0.7)');
+    if(Math.floor(a*5)%2===0) this.centre(r,'WARNING',52,4,C.red3,'#000');
+    this.centre(r,'BIOSIGNAL DETECTED',100,2,C.yel,'#2a1a00');
+    this.centre(r,'UNKNOWN ORGANISM - SECTOR 7',128,1,C.white);
+    this.centre(r,'THE FEEDING PIT',142,1,C.orange);
+    r.px(30,200,300,110,'rgba(0,0,0,0.7)'); r.px(30,200,300,1,C.grn1); r.px(30,309,300,1,C.grn1);
+    r.txt('CREW LIFE SIGNS',40,208,1,C.grn3);
+    const crew=Math.max(0,12-Math.floor(Math.max(0,t-5.2)/0.11));
+    r.txt('CREW',250,208,1,C.grn3); r.led(String(crew).padStart(2,'0'),282,204,2,crew?'#7dff3a':'#ff3b2e','#0a2008');
+    let py=262;
+    for(let x=36;x<=324;x+=3){
+      let y=262;
+      if(t<6.5){
+        const p=(((x+a*160)%96)+96)%96/96;
+        y+=p>0.40&&p<0.47?-34*Math.sin((p-0.40)/0.07*Math.PI):(p>0.47&&p<0.52?12*Math.sin((p-0.47)/0.05*Math.PI):(p<0.12?-5*Math.sin(p/0.12*Math.PI):0));
+        if(a>1.0) y+=rnd(-4,4)*clamp(a-1.0,0,1);
+      }
+      if(x>36) r.line(x-3,py,x,y,t<6.5?C.grn3:C.red3,1);
+      py=y;
+    }
+    if(t>=6.5&&Math.floor(t*4)%2===0) this.centre(r,'FLATLINE',290,1,C.red3);
+  }
+  eyeScene(r,t){
+    const e=t-7.1, ex=180, ey=214, shk=e>1.4?Math.round(rnd(-1,1)*Math.min(2,(e-1.4)*2)):0, cx=ex+shk, pu=Math.sin(t*2)*2;
+    for(let i=0;i<14;i++){
+      const a=i/14*TAU+0.2; let x=cx+Math.cos(a)*34, y=ey+Math.sin(a)*34;
+      for(let k=0;k<5;k++){ const nx=x+Math.cos(a+Math.sin(t+i+k)*0.3)*6, ny=y+Math.sin(a+Math.sin(t+i+k)*0.3)*6; r.line(x,y,nx,ny,i&1?C.red1:C.red2,1); x=nx; y=ny; }
+    }
+    r.disc(cx,ey,36+pu*0.5,'#10040a'); r.disc(cx,ey,34+pu*0.5,C.yel); r.disc(cx,ey,30,'#c9d34a');
+    const look=Math.sin(t*0.8)*8; r.disc(cx+look,ey,19,C.grn1); r.disc(cx+look,ey,16,C.grn2); r.disc(cx+look,ey,11,C.grn3);
+    const pw=Math.round(2+clamp(e/1.9,0,1)*6); r.px(cx+look-pw/2,ey-16,pw,32,'#000'); r.px(cx+look-5,ey-8,3,3,C.white);
+    const k=clamp((e-0.2)/1.0,0,1), ease=k*k*(3-2*k), cov=Math.round((1-ease)*90);
+    if(cov>0){ r.px(ex-90,ey-90,180,cov,'#000'); r.px(ex-90,ey+90-cov,180,cov,'#000'); }
+    const msg='IT IS HUNGRY', n=clamp(Math.floor((t-7.9)*14),0,msg.length);
+    if(n>0) r.txt(msg.slice(0,n),Math.round((W-r.txtW(msg,2))/2),300,2,C.red3,'#000');
+  }
+  titleSlam(r,t){
+    const e=t-9.0, g=r.g, title='NIDUS', tx=Math.round((W-r.txtW(title,8))/2), ty=150;
+    r.disc(180,190,110,'#12050c'); r.disc(180,190,70,'#1a0610');
+    if(e<0.35){ g.globalAlpha=1-e/0.35; g.fillStyle='#fff'; g.fillRect(0,0,W,H); g.globalAlpha=1; }
+    const j=e<0.5?Math.round(rnd(-6,6)*(1-e/0.5)):0;
+    if(e<0.8){ g.globalAlpha=0.7; r.txt(title,tx+j-3,ty,8,'#ff2020'); r.txt(title,tx+j+3,ty,8,'#20e0ff'); g.globalAlpha=1; }
+    r.txt(title,tx+j,ty,8,C.grn3,C.red1);
+    if(e>0.4) this.centre(r,'THE FEEDING PIT',218,2,C.yel,'#2a1a00');
+    if(e>0.8) this.centre(r,'FEED IT. OR BE FED UPON.',248,1,C.pur3);
+  }
+}
+
+
 class TitleScene extends Phaser.Scene{
   constructor(){ super('Title'); }
   create(){
@@ -1399,6 +1597,7 @@ class GameScene extends Phaser.Scene{
       if(code==='Enter'||code==='ArrowDown'){ if(w.phase==='over'){ if(w.overT>1.5){ w.newGame(); SFX.startDrone(); } } else w.launch(); }
       else if(code==='Space') w.nudge();
       else if(code==='Backquote') w.debug=!w.debug;
+      else if(code==='KeyI'||code==='KeyO'){ if(Keys.held.KeyI&&Keys.held.KeyO) w.cheatBonus(); }
       else if(code==='KeyQ') SFX.toggleMute();
       else if(code==='Minus') MUSIC.setVol(MUSIC.vol-0.05);
 else if(code==='Equal') MUSIC.setVol(MUSIC.vol+0.05);
@@ -1423,7 +1622,7 @@ else {
     render:{pixelArt:true,antialias:false,roundPixels:true},
     scale:{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH},
     fps:{target:60},
-    scene:[TitleScene,GameScene]
+    scene:[IntroScene,TitleScene,GameScene]
   });
 }
 </script>

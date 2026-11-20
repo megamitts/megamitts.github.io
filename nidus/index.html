@@ -342,17 +342,31 @@ class Pinball{
     this.rails=[this.rampA,this.rampB];
     // bonus chamber furniture
     this.bonusBumpers=[new Pop('bbump',62,230,8,{kick:220,score:200,color:C.pur3}),new Pop('bbump',156,230,8,{kick:220,score:200,color:C.pur3})];
+    this.bonusBumpers=[
+  new Pop('bbump',62,230,8,{kick:220,score:200,color:C.pur3}),
+  new Pop('bbump',156,230,8,{kick:220,score:200,color:C.pur3}),
+  new Pop('bbump',186,130,8,{kick:220,score:200,color:C.pur3}),
+  new Pop('bbump',40,90,8,{kick:220,score:200,color:C.pur3}),
+  new Pop('bbump',10,304,4,{kick:300,score:200,color:C.pur3,upward:true}),
+  new Pop('bbump',209,304,4,{kick:300,score:200,color:C.pur3,upward:true}),
+  new Pop('bbump',109,425,4,{kick:300,score:200,color:C.pur3,upward:true}),
+  new Pop('bbump',109,314,8,{kick:300,score:200,color:C.pur3,upward:true})   // between the slings
+];
     this.bpops=[]; this.aliens=[]; this.boss=null;
   }
 
   /* ---------- game / ball lifecycle ---------- */
   newGame(){
+  	
     this.score=0; this.ballNo=1; this.ballsMax=3; this.extraQueue=0; this.extrasGiven=0; this.thresholdGiven=false;
-    this.hive=[false,false,false,false]; this.hiveFlash=0; this.hiveResetT=0;
+    this.hive=[false,false,false,false];
+    //this.hive=[true,true,true,true];
+     this.hiveFlash=0; this.hiveResetT=0;
     this.time=0; this.parts=[]; this.floats=[]; this.msgQ=[]; this.msg=null; this.big=null;
     this.flashA=0; this.flashCol='#fff'; this.shake=0; this.blackout=0; this.over=false; this.overT=0; this.newHigh=false; this.overBurstT=0;
     this.phase='play'; this.phaseT=0; this.endDelay=2.8;
     this.buildTable(); this.startBall();
+    //this.hiveComplete();
   }
   startBall(){
     this.balls=[]; this.nudges=3; this.tilt=false; this.baseMult=1; this.hiveBoost=0; this.combo=0; this.comboT=0;
@@ -543,11 +557,14 @@ class Pinball{
     const vn=b.vx*nx+b.vy*ny;
     if(vn<0){
       if(p.kick){
-        const sp=Math.hypot(b.vx,b.vy), k=p.kick+Math.min(sp*0.25,90), tv=-b.vx*ny+b.vy*nx;
-        b.vx=nx*k-ny*tv*0.4; b.vy=ny*k+nx*tv*0.4;
-      } else {
-        const e=(-vn<30)?0:p.e; b.vx-=(1+e)*vn*nx; b.vy-=(1+e)*vn*ny;
-      }
+  const sp=Math.hypot(b.vx,b.vy), k=p.kick+Math.min(sp*0.25,90), tv=-b.vx*ny+b.vy*nx;
+  if(p.upward){
+    // always launch skywards, with a little sideways scatter so it never loops
+    b.vx=nx*k*0.35+rnd(-35,35); b.vy=-(k+70);
+  } else {
+    b.vx=nx*k-ny*tv*0.4; b.vy=ny*k+nx*tv*0.4;
+  }
+}
       return -vn;
     }
     return 0;
@@ -728,9 +745,9 @@ class Pinball{
   this.enterBonus(b);
 }
   
-  enterBonus(b){
+  enterBonus(b){ //bonus time
     this.mode='bonus'; b.state='play'; b.x=120; b.y=60; b.vx=rnd(-40,40); b.vy=180; b.cool=0.5; b.trail=[];
-    this.bonus={t:45,wave:0,pool:2000,kills:0,clock:0,nextT:0,done:false,tick:0};
+    this.bonus={t:99,wave:0,pool:2000,kills:0,clock:0,nextT:0,done:false,tick:0};
     this.hatchOpen=0; this.saver=0; this.blackout=1.3; this.flashA=0.8; this.flashCol='#ff3b2e';
     this.sfx('bonusStart'); this.say('BONUS CHAMBER','#ff3b2e'); this.bigMsg('BONUS CHAMBER','#ff3b2e',2);
     this.bpops=this.bonusBumpers.slice(); this.spawnWave(1);
@@ -746,6 +763,13 @@ class Pinball{
     }
     this.bpops=this.bonusBumpers.concat(this.aliens); this.say('WAVE '+n,'#c77dff'); this.sfx('wave');
   }
+  
+  debugBoss(){
+  if(this.mode!=='bonus'||!this.bonus||this.boss) return;   // only in the chamber, and only once
+  this.aliens=[];
+  this.bonus.nextT=0;
+  this.spawnBoss();
+}
   spawnBoss(){
     this.boss=new Pop('boss',109,105,20,{hp:12,hpMax:12,e:0.7});
     this.bpops=this.bonusBumpers.concat([this.boss]); this.bonus.wave=4;
@@ -1154,7 +1178,12 @@ class Renderer{
   drawBonusPops(w,t){
     for(const p of w.bpops){
       if(!p.alive) continue; const fl=p.flash>0;
-      if(p.type==='bbump'){ this.disc(p.x,p.y,p.r+1,'#10040a'); this.disc(p.x,p.y,p.r,fl?C.white:C.pur2); this.disc(p.x,p.y,p.r-3,C.pur3); }
+      if(p.type==='bbump'){
+  this.disc(p.x,p.y,p.r+1,'#10040a');
+  this.disc(p.x,p.y,p.r,fl?C.white:(p.upward?C.red2:C.pur2));
+  this.disc(p.x,p.y,p.r-3,p.upward?C.orange:C.pur3);
+  if(p.upward){ this.line(p.x-3,p.y+1,p.x,p.y-2,C.white,1); this.line(p.x,p.y-2,p.x+3,p.y+1,C.white,1); }   // chevron
+}
       else if(p.type==='larva'){
         const wig=Math.sin(t*10+p.ox)*1.5;
         this.disc(p.x,p.y,p.r,fl?C.white:C.grn2); this.disc(p.x+wig,p.y+3,3,C.grn1);
@@ -1293,7 +1322,7 @@ class Renderer{
     } else if(w.combo>=2){ this.txt('COMBO X'+w.combo,L,184,1,C.yel2); }
     else if(w.hiveBoost>0){ this.txt('HIVE BOOST '+Math.ceil(w.hiveBoost),L,184,1,C.grn3); }
     // controls legend
-    const lg=['Z / LEFT: L FLIP','M / RIGHT: R FLIP','ENTER/DOWN: LAUNCH','SPACE: NUDGE x3','Q: MUTE  -/=: VOL'];
+    const lg=['Z / LEFT: L FLIP','M / RIGHT: R FLIP','ENTER/DOWN: LAUNCH','SPACE: NUDGE x3','Q: MUTE  -/=: VOL', 'C: CRT ON/OFF', 'H:HATCH (30 secs)'];
     for(let i=0;i<lg.length;i++) this.txt(lg[i],L-2,238+i*10,1,'#4f4a6a');
     // panel mascot: a watchful eye
     const ex=x0+60, ey=352, look=Math.sin(t*0.7)*5;
@@ -1375,6 +1404,55 @@ class Renderer{
     //const dbg='` = DEVELOPER DEBUG OVERLAY'; this.txt(dbg,Math.round((W-this.txtW(dbg,1))/2),430,1,'#3a3a52');
   }
 }
+
+/* ============================ CRT SHADER (Phaser post-FX) ============================ */
+const CRT_FRAG=`
+#define SHADER_NAME CRT
+precision highp float;
+uniform sampler2D uMainSampler;
+uniform float uTime;
+varying vec2 outTexCoord;
+const vec2 RES=vec2(360.0,448.0);
+vec3 tap(vec2 uv){ return texture2D(uMainSampler,uv).rgb; }
+void main(){
+  vec2 c=outTexCoord*2.0-1.0;
+  c*=1.0+0.035*dot(c,c);                       // barrel curvature
+  vec2 uv=c*0.5+0.5;
+  if(uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0){ gl_FragColor=vec4(0.0,0.0,0.0,1.0); return; }
+  float px=1.0/RES.x, py=1.0/RES.y;
+  // chromatic fringing + horizontal phosphor bleed
+  vec3 col=vec3(tap(uv+vec2(px*0.6,0.0)).r, tap(uv).g, tap(uv-vec2(px*0.6,0.0)).b);
+  vec3 bleed=(tap(uv+vec2(px,0.0))+tap(uv-vec2(px,0.0)))*0.5;
+  col=col*0.7+bleed*0.3;
+  // cheap bloom on bright areas
+  vec3 glow=(tap(uv+vec2(0.0,py))+tap(uv-vec2(0.0,py))+bleed)/3.0;
+  col+=max(glow-0.45,0.0)*0.5;
+  // scanlines (alternate rows) and RGB aperture mask
+  col*=1.0-0.22*mod(floor(gl_FragCoord.y),2.0);
+  float m=mod(floor(gl_FragCoord.x),3.0);
+  vec3 mask=vec3(0.88)+0.12*vec3(step(abs(m),0.5),step(abs(m-1.0),0.5),step(abs(m-2.0),0.5));
+  col*=mask*1.14;
+  // slow rolling bar, mains flicker, vignette
+  col*=1.0+0.05*sin(uv.y*6.0-uTime*1.5);
+  col*=0.97+0.03*sin(uTime*95.0);
+  col*=1.0-0.45*dot(c*0.75,c*0.75);
+  gl_FragColor=vec4(col,1.0);
+}`;
+class CRTPipeline extends Phaser.Renderer.WebGL.Pipelines.PostFXPipeline{
+  constructor(game){ super({game,name:'CRT',fragShader:CRT_FRAG}); }
+  onPreRender(){ this.set1f('uTime',this.game.loop.time/1000); }
+}
+const CRT={
+  on:false,
+  apply(scene){
+    if(scene.renderer.type!==Phaser.WEBGL) return;          // canvas fallback keeps the CSS overlay
+    const cam=scene.cameras.main;
+    if(this.on) cam.setPostPipeline('CRT'); else cam.resetPostPipeline();
+    document.getElementById('crt').style.display='none';
+  },
+  toggle(scene){ this.on=!this.on; this.apply(scene); }
+};
+
 
 /* ============================================================== PHASER === */
 const Keys={held:{}};
@@ -1576,7 +1654,8 @@ class IntroScene extends Phaser.Scene{
 class TitleScene extends Phaser.Scene{
   constructor(){ super('Title'); }
   create(){
-    this.tex=getScreen(this); this.t=0;
+  	this.started=false; 
+    this.tex=getScreen(this); CRT.apply(this); this.t=0;
     this.demo=new Pinball(true,{left:false,right:false});
     const go=()=>{ if(this.started) return; this.started=true; SFX.init(); this.scene.start('Game'); };
     bindKeys(this,code=>{ if(code==='Enter'||code==='ArrowDown'||code==='Space') go(); if(code==='KeyQ') SFX.toggleMute(); });
@@ -1590,17 +1669,21 @@ class TitleScene extends Phaser.Scene{
 class GameScene extends Phaser.Scene{
   constructor(){ super('Game'); }
   create(){
-    this.tex=getScreen(this);
+    this.tex=getScreen(this); CRT.apply(this);
     this.w=new Pinball(false,Input); SFX.startDrone();
     bindKeys(this,code=>{
       const w=this.w;
       if(code==='Enter'||code==='ArrowDown'){ if(w.phase==='over'){ if(w.overT>1.5){ w.newGame(); SFX.startDrone(); } } else w.launch(); }
       else if(code==='Space') w.nudge();
+	
+      else if(code==='KeyC') CRT.toggle(this);
       else if(code==='Backquote') w.debug=!w.debug;
       else if(code==='KeyI'||code==='KeyO'){ if(Keys.held.KeyI&&Keys.held.KeyO) w.cheatBonus(); }
       else if(code==='KeyQ') SFX.toggleMute();
       else if(code==='Minus') MUSIC.setVol(MUSIC.vol-0.05);
 else if(code==='Equal') MUSIC.setVol(MUSIC.vol+0.05);
+else if(code==='KeyH') w.hiveComplete();
+else if(code==='KeyB') w.debugBoss();
       else if(code==='Escape'){ SFX.stopDrone(); this.scene.start('Title'); }
     });
     this.wasOver=false;
@@ -1617,6 +1700,7 @@ else if(code==='Equal') MUSIC.setVol(MUSIC.vol+0.05);
 if(typeof Phaser==='undefined'){ document.getElementById('err').style.display='block'; }
 else {
   new Phaser.Game({
+  	    pipeline:{CRT:CRTPipeline},
     type:Phaser.AUTO, parent:'game', width:W, height:H, backgroundColor:'#000000',
     pixelArt:true, antialias:false, roundPixels:true,
     render:{pixelArt:true,antialias:false,roundPixels:true},
